@@ -58,6 +58,21 @@ tested, assumed, and still trusted.
 - Violates it: adapter-side trust in its own validation; protocol records on
   stderr or diagnostics on stdout; inline large payloads.
 
+### PAT-004: Structural enforcement over prose-level instruction
+- Adopted from the Correctless project's PAT-018 (public repo:
+  joshft/correctless), where it emerged from repeated incidents of
+  prose-described constraints silently not holding. It is also Corrected's own
+  thesis applied to itself: the deterministic acceptance layer exists because
+  agent discipline is not enforcement.
+- Any invariant that matters must be enforced by a mechanism that runs —
+  a verifier check, a schema validator, a digest comparison, a gate that
+  fails closed, a test that exercises the real path. An invariant stated
+  only in documentation, spec prose, or agent instructions is unenforced.
+- Review rule: every spec invariant names its enforcement mechanism (see
+  antipatterns AP-004); "the agent/developer will make sure" is not one.
+- Violates it: prose-only tool restrictions, comment-documented protocol
+  constraints with no validator, review checklists with no gate.
+
 ## Prohibitions
 
 - **PROHIBIT-001**: The TypeScript adapter never owns run state, parses
