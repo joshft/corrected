@@ -7,7 +7,7 @@
 > reproducible evidence stating exactly what was proved, built, tested, assumed,
 > and still trusted.
 
-Status: founding design doc (v1.12), revised 2026-07-20. Nothing here is built
+Status: founding design doc (v1.13), revised 2026-07-20. Nothing here is built
 yet. The intended implementation is open source.
 
 ---
@@ -329,50 +329,54 @@ Corrected deliberately targets [Pi](https://pi.dev) as its v0 agent harness.
 Host-agnostic certification remains a property of the deterministic core; an
 agent-agnostic development harness is not a v0 goal.
 
-The architecture has two trusted project components:
+Corrected is a C# system with a thin, optional Pi adapter, not two independent
+application stacks. The architecture has two trusted project components with
+deliberately unequal authority:
 
 ```text
-Corrected Core
-  intake, ownership policy, Dafny integration, gates, digests, receipts
+Corrected CLI / Worker (.NET 10, C#)
+  intake, Dafny integration, policy, methodology state, gates, digests, receipts
           ▲
-          │ versioned structured commands and results
+          │ strict LF-delimited JSON commands, events, and typed results
           ▼
-Corrected Pi Extension
-  phase state, active tools, repair loop, checkpoints, review, user interaction
+Corrected Pi Adapter (small TypeScript package)
+  tool registration/activation, Pi lifecycle, UI, session-evidence transport
           ▲
-          │ constrained domain tools and proposal results
+          │ Pi extension API or headless Pi RPC
           ▼
 Proposal Strategies
   search/review models, retrieval, templates, bounded synthesizers
 ```
 
-The Pi extension owns methodology:
+The C# core owns the normative methodology:
 
 - the current development phase and legal transitions;
-- which tools are active in each phase;
-- attempt budgets, progress state, checkpoints, and rollback;
-- normalization and presentation of verifier diagnostics;
+- the permitted tool set for each phase;
+- attempt budgets, deterministic progress ordering, checkpoint selection, and
+  rollback state;
+- normalization of verifier diagnostics;
+- methodology-record schemas and hash-chain validation;
+- all identities and typed results consumed by certification; and
+- every acceptance decision.
+
+The TypeScript adapter realizes that methodology inside Pi:
+
+- registering the small fixed set of domain tools and activating only the set
+  directed by the core;
+- forwarding typed requests, cancellation, and progress events without
+  reinterpreting them;
+- rendering diagnostics and residual state;
 - fresh-session adversarial review;
 - user interaction, interruption, resumption, and escalation; and
 - durable session evidence needed to explain the search.
 
-The core owns acceptance:
-
-- the frozen intake snapshot and resolved certification lock;
-- protected/editable AST classification;
-- complete Dafny resolution and verification scope;
-- honesty, vacuity, specification-strength, robustness, build, and runtime
-  gates;
-- methodology-evidence validation;
-- content-addressed candidate and artifact identities; and
-- receipt construction and profile evaluation.
-
-The extension may orchestrate `certify`; it cannot create, edit, or reinterpret a
-successful core result. Phase 0 certification remains runnable with no model and
-no Pi session.
+The adapter may request a transition or orchestrate `certify`; it cannot advance
+phase, choose a checkpoint, mutate authoritative methodology state, or create,
+edit, or reinterpret a successful core result. Phase 0 certification remains
+runnable with no model, Node.js, TypeScript, or Pi session.
 
 Pi extensions are trusted executable code and run with the permissions of the Pi
-process. The pinned Corrected extension is therefore part of the named TCB, not a
+process. The pinned Corrected adapter is therefore part of the named TCB, not a
 security boundary. Project-supplied extensions, prompts, and settings are
 untrusted certification inputs unless the lock explicitly approves their
 digests.
@@ -431,11 +435,11 @@ not have authority to replace:
 - the frozen intake spec package or its identity digest;
 - the resolved certification lock or effective policy;
 - the trusted Corrected executable/container;
-- the pinned Corrected Pi extension;
+- the pinned Corrected Pi adapter;
 - the CI policy that validates the receipt; or
 - the lock-pinned exception registry.
 
-The Pi extension disables or replaces general write, edit, and shell tools during
+The Pi adapter disables or replaces general write, edit, and shell tools during
 the managed workflow. Phase 1 models receive ownership-aware operations such as
 `apply_proof_patch`, `verify_candidate`, and `checkpoint_candidate`; later
 policy versions may expose additional ownership-aware tools. Tool-surface control
@@ -521,7 +525,8 @@ exact spec, implementation, generated, and library file sets
 locked task mode
 ownership classification and protected-surface identity
 effective Dafny options and project-file inheritance
-pinned Corrected, Pi-extension, Dafny, Boogie, Z3, and backend identities
+pinned Corrected, .NET-runtime, Dafny, Boogie, Z3, and backend identities;
+in MANAGED_PI, pinned Pi-adapter, Pi, and Node-runtime identities
 certification resource plan, including resource-unit limits, seeds,
 verification concurrency, and solver-thread settings
 Corrected release-manifest, authentication-policy, and SLSA provenance
@@ -770,23 +775,24 @@ equality of their envelopes is neither required nor expected.
 
 Reproducibility is scoped, not universal. A certification environment identity
 canonically binds the architecture/OS platform triple, immutable OS or container
-image when one is used, runtime identity, exact Corrected/Dafny/Boogie/Z3 binary
+image when one is used, exact Corrected/.NET/Dafny/Boogie/Z3 binary and package
 digests, locale-relevant execution settings, and the locked solver
-concurrency/seed configuration. The hardware inventory remains named in the TCB
-but is not claimed to be reproducible across unlike machines. Corrected claims
-the same receipt core only for the same already-identified candidate and
-certification subject, lock, predicate schema, certification environment, and
-required methodology/review evidence identities. Managed search from the same
-intake is not claimed deterministic: a model, wall-clock search budget, or
-parallel proposal batch may legitimately select a different candidate or
-produce different process evidence. Advisory review and sampled runtime or
-differential campaigns likewise may produce new observational evidence on a
-fresh execution. The same-core claim means deterministic replay over the same
-identified candidate and required evidence identities, not that rerunning every
-evidence producer recreates identical evidence. Each selected candidate is
-nevertheless subject to deterministic proof replay within the stated
-certification scope. Cross-platform agreement is a differential result, not
-receipt equivalence.
+concurrency/seed configuration. For `MANAGED_PI`, required methodology evidence
+also binds the exact Pi adapter, Pi, and Node runtime artifacts. The hardware
+inventory remains named in the TCB but is not claimed to be reproducible across
+unlike machines. Corrected claims the same receipt core only for the same
+already-identified candidate and certification subject, lock, predicate schema,
+certification environment, and required methodology/review evidence identities.
+Managed search from the same intake is not claimed deterministic: a model,
+wall-clock search budget, or parallel proposal batch may legitimately select a
+different candidate or produce different process evidence. Advisory review and
+sampled runtime or differential campaigns likewise may produce new
+observational evidence on a fresh execution. The same-core claim means
+deterministic replay over the same identified candidate and required evidence
+identities, not that rerunning every evidence producer recreates identical
+evidence. Each selected candidate is nevertheless subject to deterministic
+proof replay within the stated certification scope. Cross-platform agreement is
+a differential result, not receipt equivalence.
 
 ### Legitimate update affordance
 
@@ -812,7 +818,7 @@ prove that the isolated copy contains the right code.
 
 ---
 
-## 7. Pi-enforced development methodology
+## 7. Core-defined, Pi-enforced development methodology
 
 This section defines the full managed workflow Corrected may provide, not a
 claim that every phase improves proof search. Phase 1 begins with the thin Pi
@@ -870,8 +876,11 @@ FRESH_CONTEXT_REVIEW      when review_mode = ADVISORY
 CERTIFY
 ```
 
-The state machine lives in the pinned Corrected Pi extension. Each transition is
-guarded by a structured core result. Representative predicates:
+The canonical state machine, current authoritative state, and transition
+function live in the C# core. The Pi adapter requests transitions and mirrors
+the returned state and active-tool set for user experience; it cannot commit a
+transition locally. Each transition is guarded by a structured core result.
+Representative predicates:
 
 ```text
 PATCH → PATCH_POLICY_CHECK
@@ -918,21 +927,26 @@ any state → INFRASTRUCTURE_INVALID
   ∨ tool output malformed or unverifiable
 ```
 
-No model message changes phase. The extension changes phase only after validating
-the corresponding structured result and persists that transition in session
-evidence.
+No model message changes phase. The core changes phase only after validating the
+corresponding structured result, persists the transition in the content-addressed
+run state, and returns the exact tool set the adapter must activate. A mismatch
+between core state and Pi's observed active tools blocks further managed
+transitions.
 
-Methodology evidence is emitted as canonical records and transported in
-extension-appended session entries, never reconstructed from conversation
-history: session compaction may summarize away earlier turns, so anything the
-receipt or a methodology audit needs must live in dedicated entries.
+The core emits methodology evidence as canonical records. The adapter transports
+their digests and display projection in extension-appended session entries, but
+the authoritative records live in the core-managed content store and are never
+reconstructed from conversation history. Session compaction may summarize away
+earlier turns, so anything the receipt or a methodology audit needs must already
+exist in those dedicated records.
 
 A Pi session entry is transport, not certification authority. Each methodology
 record contains a monotonic sequence number, the previous-record digest, phase
 transition, candidate digest, referenced core-result and tool-call/result
-digests, model/provider identity, and budget state. The deterministic core
-validates the hash chain, transition sequence, locked state-machine and schema
-versions, candidate identities, and referenced core results. The final
+digests, model/provider identity, and budget state. The same deterministic core
+that creates the record validates the completed hash chain, transition
+sequence, locked state-machine and schema versions, candidate identities, and
+referenced core results. The final
 `methodology_evidence_digest` is bound into the receipt. This chain makes
 omission or alteration visible after it is bound; producer authenticity still
 comes from the pinned runner and its declared isolation boundary. Missing,
@@ -978,7 +992,8 @@ command. `verify_candidate` invokes the exact effective verification plan.
 
 ### Deterministic core path
 
-The extension drives this lower-level core path:
+The adapter drives this lower-level core path while the core owns every state
+transition and result:
 
 ```text
 frozen spec S + resolved lock L + candidate I
@@ -1119,7 +1134,7 @@ Guiding principle:
 ### 8.1 Preflight and formatting
 
 - Validate the optional manifest, mandatory lock, and path containment.
-- Pin the Corrected core, Pi extension when present, and Dafny distribution by
+- Pin the Corrected core, Pi adapter when present, and Dafny distribution by
   version and digest.
 - Before executing Corrected in trusted CI, independently verify its release
   manifest, authentication bundle, artifact digest, and SLSA builder/source
@@ -1469,7 +1484,7 @@ Implementer isolation:
 When review runs, the session is tool-pinned read-only and receives a
 content-verified immutable snapshot. Corrected must report the review mode and
 implementer-isolation profile in the receipt. A general skill
-or prompt cannot upgrade either profile; the extension and execution substrate
+or prompt cannot upgrade either profile; the adapter and execution substrate
 must produce the corresponding evidence.
 
 ### Findings as experiments
@@ -1617,8 +1632,8 @@ review_mode: ADVISORY | NOT_REQUIRED
 
 `CertificationEnvironmentEvidence` contains the canonical environment identity
 defined in §6, the complete effective solver-resource plan, and the independently
-observed effective verifier options. A mismatch between the lock, adapter, and
-observed options is `INFRASTRUCTURE_INVALID`, not a verifier result.
+observed effective verifier options. A mismatch between the lock, Dafny adapter,
+and observed options is `INFRASTRUCTURE_INVALID`, not a verifier result.
 
 `SearchOutcomeEvidence` is a versioned, total search-termination and escalation
 deliverable:
@@ -1665,8 +1680,8 @@ typed backend-specific evidence payload. The v0 outer task, gate-result, profile
 and attestation schemas are backend-tagged and intended to separate common facts
 from Dafny-specific evidence, but that separation is experimental. The
 reference core implements only Dafny; backend neutrality is not claimed until a
-second adapter passes shared conformance tasks without distorting the common
-model.
+second backend adapter passes shared conformance tasks without distorting the
+common model.
 
 `analysis_status` answers whether the declared analysis ran and produced a
 usable typed result. `evidence` records what it found.
@@ -1785,7 +1800,7 @@ gate, and cannot produce `COMPLETE`.
 The final receipt also includes:
 
 - requested profile, profile verdict, and failed predicates;
-- active Pi extension, model/provider, tool-surface, isolation, and reviewer
+- active Pi adapter, model/provider, tool-surface, isolation, and reviewer
   mode;
 - certification-subject and receipt-core digests and, when applicable, the
   methodology-evidence digest, with their schema versions;
@@ -1813,11 +1828,12 @@ receipt.
 
 ## 12. Delivery model
 
-Corrected v0 is a deterministic core plus a pinned Pi extension. The core is
-agent-optional and host-neutral: Phase 0 certification runs with zero agents.
-The managed development experience is intentionally Pi-specific. Generic agent
-commands, MCP exposure, and other host adapters are deferred until the Pi path
-works and the structured boundary has stabilized.
+Corrected v0 is a self-contained .NET 10/C# system plus an optional pinned Pi
+adapter. The C# CLI and worker are agent-optional and host-neutral: Phase 0
+certification runs with zero agents and no Node.js dependency. The managed
+development experience is intentionally Pi-specific. Generic agent commands,
+MCP exposure, and other host adapters are deferred until the Pi path works and
+the structured boundary has stabilized.
 
 The core implementation, predicate and lock schemas, policy registries,
 conformance fixtures, bypass corpus, and reference CI workflows are public.
@@ -1830,20 +1846,26 @@ schema, predicate, policy-registry, and conformance-suite versions.
 
 ### Reference implementation and dependency posture
 
-The reference deterministic core defaults to .NET 8 and C#. The reason is
+The reference deterministic core targets .NET 10 LTS and C#. The reason is
 semantic reuse rather than ecosystem preference: Dafny publishes the
 MIT-licensed `DafnyCore`, `DafnyPipeline`, `DafnyDriver`, and
 `DafnyLanguageServer` packages that implement the language Corrected must
-classify. The Phase 0.0 ADR may reject this choice only with a reproduced
-integration failure. An implementation in another language must still use a
-small pinned C# semantic sidecar or an upstream resolved-program export that
-passes the identical conformance corpus; it may not reconstruct Dafny semantics
-from a second parser.
+classify. Dafny 4.11 packages contain `net8.0` assemblies that NuGet considers
+compatible with `net10.0`; Phase 0.0 must prove that compatibility for the
+actual APIs and process behavior Corrected uses. Corrected does not target
+.NET 8 merely because its pinned Dafny libraries do.
 
-All Dafny SDK calls sit behind one Corrected adapter and one exact package
-lock. The design assumes neither source nor binary compatibility across Dafny
-versions. A toolchain upgrade recompiles the adapter and reruns the ownership,
-closure, bypass, and fingerprint suites.
+The Phase 0.0 ADR may reject the .NET 10 in-process boundary only with a
+reproduced integration failure. Its fallback is a pinned Dafny CLI or minimal
+C# semantic worker, not a second language implementation of Dafny. An
+implementation in another language must still use that semantic worker or an
+upstream resolved-program export that passes the identical conformance corpus;
+it may not reconstruct Dafny semantics from a second parser.
+
+All Dafny SDK calls sit behind one `DafnyAdapter` boundary and one exact
+package lock. The design assumes neither source nor binary compatibility across
+Dafny versions. A toolchain upgrade recompiles the Dafny adapter and reruns the
+ownership, closure, bypass, and fingerprint suites.
 
 Development and certification deliberately use different process lifetimes:
 
@@ -1858,24 +1880,52 @@ The two paths share the verification-plan schema and are differentially tested.
 Any disagreement invalidates the development result and the fresh certification
 path wins. Search caches and Language Server state are never receipt evidence.
 
-The C# core and TypeScript Pi extension communicate through a versioned,
-length-framed local process protocol whose messages are derived from the
-published core schemas. The core distribution supplies generated TypeScript
-types and validators. The extension may manage session state, cancellation,
-progress display, and proposal orchestration, but it does not parse Dafny,
-recompute identities, classify ownership, or evaluate acceptance. Protocol
-messages carry candidate and lock digests, request IDs, typed results, and
-schema versions; malformed, stale, reordered, or cross-candidate responses fail
-closed. Phase 0.0 treats process lifecycle, cancellation, bounded concurrency,
-backpressure, and diagnostic streaming as implementation work rather than
-assuming the language seam is free.
+The C# worker and TypeScript Pi adapter communicate through strict
+LF-delimited JSON over stdin/stdout. Each line is one versioned command, event,
+or result derived from the published core schemas. JSON strings carry escaped
+newlines; stdout carries protocol records only, diagnostics go to stderr,
+records have explicit size limits, and large artifacts travel by
+content-addressed descriptor rather than inline payload. Messages carry request
+IDs, candidate and lock digests, state versions, typed results, and schema
+versions. Malformed, stale, reordered, duplicate, or cross-candidate responses
+fail closed.
+
+The core distribution supplies generated TypeScript types and runtime
+validators, but generated bindings are convenience rather than authority: the
+C# endpoint validates every request. The adapter may manage Pi lifecycle,
+cancellation, progress display, and proposal transport; it does not own run
+state, parse Dafny, recompute identities, classify ownership, rank checkpoints,
+or evaluate acceptance. Phase 0.0 treats process lifecycle, shutdown,
+cancellation, bounded concurrency, backpressure, diagnostic streaming, and
+protocol conformance as implementation work rather than assuming the language
+seam is free.
+
+Published reference executables are self-contained, RID-specific .NET 10
+directories or containers whose runtime files are included in the release
+manifest and certification-environment identity. Phase 0 does not use
+NativeAOT or single-file bundling: Dafny dependencies, native Z3 distribution,
+reflection, and plugin behavior should remain ordinary and inspectable until a
+separate compatibility and reproducibility spike justifies a more aggressive
+packaging mode.
 
 The hard production dependency set stays small: the pinned Dafny distribution
-and official .NET packages in the core, Pi in managed mode, standard schema and
+and official .NET packages in the C# system, the pinned Pi/Node distribution
+and small TypeScript adapter only in managed mode, standard schema and
 canonicalization libraries, and Cosign in trusted CI. Research tools such as
 `dafny-annotator`, Dafny Sketcher, MutDafny, and Claimcheck contribute ported
 algorithms, fixtures, differential results, or optional advisory evidence; they
 do not create parallel acceptance implementations.
+
+This is the smallest split that follows both upstream semantic authorities.
+An all-TypeScript implementation would still need a C# or Dafny subprocess
+boundary—or would duplicate Dafny's resolver and ghostness semantics. An
+all-C# implementation cannot natively register Pi extension tools and lifecycle
+hooks, so it would replace a small typed adapter with a less direct external
+control scheme. TypeScript is therefore integration code, not a second policy
+implementation. Revisit the split if Pi gains a stable language-neutral
+extension protocol or Dafny supplies a stable language-neutral resolved-program
+and verification service; language uniformity alone is not enough reason to
+move either boundary.
 
 Corrected does not initially add Witness/OPA as a second provenance-policy
 engine, tree-sitter or Semgrep as a semantic ownership authority, a hosted
@@ -1892,7 +1942,8 @@ Every published Corrected executable or container is content-addressed, signed,
 and accompanied by SLSA Build Provenance binding it to the public source
 revision, build definition, builder identity, and resolved dependencies. The
 release manifest also binds the matching core schemas, policy registries,
-conformance-suite version, and Pi-extension package.
+conformance-suite version, shipped .NET runtime, and, for a managed bundle, the
+Pi-adapter package and exact Pi and Node distributions.
 
 Before running Corrected, the reference CI workflow uses independently pinned
 bootstrap tooling to verify the selected distribution's digest, signature or
@@ -1914,6 +1965,9 @@ Candidate commands:
   ownership, and mint `corrected.lock`.
 - `corrected check` — validate the lock, protected surface, proof scope, and
   honesty policy.
+- `corrected dev` — launch the lock-pinned Pi managed workflow with discovery
+  disabled and the exact adapter, worker, tools, and resources. It is optional
+  and never required for core certification.
 - `corrected verify` — verify one identified candidate against the locked plan
   and return normalized obligations.
 - `corrected screen` — run the locked intake-spec screen and, when a verified
@@ -1933,37 +1987,43 @@ schema. `certify` is not a prose orchestrator that reimplements their rules; it
 invokes the same coded entrypoints. Independent implementations must pass the
 published conformance suite to claim compatibility.
 
-### Pi extension as the methodology implementation
+### Pi adapter
 
-The pinned extension provides:
+The pinned TypeScript adapter provides:
 
-- `/corrected` to start intake or resume the managed state machine;
-- phase-specific domain tools backed by the core;
-- bounded repair, checkpoint, and rollback policy;
+- `/corrected` to ask the core to start or resume a managed run;
+- fixed domain-tool registrations whose active subset mirrors the core state;
+- forwarding for core-owned repair, checkpoint, rollback, and budget decisions;
 - fresh-session adversarial review;
-- structured `SPEC_ESCALATION`;
-- progress, interruption, and resumption behavior; and
+- structured user requests for core-owned `SPEC_ESCALATION`;
+- Pi lifecycle, interruption, resumption, and presentation behavior; and
 - human-readable receipt and residual-state explanation.
 
 Prompt assets and skills may teach Dafny proof strategy, but they are not
-structural gates. They consume the extension's structured state and never decide
-that certification passed.
+structural gates. They consume the adapter's core-supplied state projection and
+never decide that certification passed.
 
-The extension is installed from a pinned package or explicit trusted path
+The adapter is installed from a pinned package or explicit trusted path
 outside the model-writable workspace. The managed launcher must admit only the
-lock-pinned extension, prompt, skill, context, theme, settings, tool, and package
-set. Pi supports two viable control mechanisms. Its CLI can disable discovered
-extensions, skills, prompt templates, themes, context files, and built-in tools,
-then load an explicit extension and tool allowlist. Its SDK can create a session
-with a custom `ResourceLoader`, explicit tools, and in-memory settings.
+lock-pinned adapter, prompt, skill, context, theme, settings, tool, and package
+set. For interactive work, `corrected dev` launches ordinary Pi with discovery
+disabled, an explicit adapter path and tool allowlist, and the exact
+lock-approved resources. The launcher gives the adapter an absolute worker path
+and expected release-manifest digest; the adapter verifies both and never
+resolves a worker from the workspace or ambient `PATH`. It starts that C# worker
+only from a command or session lifecycle event and closes it idempotently on
+shutdown; it does not start long-lived resources during extension factory
+evaluation.
 
-Corrected v0 uses the SDK-embedded runner because it provides structured state
-injection, resource pinning, and diagnostics through one programmatic boundary;
-this is a design choice, not a claim that the CLI lacks exclusion controls. A
-future certification-capable CLI mode may use the same core if the lock binds
-its exact argv, environment, working directory, explicit resources, and
-resource-discovery diagnostics. Any launch mode that cannot prove the effective
-resource set is not certification-capable.
+For automated managed runs, the launcher uses Pi's strict-JSONL RPC mode with
+the same pinned adapter and resource exclusions. Pi RPC is the cross-language
+control surface; the adapter-to-core protocol remains the narrower
+Corrected-specific tool and state boundary. The Pi SDK is not the v0
+application host. It may support tests or a later embedded UI only if that path
+demonstrates a concrete advantage and can prove the same effective resource
+set. Any launch mode that cannot bind its exact Pi argv, environment, working
+directory, discovered resources, active tools, and adapter/core identities is
+not eligible for a managed-methodology claim.
 
 ### Future adapters
 
@@ -1983,7 +2043,7 @@ Local runs optimize iteration speed. Trusted CI independently:
 
 1. resolves the Corrected release artifact named by the workflow and lock;
 2. verifies its artifact digest, authenticated release manifest, SLSA
-   builder/source expectations, and matching core/extension/schema identities
+   builder/source expectations, and matching core/adapter/schema identities
    with independently pinned bootstrap tools;
 3. materializes the exact intake and candidate snapshots named by digest;
 4. loads and validates the resolved certification lock;
@@ -2035,10 +2095,11 @@ certification stack before testing the economic hypothesis.
 Before production implementation, run a time-boxed spike against the exact
 Dafny 4.11.0 distribution. The spike must:
 
-- create a .NET 8/C# harness with exact package locks for the relevant official
-  Dafny packages, beginning with `DafnyCore` and `DafnyPipeline`;
+- create a .NET 10/C# harness with exact package locks for the relevant
+  `net8.0` Dafny assemblies, beginning with `DafnyCore` and `DafnyPipeline`,
+  and demonstrate their actual `net10.0` compatibility;
 - load or invoke the pinned parser, resolver, and verification pipeline through
-  one documented adapter boundary;
+  one documented Dafny-adapter boundary;
 - recover resolved symbols, declaration kinds, proof versus executable nodes,
   resolver-inferred ghostness, effective options, and the complete source set
   for the Phase 0.1 fixtures;
@@ -2046,24 +2107,29 @@ Dafny 4.11.0 distribution. The spike must:
   that each planted erased-but-assumption-producing construct is still rejected;
 - demonstrate deterministic protected-surface fingerprints across repeated
   parses;
-- compare the adapter's resolved closure and diagnostics with the pinned Dafny
-  CLI on the same fixtures;
+- compare the Dafny adapter's resolved closure and diagnostics with the pinned
+  Dafny CLI on the same fixtures;
 - measure repeated Z3 resource counts under an exact build/platform identity,
   verify enforcement of `--resource-limit`, disable solver time limits, and
   prove that a wall-clock or memory watchdog abort cannot be normalized as a
   verification result;
 - demonstrate that a persistent development verifier can reuse state without
   changing the result of a fresh, cache-free complete certification run;
-- prototype the versioned C#-core/TypeScript-extension process protocol,
-  generated types/validators, cancellation, concurrency, and stale-response
-  rejection;
+- prototype the strict-LF JSONL C#-worker/TypeScript-adapter protocol,
+  generated types and runtime validators, stdout/stderr separation, record-size
+  limits, cancellation, shutdown, concurrency, and stale-response rejection;
+- launch the same pinned adapter in ordinary interactive Pi and Pi RPC modes
+  without an SDK-embedded application host, and prove the effective discovered
+  resources and active tools match the lock;
+- publish a self-contained RID-specific test distribution and confirm its
+  runtime, Dafny, and Z3 identities are recoverable from the release manifest;
 - accept every allowed edit class and reject every planted protected-node,
   option, attribute, and proof-bypass mutation in the spike corpus; and
 - record the selected integration boundary, pinned API/tool identities,
   unsupported constructs, and failure behavior in an implementation ADR.
 
 The preferred outcome is direct use of Dafny's pinned official packages behind
-the adapter. If that surface is not usable, the ADR may select a pinned C#
+the Dafny adapter. If that surface is not usable, the ADR may select a pinned C#
 semantic sidecar or upstream subprocess export. A purpose-built parser is a
 last resort only for the strict Phase 0.1 grammar and requires an explicit
 counterexample showing why the official semantic surfaces failed. No path may
@@ -2075,11 +2141,12 @@ ADR and fixtures establish a deterministic structural boundary.
 The first supported fragment is deliberately closed rather than
 "best-effort Dafny":
 
-- **Toolchain:** Dafny 4.11.0 with the exact verifier, Boogie, and Z3 identities
+- **Toolchain:** a self-contained .NET 10 Corrected host for one initial RID,
+  consuming Dafny 4.11.0 with the exact verifier, Boogie, and Z3 identities
   resolved into the lock. The certification plan fixes random seeds, one
   verification worker, one solver thread, a per-proof-batch resource-unit
   limit, and no solver time limit. The receipt binds the canonical
-  certification-environment identity.
+  certification-environment identity, including the shipped .NET runtime.
 - **Execution:** `execution_mode = CORE` and
   `review_mode = NOT_REQUIRED`; Phase 1 introduces `MANAGED_PI`.
 - **Package:** one regular UTF-8 `.dfy` source file in the default module. Phase
@@ -2163,7 +2230,10 @@ libraries and examples as read-only proposal context rather than linked Phase
 0.1 inputs, a checkpoint, and the independent cheat checker. Record
 cost and completion before adding search controls. The phase/tool authorization
 boundary and canonical methodology record chain are required before claiming a
-managed run and are tested against the methodology corpus.
+managed run and are tested against the methodology corpus. The TypeScript
+adapter only registers, forwards, activates, and renders; the C# worker owns
+phase, budgets, progress ordering, checkpoint identity, and every canonical
+record.
 
 Then introduce the §7 proposal portfolio as separately measured interventions:
 
@@ -2202,7 +2272,9 @@ bounds. Every truthful failure must retain reproducible residual obligation
 identities, its best candidate or checkpoint, strategy attribution, and any
 escalation witnesses. Every illegal phase transition and direct mutation
 attempt in the methodology corpus is blocked, and missing, reordered, or
-altered required methodology evidence is rejected.
+altered required methodology evidence is rejected. A mutated adapter that
+locally changes phase, tool set, checkpoint, or candidate identity must be
+detected by the next core request and cannot yield valid methodology evidence.
 
 ### Phase 2 — Extended deterministic certification
 
@@ -2285,8 +2357,9 @@ The benchmark suite contains:
    pinned Dafny version.
 7. **Substrate corpus** — stale worktrees, wrong or unprovenanced Corrected
    binaries, mutated wrappers, mismatched config, incomplete source closure,
-   changed platform identities, altered solver seeds/concurrency, wall-clock
-   certification limits, and watchdog aborts misreported as solver outcomes.
+   wrong .NET runtime/RID contents, changed platform identities, altered solver
+   seeds/concurrency, wall-clock certification limits, and watchdog aborts
+   misreported as solver outcomes.
 8. **Robustness corpus** — proofs with known seed/resource instability.
 9. **Runtime corpus** — lying externs, compiler-wrapper mismatches, crashes,
    hangs, and insufficient valid-input generation.
@@ -2297,8 +2370,9 @@ The benchmark suite contains:
     obligations, dependency updates, and pinned verifier/toolchain upgrades.
 12. **Methodology corpus** — illegal Pi phase transitions, hidden raw-tool calls,
    direct lock/spec mutation, stale session recovery, checkpoint forgery,
-   reviewer-context leakage, malformed cross-language protocol messages, and
-   incomplete or cross-candidate residual-state bundles.
+   reviewer-context leakage, adapter/core state or active-tool drift, malformed,
+   duplicate, oversized, or stdout-corrupted cross-language protocol messages,
+   and incomplete or cross-candidate residual-state bundles.
 13. **External strategy corpus** — a license-compatible, deduplicated,
     version-pinned subset of DafnyBench and other public tasks, partitioned
     before prompt, hint-card, template, or strategy development. The compatible
@@ -2406,7 +2480,7 @@ on benchmarks Corrected's authors designed.
 - **Intake attestation formats:** Which generic envelopes and trust policies
   should intake verify natively, and what is the stable verifier-plugin
   interface?
-- **Pi packaging:** How are the extension, active tool schemas, system prompt,
+- **Pi packaging:** How are the adapter, active tool schemas, system prompt,
   model/provider configuration, and project resource policy pinned and upgraded?
 - **Sandbox profile:** Which Pi execution backend provides the first complete
   filesystem/network/secret/process capability boundary?
@@ -2448,14 +2522,30 @@ on benchmarks Corrected's authors designed.
 The first implementation must verify these against the pinned release rather
 than treating documentation as timeless:
 
+### .NET
+
+- .NET 10 is the active LTS line at revision time and is supported through
+  2028-11-14. .NET 8 is already in maintenance and reaches end of support on
+  2026-11-10, so it is not an appropriate application target for a new
+  implementation beginning in mid-2026.
+- A `net10.0` application can consume compatible `net8.0` libraries. NuGet
+  reports that compatibility for the Dafny 4.11 package set, but Phase 0.0 must
+  validate the exact APIs, native dependencies, and process behavior rather
+  than treating computed framework compatibility as an integration guarantee.
+- Self-contained RID-specific publication lets Corrected include and digest its
+  .NET runtime instead of depending on an ambient host runtime. NativeAOT and
+  single-file packaging remain deferred until tested against Dafny, Z3,
+  reflection, and plugin behavior.
+
 ### Dafny
 
 - Current target release at revision time: Dafny 4.11.0.
 - Dafny publishes `DafnyCore`, `DafnyPipeline`, `DafnyDriver`, and
-  `DafnyLanguageServer` as .NET 8 packages. `DafnyCore` contains the AST,
-  resolver, auditor, options, and verifier-facing implementation needed by the
-  Phase 0 structural boundary. Publication is not an API-stability promise, so
-  Corrected pins exact package versions behind one adapter.
+  `DafnyLanguageServer` as `net8.0` packages compatible with a `net10.0`
+  consumer. `DafnyCore` contains the AST, resolver, auditor, options, and
+  verifier-facing implementation needed by the Phase 0 structural boundary.
+  Publication is not an API-stability promise, so Corrected pins exact package
+  versions behind one `DafnyAdapter` boundary.
 - The official Language Server uses the same core implementation and supports
   incremental verification and caching controls. Corrected may use it as a
   development accelerator but not as the clean certification oracle.
@@ -2484,8 +2574,10 @@ than treating documentation as timeless:
 
 - Current release at revision time: Pi v0.80.10 (2026-07-16) — actively
   maintained v0.x with no documented API-stability or deprecation policy. The
-  lock pins exact Pi and extension identities; the extension stays thin so API
-  churn lands in the methodology layer, never in acceptance.
+  lock pins exact Pi and Corrected-adapter identities; the adapter stays thin so
+  API churn lands at the integration edge, never in core policy or acceptance.
+- Pi extensions are TypeScript modules, making a small TypeScript adapter the
+  native way to register Corrected's domain tools and lifecycle hooks.
 - Pi extensions can register custom tools and commands, intercept or block tool
   calls, persist session state, and react to lifecycle events.
 - Extensions can change the active tool set during a session, enabling a
@@ -2496,9 +2588,11 @@ than treating documentation as timeless:
   trusted code.
 - The CLI exposes resource-exclusion flags, explicit extension loading, and
   built-in-tool selection; the SDK exposes `createAgentSession`, custom
-  `ResourceLoader` instances, explicit tools, and in-memory settings. Corrected
-  v0 chooses the SDK boundary, but a fully locked and diagnosed CLI invocation
-  is not inherently excluded.
+  `ResourceLoader` instances, explicit tools, and in-memory settings.
+- Pi RPC provides a strict LF-delimited JSONL subprocess protocol and is the
+  documented integration path for another language or process isolation.
+  Corrected uses ordinary extension loading for interactive Pi and RPC for
+  automated managed runs; it does not make the Node SDK its application host.
 - Session compaction may summarize earlier turns. Extension-appended entries can
   transport durable methodology evidence, but certification binds their
   exported, core-validated digest rather than trusting mutable session JSONL by
@@ -2629,8 +2723,10 @@ results below are recent arXiv preprints. This document therefore says
 
 Primary references:
 
+- [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy)
 - [Dafny 4.11.0 release](https://github.com/dafny-lang/dafny/releases/tag/v4.11.0)
 - [DafnyCore package](https://www.nuget.org/packages/DafnyCore/4.11.0)
+- [DafnyDriver package](https://www.nuget.org/packages/DafnyDriver/4.11.0)
 - [DafnyLanguageServer package](https://www.nuget.org/packages/DafnyLanguageServer/4.11.0)
 - [DafnyCore source](https://github.com/dafny-lang/dafny/tree/master/Source/DafnyCore)
 - [Current Dafny Reference Manual](https://dafny.org/dafny/DafnyRef/DafnyRef)
@@ -2640,6 +2736,7 @@ Primary references:
 - [Pi CLI usage and resource controls](https://pi.dev/docs/latest/usage)
 - [Pi security model](https://pi.dev/docs/latest/security)
 - [Pi SDK documentation](https://pi.dev/docs/latest/sdk)
+- [Pi RPC documentation](https://pi.dev/docs/latest/rpc)
 - [Pi session format](https://pi.dev/docs/latest/session-format)
 - [DafnyPro (Dafny Workshop 2026)](https://arxiv.org/abs/2601.05385)
 - [`dafny-annotator` source](https://github.com/metareflection/dafny-annotator)
