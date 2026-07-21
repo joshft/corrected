@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "branch": "feature/dafny-compat-spike",
+  "recommended_lenses": [
+    {
+      "lens_name": "verdict-integrity",
+      "rationale": "The spike's whole value is a trustworthy COMPATIBLE/INCOMPATIBLE verdict; review found three independent channels (route-set shrink, manifest self-reference, fail-open aggregation) by which implementation can emit COMPATIBLE without earning it.",
+      "focus_areas": [
+        "route set committed inside the probe manifest and covered by set equality with (probeID, route) composite keys",
+        "test-suite hard-coded manifest digest asserted against the manifest file and every evidence report",
+        "aggregator derives its expected report set from the manifest, never from reports found on disk",
+        "deletion and route-deletion tests actually fail when an entry or route is removed"
+      ],
+      "severity_guidance": "CRITICAL: any path where a probe/route/report can be absent while COMPATIBLE is still emitted. HIGH: equality performed on non-composite keys or against runtime-declared sets. MEDIUM: aggregation semantics present but unowned/undocumented.",
+      "source_agent": "red-team,design-contract",
+      "source_finding": "RS-001",
+      "source_finding_summary": "Route-set self-shrink and self-referential manifest allow a rule-abiding COMPATIBLE that never loads DafnyPipeline"
+    },
+    {
+      "lens_name": "solver-execution-identity",
+      "rationale": "INV-003's mechanism is defeatable by installing z3 at the assembly-adjacent discovery path (which the research brief recommends), stale sentinel recordings, and PROVER_PATH; evidence would then prove digest identity while the option-wiring Phase 0.1 relies on is unproven.",
+      "focus_areas": [
+        "provisioned z3 location is outside every ambient discovery location; pre-assert no other z3 executable under route output trees",
+        "decoy test: differently-hashed z3 planted at the assembly-adjacent path, executed solver still the pinned one",
+        "removal test asserts P06/P07 individually record solver-unavailable failure, per route",
+        "sentinel recording carries a per-run nonce; PROVER_PATH sanitized"
+      ],
+      "severity_guidance": "CRITICAL: verification succeeds with the pinned z3 removed or a decoy present. HIGH: removal test passes only via P04's identity failure (wrong-reason pass). MEDIUM: sentinel evidence without run-uniqueness.",
+      "source_agent": "red-team,assumptions",
+      "source_finding": "RS-003",
+      "source_finding_summary": "Assembly-adjacent same-file collision plus weak removal-test oracle defeat executed-solver identity"
+    },
+    {
+      "lens_name": "typed-api-observability",
+      "rationale": "Four invariants assert facts (solver invoked, no solver launch, options actually consumed, SDK that built) with no named typed observation channel while PRH-004 bans console scraping — the exact spot implementations quietly regress to stdout regexes or proxy inference.",
+      "focus_areas": [
+        "solver observation defined as typed solver-produced outcome enums plus removal negative, never text scraping",
+        "P08/P09 frontend probes run against the recording sentinel to make no-solver-launch observable",
+        "options manifest read back post-verification with a normalization canary that defeats input echo",
+        "P02 build-SDK recorded at build time via allowlisted launcher; invocation cwd/global.json location pinned"
+      ],
+      "severity_guidance": "CRITICAL: any classification/count sourced from console text or regex over tool output. HIGH: invariant satisfied by proxy inference the spec never blessed. MEDIUM: observation channel used but undocumented in evidence.",
+      "source_agent": "testability,red-team",
+      "source_finding": "RS-004",
+      "source_finding_summary": "Undefined observation channels invite PRH-004 violations or silent invariant weakening"
+    },
+    {
+      "lens_name": "evidence-determinism",
+      "rationale": "The committed-sample equality test is self-contradictory (commit-id bootstrap paradox) until the deterministic projection is partitioned; implementers will otherwise weaken the projection silently, deleting the reproducibility anchor.",
+      "focus_areas": [
+        "three-way field partition (binding identity / deterministic projection / volatile) lives in a committed schema file with digest in the report",
+        "equality test derives its comparison set from the schema file, not from code constants",
+        "commit id asserted equal to HEAD at generation time by a separate check, excluded from cross-run equality",
+        "sample-equality test scoped to the pinned RID with loud skip elsewhere; atomic report emission"
+      ],
+      "severity_guidance": "CRITICAL: equality test that cannot pass as implemented, or projection shrunk in code without a schema-file diff. HIGH: binding fields silently dropped from evidence. MEDIUM: volatile classification changes without spec change.",
+      "source_agent": "assumptions,upgrade-compat,ux",
+      "source_finding": "RS-005",
+      "source_finding_summary": "Deterministic projection undefined and self-contradictory; committed-sample equality permanently red as written"
+    },
+    {
+      "lens_name": "sidecar-fixture-honesty",
+      "rationale": "Expected-value sidecars generated by freezing the harness's first run self-certify first-run bugs; the resolver-inference fixture requirement has no independent enforcement, so the subtlest recovery claim can silently go unexercised.",
+      "focus_areas": [
+        "shape tests on sidecars independent of fixture equality (per-form rows, inferred-ghost row with no ghost keyword, exactly one expect row)",
+        "AST-based fixture-hygiene test for ok.dfy structural purity",
+        "sidecar provenance documented (how generated, how reviewed)",
+        "expected-loaded-assembly sidecar per route asserted as set equality in P03"
+      ],
+      "severity_guidance": "CRITICAL: a required fixture feature (inferred ghost, expect contrast) absent while all tests pass. HIGH: sidecar regenerated to green without review trail. MEDIUM: sidecar shape asserted but provenance undocumented.",
+      "source_agent": "red-team,testability",
+      "source_finding": "RS-009",
+      "source_finding_summary": "Frozen-first-run sidecars self-certify recovery bugs; fixture-inventory requirements unenforced"
+    },
+    {
+      "lens_name": "operator-recovery",
+      "rationale": "The verdict taxonomy conflates harness bugs with reproduced integration failures (false INCOMPATIBLE triggers the expensive architecture fallback), and the operator surface (run procedure, exit codes, atomic reports, artifact lifecycle in a public repo) is unspecified.",
+      "focus_areas": [
+        "verdict taxonomy: INCOMPLETE for environment faults, INCOMPATIBLE-candidate with net8.0 control experiment before boundary rejection",
+        "distinct exit codes for COMPATIBLE/INCOMPATIBLE/INCOMPLETE/crashed; malformed report is its own state",
+        "untracked out/ directory plus gitignore so z3 binaries and package caches never land in the public repo",
+        "terminal verdict summary per route and ADR evidence citations as repo-relative paths"
+      ],
+      "severity_guidance": "CRITICAL: harness API misuse citable as a reproduced integration failure in ADR-0001. HIGH: truncated/absent report readable as pass or refutation. MEDIUM: missing run docs, summaries, or lifecycle rules.",
+      "source_agent": "ux,design-contract",
+      "source_finding": "RS-007",
+      "source_finding_summary": "INCOMPATIBLE conflates harness bug, environment fault, and reproduced integration failure"
+    }
+  ]
+}

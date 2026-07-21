@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "findings": [
+    {
+      "id": "DF-001",
+      "status": "open",
+      "severity": "MEDIUM",
+      "deferred_at": "2026-07-21T02:49:44Z",
+      "source_file": ".correctless/specs/dafny-compat-spike.md",
+      "finding_id": "DD-005",
+      "summary": "Deferred obligation: wire the committed stub workflow under spikes/dafny-compat/ci/ as a permanent CI job when the CI feature lands (spike suite becomes CI-enforced). Dischargeable only by the CI feature's spec."
+    },
+    {
+      "id": "DF-002",
+      "status": "open",
+      "severity": "MEDIUM",
+      "deferred_at": "2026-07-21T02:49:44Z",
+      "source_file": ".correctless/specs/dafny-compat-spike.md",
+      "finding_id": "DD-007",
+      "summary": "Deferred obligation: promote ADR-0001 from provisional to accepted (or supersede with counter-evidence) — inherited by the final Phase 0.0 feature's spec."
+    }
+  ]
+}

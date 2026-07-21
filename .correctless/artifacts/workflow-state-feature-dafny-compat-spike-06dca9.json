@@ -1,0 +1,16 @@
+{
+  "phase": "tdd-tests",
+  "task": "dafny-compat-spike",
+  "spec_file": ".correctless/specs/dafny-compat-spike.md",
+  "started_at": "2026-07-20T22:46:43Z",
+  "phase_entered_at": "2026-07-21T00:59:00Z",
+  "branch": "feature/dafny-compat-spike",
+  "qa_rounds": 0,
+  "feature_intensity": "high",
+  "override": {
+    "active": false,
+    "remaining_calls": 0
+  },
+  "spec_hash": "c96a7aefb9c93db3357f35b33ceda902d45d1924450eb4750120de5825ecd0d9",
+  "spec_line_count": 391
+}

@@ -1,0 +1,13 @@
+{
+  "reviews": [
+    {
+      "run_id": "dafny-compat-spike-20260721T003328Z-28f5",
+      "spec_slug": "dafny-compat-spike",
+      "model": "codex",
+      "codex_version": "unknown",
+      "timestamp": "2026-07-21T00:33:28Z",
+      "status": "skipped",
+      "findings": []
+    }
+  ]
+}
