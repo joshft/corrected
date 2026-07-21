@@ -1,0 +1,6 @@
+<Project>
+  <!-- INV-001 sealing file: intentionally empty. Its presence terminates
+       MSBuild's upward Directory.Build.targets inheritance at the spike root
+       (an empty Directory.Build.props alone does not block the others -
+       codex F9). -->
+</Project>

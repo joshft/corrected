@@ -1,0 +1,13 @@
+{
+  "sidecar_for": "fixtures/ok.dfy",
+  "spike_only": false,
+  "probe": "P06",
+  "expected_verification_targets": ["Add", "MaxOfTwo", "SumFirst"],
+  "expected_target_count": 3,
+  "min_task_count": 3,
+  "expected_frontend_error_count": 0,
+  "notes": [
+    "Target names follow Dafny's typed per-member verification-task naming; re-captured via the DD-006/DD-008 procedure on any toolchain bump.",
+    "Every task outcome must be a solver-produced outcome enum value (RS-004a); raw resource counts are a nondeterministic observation outside the equality domain (codex R4-09)."
+  ]
+}

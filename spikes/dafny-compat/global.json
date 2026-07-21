@@ -1,0 +1,8 @@
+{
+  "//": "EA-001/INV-001: exact .NET 10 SDK pin. Changing this requires re-running the spike suite and committing the evidence diff - see DD-006 / docs/adr/ADR-0001-dafny-integration-boundary.md.",
+  "sdk": {
+    "version": "10.0.302",
+    "rollForward": "disable",
+    "allowPrerelease": false
+  }
+}

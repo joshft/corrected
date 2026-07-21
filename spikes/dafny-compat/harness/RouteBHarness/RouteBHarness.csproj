@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Route B harness executable (DD-001/DD-003). See RouteAHarness.csproj. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RollForward>LatestPatch</RollForward>
+    <RootNamespace>Corrected.Spike.RouteBHarness</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../adapters/SpikeDafnyAdapter.RouteB/SpikeDafnyAdapter.RouteB.csproj" />
+  </ItemGroup>
+</Project>

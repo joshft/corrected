@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-008 / RS-019c: THE single test project. It references ONLY the
+       Dafny-free contracts assembly (project-graph-enforced "tests never load
+       Dafny") and launches route harnesses as child processes via the
+       allowlisted managed launcher. Test runner pinned: VSTest
+       (Microsoft.NET.Test.Sdk + xunit.runner.visualstudio); exit-code contract
+       committed in README.md (INV-006). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RollForward>LatestPatch</RollForward>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Corrected.Spike.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="System.Reflection.MetadataLoadContext" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../contracts/SpikeContracts/SpikeContracts.csproj" />
+  </ItemGroup>
+</Project>

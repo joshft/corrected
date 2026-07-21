@@ -1,0 +1,26 @@
+<Project>
+  <!-- INV-001 sealing file: terminates MSBuild's upward Directory.Build.props
+       inheritance at the spike root (codex F9). Together with
+       Directory.Build.targets, Directory.Build.rsp, and -noAutoResponse on every
+       restore/build/test invocation, no props/targets/rsp above
+       spikes/dafny-compat/ can leak into resolution. -->
+  <PropertyGroup>
+    <!-- INV-001: committed lock file per project; locked-mode restore once the
+         lock exists (the stale-lock negative test proves locked mode is in
+         effect, RS-014a). -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="Exists('$(MSBuildProjectDirectory)/packages.lock.json')">true</RestoreLockedMode>
+    <!-- NuGet downgrade warnings are errors (INV-001). -->
+    <WarningsAsErrors>$(WarningsAsErrors);NU1605</WarningsAsErrors>
+    <!-- DD-003: plain framework-dependent publish; trimming/AOT/single-file
+         break Dafny (solver discovery, reflection, embedded resources). -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishAot>false</PublishAot>
+    <PublishSingleFile>false</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

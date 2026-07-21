@@ -1,0 +1,11 @@
+# INV-014: all run products (spike-local package cache, provisioned z3, sentinel
+# recordings, fresh evidence reports, research clones) live under the untracked
+# out/ area. A public repo must never accidentally receive the z3 binary or the
+# package cache. Committed evidence samples live at evidence/samples/ (tracked).
+out/
+
+# Build products (evidentiary builds are redirected under out/<run_id>/ by the
+# bootstrap controller per DD-008; local scaffold builds use bin/obj).
+bin/
+obj/
+*.user

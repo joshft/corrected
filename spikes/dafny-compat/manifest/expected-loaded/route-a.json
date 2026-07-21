@@ -1,0 +1,16 @@
+{
+  "route": "A",
+  "universe": "trust-relevant managed assets selected through the route harness's .deps.json, excluding shared-framework assemblies (codex F8)",
+  "status": "RED-PLACEHOLDER: sha256 values are captured in GREEN via the DD-008 regeneration procedure; a null sha256 fails P03 structural tests by design",
+  "anchors": ["DafnyDriver", "DafnyCore"],
+  "system_commandline_expected_loaded": true,
+  "assemblies": [
+    { "simple_name": "DafnyDriver", "package_version": "4.11.0", "sha256": null },
+    { "simple_name": "DafnyCore", "package_version": "4.11.0", "sha256": null },
+    { "simple_name": "System.CommandLine", "package_version": "2.0.0-beta4.22272.1", "sha256": null }
+  ],
+  "notes": [
+    "Set equality, not subset (INV-002/RS-008): any loaded Dafny/Boogie-family assembly outside this mapping fails P03; an expected-but-never-loaded assembly is a failure, never a vacuous pass.",
+    "Identity discrimination is by file SHA-256 (beta4 and GA System.CommandLine can share assembly version 2.0.0.0)."
+  ]
+}

@@ -1,0 +1,21 @@
+# DD-005: STUB CI workflow — the structural handoff artifact for the future CI
+# feature (deferred finding DF-001 in .correctless/meta/deferred-findings.json).
+# This file is NOT wired into any CI system yet; the CI feature must move/wire
+# it (assumed runner RID: linux-x64 — a different RID requires new pinned
+# digests and a re-captured committed sample, EA-002/RS-005).
+#
+# Until CI lands, enforcement is local `dotnet test` (EA-004): the Correctless
+# workflow test command runs this suite.
+name: dafny-compat-spike (permanent conformance job — DD-005/DD-006)
+on:
+  workflow_call: {}
+jobs:
+  spike:
+    runs-on: ubuntu-latest # must be linux-x64 (EA-002)
+    steps:
+      - name: checkout
+        run: 'echo "STUB: the CI feature wires real steps here (DF-001)"'
+      - name: pinned SDK 10.0.302 per spikes/dafny-compat/global.json
+        run: 'echo "STUB: install exact pinned SDK"'
+      - name: provision -> locked restore -> build -> test (README phase ordering)
+        run: 'echo "STUB: env -i HOME=$HOME bash -p spikes/dafny-compat/scripts/run-spike.sh"'

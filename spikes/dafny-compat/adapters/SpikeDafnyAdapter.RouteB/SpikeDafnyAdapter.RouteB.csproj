@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-008 / DD-001: Route B seam project - the SOLE owner of Route B's
+       Dafny/Boogie packages (hand-assembled Compilation from
+       DafnyCore/DafnyPipeline; Boogie.ExecutionEngine driven directly).
+       OQ-004 (resolved during RED): the named DafnyPipeline consumption on the
+       verification path is the DafnyStandardLibraries.doo embedded resource,
+       loaded by DafnyCore via Assembly.Load("DafnyPipeline") +
+       GetManifestResourceStream when the standard-libraries option is on
+       (dafny v4.11.0: Source/DafnyCore/DafnyMain.cs:21-28,
+       Source/DafnyCore/Pipeline/Compilation.cs:181-203,
+       Source/DafnyCore/DafnyFile.cs:214-222). See
+       manifest/expected-loaded/route-b.json.
+       See Route A csproj for the PrivateAssets="compile" rationale. -->
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <RootNamespace>Corrected.Spike.RouteB</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DafnyCore" PrivateAssets="compile" />
+    <PackageReference Include="DafnyPipeline" PrivateAssets="compile" />
+    <PackageReference Include="Boogie.ExecutionEngine" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../contracts/SpikeContracts/SpikeContracts.csproj" />
+  </ItemGroup>
+</Project>

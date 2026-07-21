@@ -1,0 +1,40 @@
+{
+  "manifest_version": 1,
+  "spec": ".correctless/specs/dafny-compat-spike.md (Probe Manifest section)",
+  "note": "Spec-owned. Removing, renaming, or adding a probe or route is a spec change. This file's SHA-256 is hard-coded as a constant in the test suite (RS-002) and appears in every evidence report. Expected completed set for a full run: 9 child probes x 2 routes + 2 controller-attested P01 instances + 2 shared probes = 22 composite-keyed entries.",
+  "route_plan": {
+    "mandatory_routes": ["A", "B"],
+    "route_a": "CliCompilation via DafnyDriver 4.11.0",
+    "route_b": "hand-assembled Compilation from DafnyCore/DafnyPipeline",
+    "verdict_policy": "per-route verdicts; no bare overall COMPATIBLE; one route failing while the other passes is a recorded per-route finding, not a veto (DD-001)"
+  },
+  "ownership": {
+    "bootstrap_controller": "mints run_id, creates run root, holds the single absolute /proc/uptime monotonic deadline through final aggregation, emits nonce-bound restore/build receipts; attests P01 per route",
+    "aggregator": "validates receipts (never claims to have performed them); owns shared probes P02 and P04",
+    "route_children": "own P03 and P05-P12 only; report only their route probes"
+  },
+  "entries": [
+    { "probe": "P01", "route": "A", "owner": "controller", "title": "restore-identity (Route A partition: seam+harness+control plus shared contracts/aggregator/test projects)" },
+    { "probe": "P01", "route": "B", "owner": "controller", "title": "restore-identity (Route B partition: seam+harness+control plus shared contracts/aggregator/test projects)" },
+    { "probe": "P02", "route": "shared", "owner": "aggregator", "title": "sdk-build-identity (build-time records; per-route runtime identity lives in P03)" },
+    { "probe": "P03", "route": "A", "owner": "route-child", "title": "loaded-assembly + runtime identity (set equality vs committed expected-loaded set; net10-on-net10 gate)" },
+    { "probe": "P03", "route": "B", "owner": "route-child", "title": "loaded-assembly + runtime identity (set equality vs committed expected-loaded set; net10-on-net10 gate)" },
+    { "probe": "P04", "route": "shared", "owner": "aggregator", "title": "solver-identity (non-discoverable install location, digest matches pin, banner 4.12.1)" },
+    { "probe": "P05", "route": "A", "owner": "route-child", "title": "solver-path-honored (sentinel solver, per-run nonce)" },
+    { "probe": "P05", "route": "B", "owner": "route-child", "title": "solver-path-honored (sentinel solver, per-run nonce)" },
+    { "probe": "P06", "route": "A", "owner": "route-child", "title": "verify-ok (non-vacuous)" },
+    { "probe": "P06", "route": "B", "owner": "route-child", "title": "verify-ok (non-vacuous)" },
+    { "probe": "P07", "route": "A", "owner": "route-child", "title": "verify-bad (completed refutation at planted location)" },
+    { "probe": "P07", "route": "B", "owner": "route-child", "title": "verify-bad (completed refutation at planted location)" },
+    { "probe": "P08", "route": "A", "owner": "route-child", "title": "frontend-syntax (stage=parse; zero solver invocations)" },
+    { "probe": "P08", "route": "B", "owner": "route-child", "title": "frontend-syntax (stage=parse; zero solver invocations)" },
+    { "probe": "P09", "route": "A", "owner": "route-child", "title": "frontend-resolve (stage=resolution; zero solver invocations)" },
+    { "probe": "P09", "route": "B", "owner": "route-child", "title": "frontend-resolve (stage=resolution; zero solver invocations)" },
+    { "probe": "P10", "route": "A", "owner": "route-child", "title": "ast-recovery (committed sidecar equality)" },
+    { "probe": "P10", "route": "B", "owner": "route-child", "title": "ast-recovery (committed sidecar equality)" },
+    { "probe": "P11", "route": "A", "owner": "route-child", "title": "options-manifest (frozen Option Manifest readback with normalization canary)" },
+    { "probe": "P11", "route": "B", "owner": "route-child", "title": "options-manifest (frozen Option Manifest readback with normalization canary)" },
+    { "probe": "P12", "route": "A", "owner": "route-child", "title": "closure-recovery (constant closure across both included-files option values)" },
+    { "probe": "P12", "route": "B", "owner": "route-child", "title": "closure-recovery (constant closure across both included-files option values)" }
+  ]
+}

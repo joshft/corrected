@@ -1,0 +1,26 @@
+{
+  "sidecar_for": ["fixtures/incl-root.dfy", "fixtures/incl-leaf.dfy"],
+  "spike_only": true,
+  "probe": "P12",
+  "expected_closure_repo_relative": [
+    "spikes/dafny-compat/fixtures/incl-leaf.dfy",
+    "spikes/dafny-compat/fixtures/incl-root.dfy"
+  ],
+  "per_option_value": {
+    "verify_included_files_false": {
+      "expected_verification_targets": ["RootUsesLeaf"]
+    },
+    "verify_included_files_true": {
+      "expected_verification_targets": ["LeafAdd", "LeafAddCommutes", "RootUsesLeaf"]
+    }
+  },
+  "expected_target_set_delta": ["LeafAdd", "LeafAddCommutes"],
+  "single_file_control": {
+    "fixture": "fixtures/ok.dfy",
+    "expected_closure_repo_relative": ["spikes/dafny-compat/fixtures/ok.dfy"]
+  },
+  "notes": [
+    "The closure must be identical {root, leaf} under BOTH option values while the verification-target set differs by exactly the committed delta (codex R3-10); merely 'the two sets differ' would accept fabricated sets.",
+    "Single-file fixtures report a one-element closure derived from the resolver, not an echo of the CLI argument (INV-012)."
+  ]
+}

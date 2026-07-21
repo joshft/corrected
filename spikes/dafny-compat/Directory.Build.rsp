@@ -1,0 +1,4 @@
+# INV-001 sealing file: intentionally empty. Its presence terminates MSBuild's
+# upward Directory.Build.rsp (auto response file) inheritance at the spike root.
+# NOTE (codex R3-8): a local rsp does not disable the SDK-adjacent MSBuild.rsp -
+# every restore/build/test invocation must also pass -noAutoResponse.

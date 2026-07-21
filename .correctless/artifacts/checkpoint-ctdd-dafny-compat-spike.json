@@ -1,0 +1,12 @@
+{
+  "skill": "ctdd",
+  "slug": "dafny-compat-spike",
+  "branch": "feature/dafny-compat-spike",
+  "completed_phases": [
+    "red"
+  ],
+  "current_phase": "test-audit",
+  "green_attempts": 0,
+  "calm_reset_fired": false,
+  "timestamp": "2026-07-21T21:08:46Z"
+}

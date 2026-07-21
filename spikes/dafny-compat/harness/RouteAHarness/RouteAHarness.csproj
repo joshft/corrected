@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Route A harness executable (DD-001/DD-003): framework-dependent net10.0
+       console artifact, launched as a child process by the allowlisted managed
+       launcher - never test-host-loaded. RollForward=LatestPatch is the
+       committed roll-forward policy P03 asserts (EA-001: runtime patch floats,
+       recorded as binding identity, not equality-compared). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RollForward>LatestPatch</RollForward>
+    <RootNamespace>Corrected.Spike.RouteAHarness</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../adapters/SpikeDafnyAdapter.RouteA/SpikeDafnyAdapter.RouteA.csproj" />
+  </ItemGroup>
+</Project>

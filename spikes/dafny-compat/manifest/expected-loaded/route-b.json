@@ -1,0 +1,27 @@
+{
+  "route": "B",
+  "universe": "trust-relevant managed assets selected through the route harness's .deps.json, excluding shared-framework assemblies (codex F8)",
+  "status": "RED-PLACEHOLDER: sha256 values are captured in GREEN via the DD-008 regeneration procedure; a null sha256 fails P03 structural tests by design",
+  "anchors": ["DafnyCore", "DafnyPipeline"],
+  "system_commandline_expected_loaded": true,
+  "assemblies": [
+    { "simple_name": "DafnyCore", "package_version": "4.11.0", "sha256": null },
+    { "simple_name": "DafnyPipeline", "package_version": "4.11.0", "sha256": null },
+    { "simple_name": "System.CommandLine", "package_version": "2.0.0-beta4.22272.1", "sha256": null }
+  ],
+  "dafny_pipeline_consumption": {
+    "resolved_during": "RED (OQ-004)",
+    "kind": "embedded resource consumed on the verification path (not a bare Assembly.Load — the resource content feeds parse/resolve/verify)",
+    "api": "Assembly.Load(\"DafnyPipeline\") + GetManifestResourceStream(\"DafnyStandardLibraries.doo\") via dllresource://DafnyPipeline/DafnyStandardLibraries.doo",
+    "trigger": "--standard-libraries=true while verifying fixtures/stdlib-anchor.dfy (variance from the Option Manifest recorded explicitly in evidence)",
+    "source_citations": [
+      "dafny v4.11.0 Source/DafnyCore/DafnyMain.cs:21-28 (StandardLibrariesDooUri -> dllresource://DafnyPipeline/...)",
+      "dafny v4.11.0 Source/DafnyCore/Pipeline/Compilation.cs:181-203 (Compilation adds the stdlib doo URIs to the verified file set)",
+      "dafny v4.11.0 Source/DafnyCore/DafnyFile.cs:214-222 (HandleDooFile: Assembly.Load(uri.Host) + GetManifestResourceStream; throws if the resource is absent)"
+    ],
+    "removal_differential_test": "same fixture with --standard-libraries=false fails at stage=resolution; with DafnyPipeline.dll removed/renamed in the route output, the --standard-libraries=true run fails with the typed missing-assembly/missing-resource error — proving the consumption matters (codex R2-11)"
+  },
+  "notes": [
+    "Boogie.ExecutionEngine assemblies appear in the captured set in GREEN with their real simple names; the placeholder list intentionally understates the set so the P03 equality test cannot vacuously pass."
+  ]
+}

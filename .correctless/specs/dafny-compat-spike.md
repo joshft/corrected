@@ -55,8 +55,11 @@ false-verdict failure modes; their findings are folded in below.
 3. In-process parse → resolve → Z3-backed verify of committed `.dfy` fixtures:
    provable (`ok.dfy`), refutable (`bad.dfy`), classification
    (`classify.dfy`), malformed (`syntax-error.dfy`), unresolvable
-   (`resolve-error.dfy`), and a spike-only include pair
-   (`incl-root.dfy`/`incl-leaf.dfy`) for closure recovery.
+   (`resolve-error.dfy`), a spike-only include pair
+   (`incl-root.dfy`/`incl-leaf.dfy`) for closure recovery, and a spike-only
+   Route B standard-library anchor (`stdlib-anchor.dfy`) for the OQ-004
+   DafnyPipeline consumption removal/differential (added during RED per
+   OQ-004's mandate; disposition 2026-07-21).
 4. Resolved-AST recovery: symbol names, declaration kinds, proof-vs-executable
    node classification (including the four Phase 0.1 editable-proof forms),
    resolver-*inferred* ghostness, the effective-options manifest, and the
@@ -369,7 +372,7 @@ missing any mandatory route's report is INCOMPLETE (INV-006).
 
 ### BND-003: Fixture files into the verifier
 - **Boundary**: none (trusted, authored in-repo)
-- **Input from**: `spikes/dafny-compat/fixtures/*.dfy` + expected-values sidecars, committed and reviewed; positive fixtures constrained to the Phase 0.1 supported fragment (bool/int/nat/seq, no heap/classes/recursion) so they remain reusable as Phase 0.1 fixtures — **by reference in place, not by copying** (RS-020l: copies would fork the SHA-256s the evidence binds to; any re-capture records digest continuity). The include pair and error fixtures are spike-only and marked as such.
+- **Input from**: `spikes/dafny-compat/fixtures/*.dfy` + expected-values sidecars, committed and reviewed; positive fixtures constrained to the Phase 0.1 supported fragment (bool/int/nat/seq, no heap/classes/recursion) so they remain reusable as Phase 0.1 fixtures — **by reference in place, not by copying** (RS-020l: copies would fork the SHA-256s the evidence binds to; any re-capture records digest continuity). The include pair, error fixtures, and the Route B standard-library anchor (`stdlib-anchor.dfy` + sidecar, added during RED per OQ-004's mandate) are spike-only and marked as such.
 - **Validation required**: SHA-256 of each fixture and sidecar recorded in the evidence report so every claim binds to exact inputs; `ok.dfy` structural purity enforced by the named AST-based fixture-hygiene test (INV-004); sidecar shape tests independent of fixture equality (INV-007/RS-009).
 - **Failure mode**: unreadable/missing fixture → probe INCOMPLETE (fail-closed per INV-006).
 

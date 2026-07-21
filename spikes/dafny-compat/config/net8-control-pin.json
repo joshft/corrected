@@ -1,0 +1,23 @@
+{
+  "note": "BND-004: net8 control-runtime intake pin (codex R2-2/R3-3). Installed inside the run root; launched via the explicit private host argv '<control-root>/dotnet exec --fx-version 8.0.29 ...' with exactly one framework reference. DOTNET_ROOT* steers apphosts — it does not select the runtime when invoking a dotnet CLI; the matching private host must be invoked directly.",
+  "runtime_version": "8.0.29",
+  "rid": "linux-x64",
+  "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.29/dotnet-runtime-8.0.29-linux-x64.tar.gz",
+  "sha256": "dba346c5c4357e1befebf14de8c8ee7f09313cc12c7c0015a4cdd4dfd0efba81",
+  "official_sha512": "2739a48f5ec81738d05376f7bf26b2efc5297639db3f4748b458d54bf795a084c5bd47886449b9996eb1a3371bb8c3900d72049e8f0150d0a5ac8230ef38a65e",
+  "provenance": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/8.0/releases.json (runtime 8.0.29, linux-x64 tar.gz); sha256 computed from the downloaded archive whose sha512 matches the official release-metadata hash",
+  "net10_control_host": {
+    "note": "codex R4-04: EA-001's floating net10 runtime patch applies to the main run's binding record only, never to control cells. The SDK-bundled host is declared here as an explicit locked prerequisite; digests captured in GREEN via the DD-008 procedure (relative to the pinned SDK install, never absolute host paths).",
+    "sdk_version": "10.0.302",
+    "hostfxr_expected_digest": null,
+    "corelib_expected_digest": null
+  },
+  "net8_expected_identities": {
+    "note": "TA-B12: per-file identities of the pinned 8.0.29 runtime the control cell must prove it ran on. Captured in GREEN from the digest-verified archive via DD-008; null placeholders FAIL the pin test by design.",
+    "hostfxr_expected_digest": null,
+    "hostfxr_relative_path": "host/fxr/8.0.29/libhostfxr.so",
+    "corelib_expected_digest": null,
+    "corelib_relative_path": "shared/Microsoft.NETCore.App/8.0.29/System.Private.CoreLib.dll"
+  },
+  "identity_proof": "digest + location identity of the selected hostfxr and System.Private.CoreLib recorded in control evidence — 'ran on some 8.x' is insufficient; the pinned runtime must be proven to have run"
+}

@@ -1,0 +1,15 @@
+{
+  "sidecar_for": "fixtures/bad.dfy",
+  "spike_only": true,
+  "probe": "P07",
+  "planted_assertion": {
+    "file": "fixtures/bad.dfy",
+    "line": 8
+  },
+  "expected_stage": "verification",
+  "expected_outcome": "completed-refutation",
+  "notes": [
+    "P07 passes if the typed diagnostic's reported range CONTAINS the planted line (codex F15); the exact range is recorded observationally.",
+    "If the typed outcome cannot distinguish completed refutation from timeout/undetermined, P07 fails (RS-018c)."
+  ]
+}
