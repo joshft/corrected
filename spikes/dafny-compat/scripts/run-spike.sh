@@ -266,18 +266,93 @@ list_descendant_sessions() { # ancestor-pid -> prints unique session-leader pids
   done
 }
 
-# MA-UX-2/MA-RB-1: keep-last-N prune of out/runid-* (old canonical run roots,
-# ~1GB each), NEVER the out/current pointer target and NEVER out/regen-* (a live
-# regen holds its own regen-variance root — clean-runs.sh prunes those under
-# operator control). Newest-N kept by mtime comparison (bash -nt; no ls/stat/find
-# — those are not on the layer-1 allowlist).
-prune_run_roots() { # keep-count [keep-this-root]
-  local keep="$1" protect="${2:-}" d other newer dirs=()
-  for d in "$SPIKE_ROOT"/out/runid-*; do
+# MA-RB-R2-1..4 (concurrency backbone): ONE coarse out/-level advisory lock,
+# shared by every destructive/publishing operation over the shared out/
+# substrate — the start-of-run prune (prune_run_roots) AND the shared-package
+# cache seed publish (publish_cache_staged). Two concurrent canonical runs are
+# an anticipated state (the cache is hardened for it); without a lock, run B's
+# start-prune can rm -rf run A's live root, and two cold seeders can nest the
+# cache. Mechanism: an atomic `mkdir` lock dir (allowlist-safe — no flock/fcntl),
+# holder pid recorded so a crashed/killed holder's lock is reclaimed (stale
+# detection via `kill -0`). acquire returns nonzero on timeout (caller SKIPS the
+# operation — never blocks a run indefinitely).
+OUT_LOCK_DIR="$SPIKE_ROOT/out/.lock"
+acquire_out_lock() { # timeout-seconds -> 0 acquired, 1 contended/timed-out
+  local timeout="${1:-30}" waited=0 holder=""
+  run_cmd mkdir -p -- "$SPIKE_ROOT/out"
+  while :; do
+    if run_cmd mkdir -- "$OUT_LOCK_DIR" 2>/dev/null; then
+      printf '%s\n' "$$" > "$OUT_LOCK_DIR/pid"
+      return 0
+    fi
+    holder=""
+    [ -f "$OUT_LOCK_DIR/pid" ] && read -r holder < "$OUT_LOCK_DIR/pid" 2>/dev/null || true
+    # Stale-holder reclaim: a crashed/killed holder cannot hold the lock forever.
+    if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
+      run_cmd rm -rf -- "$OUT_LOCK_DIR" 2>/dev/null || true
+      continue
+    fi
+    if [ "$waited" -ge "$timeout" ]; then
+      return 1
+    fi
+    run_cmd sleep 1
+    waited=$((waited + 1))
+  done
+}
+release_out_lock() {
+  local holder=""
+  [ -f "$OUT_LOCK_DIR/pid" ] && read -r holder < "$OUT_LOCK_DIR/pid" 2>/dev/null || true
+  if [ -z "$holder" ] || [ "$holder" = "$$" ]; then
+    run_cmd rm -rf -- "$OUT_LOCK_DIR" 2>/dev/null || true
+  fi
+}
+
+# MA-RB-R2-4: resolve the run root the out/current pointer TARGETS (not just the
+# out/current directory name) so a keep-N sweep never dangles the dev-loop
+# pointer. Reads out/current/spike.runsettings's SPIKE_RUN_CONTEXT
+# (<run-root>/run-context.json) and strips the file name to the run root.
+resolve_out_current_referent() { # out-dir -> prints protected run-root path or nothing
+  local out_dir="$1" rs="$1/current/spike.runsettings" line ctx
+  [ -f "$rs" ] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      *'<SPIKE_RUN_CONTEXT>'*'</SPIKE_RUN_CONTEXT>'*)
+        ctx="${line#*<SPIKE_RUN_CONTEXT>}"
+        ctx="${ctx%%</SPIKE_RUN_CONTEXT>*}"
+        printf '%s' "${ctx%/run-context.json}"
+        return 0 ;;
+    esac
+  done < "$rs"
+  return 0
+}
+
+# MA-UX-2/MA-RB-1 + MA-RB-R2-1/R2-4 + MA-UC-R2-1: keep-last-N prune of
+# out/runid-* (old canonical run roots, ~1GB each). NEVER prunes: the explicit
+# live run root (protect), the out/current pointer's TARGET (referent), or any
+# root whose .inner-pid names a LIVE controller (a concurrent canonical run).
+# Emits one stderr line naming the count removed + keep-count (a silent
+# destructive default is invisible on a first-post-upgrade mass deletion).
+# Newest-N kept by mtime comparison (bash -nt; no ls/stat/find — not on the
+# layer-1 allowlist). Callers wrap this in acquire_out_lock so two concurrent
+# prunes never race over the shared substrate.
+prune_run_roots() { # out-dir keep-count [keep-this-root]
+  local out_dir="$1" keep="$2" protect="${3:-}" d other newer dirs=() referent holder removed=0
+  referent="$(resolve_out_current_referent "$out_dir")"
+  for d in "$out_dir"/runid-*; do
     [ -d "$d" ] || continue
     # NEVER prune the live run root (defensive: it is the newest so keep-N would
     # retain it anyway, but an explicit skip removes any mtime-ordering risk).
     [ -n "$protect" ] && [ "$d" = "$protect" ] && continue
+    # MA-RB-R2-4: NEVER prune the out/current pointer's target.
+    [ -n "$referent" ] && [ "$d" = "$referent" ] && continue
+    # MA-RB-R2-1: NEVER prune a LIVE run's root — its .inner-pid names a running
+    # controller (a concurrent canonical run mid-flight). A concurrent run B's
+    # start-prune must not rm -rf run A's live root out from under it.
+    if [ -f "$d/.inner-pid" ]; then
+      holder=""
+      read -r holder < "$d/.inner-pid" 2>/dev/null || true
+      if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then continue; fi
+    fi
     dirs+=("$d")
   done
   for d in "${dirs[@]}"; do
@@ -288,8 +363,76 @@ prune_run_roots() { # keep-count [keep-this-root]
     done
     if [ "$newer" -ge "$keep" ]; then
       run_cmd rm -rf -- "$d"
+      removed=$((removed + 1))
     fi
   done
+  # MA-UC-R2-1: announce the destructive prune so a first-post-upgrade mass
+  # deletion (~100 roots) is visible at runtime (mirrors clean-runs.sh).
+  if [ "$removed" -gt 0 ]; then
+    echo "run-spike: pruned $removed old run root(s) under $out_dir, keeping the newest $keep (never out/current's target, out/cache, or a live run)" >&2
+  fi
+}
+
+# MA-UX-5/MA-RB-2 + MA-ID-R2-1: the shared package cache is TRUSTED only when its
+# completion marker AND package dir are both present. A torn seed (deadline KILL
+# / ENOSPC / SIGKILL mid-populate) leaves a marker-less dir this predicate
+# rejects, so it is ignored (the run restores fresh) instead of being copied
+# into every subsequent run root forever. Sole guard for both the production
+# consume path and the cache-consume test phase (no drift).
+shared_cache_is_trusted() { # cache-dir
+  [ -f "$1/packages.complete" ] && [ -d "$1/packages" ]
+}
+
+# MA-RB-R2-3: publish a staged package cache into place ATOMICALLY and without
+# nesting. The whole publish is serialized under the out/-level lock, re-checks
+# the marker after acquiring (another cold seeder may have won the race while we
+# staged), rotates any existing dir to a PID-UNIQUE .old (never a shared name),
+# and swaps with `mv -T`/--no-target-directory so a stray dir can never be moved
+# INSIDE an existing packages/ (the doubled/nested-cache-marked-complete state).
+# The completion marker is written LAST. Lock contention -> drop our staged copy
+# (the winning run publishes the cache).
+publish_cache_staged() { # cache-dir staged-dir
+  local cache_dir="$1" staged="$2"
+  local pkgs="$cache_dir/packages" marker="$cache_dir/packages.complete" old="$cache_dir/packages.$$.old"
+  if acquire_out_lock 30; then
+    if [ -f "$marker" ]; then
+      run_cmd rm -rf -- "$staged"   # another cold seeder already published — one clean copy
+    else
+      run_cmd rm -rf -- "$old"
+      [ -d "$pkgs" ] && run_cmd mv -- "$pkgs" "$old"
+      run_cmd mv -T -- "$staged" "$pkgs"
+      printf 'seeded\n' > "$marker.tmp"
+      run_cmd mv -- "$marker.tmp" "$marker"
+      run_cmd rm -rf -- "$old"
+    fi
+    release_out_lock
+  else
+    run_cmd rm -rf -- "$staged"
+  fi
+}
+
+# MA-RB-R2-2: reap leaked cache staging at controller start. A deadline-KILL or
+# SIGKILL mid-seed leaks packages.staged.<pid> (hundreds of MB) in the
+# never-pruned out/cache; nothing else globs it. Reap staged/.old dirs whose
+# pid-suffix names a DEAD process (a LIVE pid is a concurrent seeder mid-flight
+# — never clobbered) plus any legacy bare packages.old from the pre-R2-3 impl.
+reap_cache_staging() { # cache-dir
+  local d holder
+  [ -d "$1" ] || return 0
+  for d in "$1"/packages.staged.* "$1"/packages.*.old; do
+    [ -e "$d" ] || continue
+    case "$d" in
+      *.old) holder="${d##*/packages.}"; holder="${holder%.old}" ;;
+      *)     holder="${d##*.}" ;;
+    esac
+    case "$holder" in
+      ''|*[!0-9]*) run_cmd rm -rf -- "$d" 2>/dev/null || true; continue ;;
+    esac
+    if ! kill -0 "$holder" 2>/dev/null; then
+      run_cmd rm -rf -- "$d" 2>/dev/null || true
+    fi
+  done
+  [ -d "$1/packages.old" ] && run_cmd rm -rf -- "$1/packages.old" 2>/dev/null || true
 }
 
 
@@ -323,6 +466,8 @@ CONFIG_FILE="$SPIKE_ROOT/config/run-config.json"
 SOLVER_OVERRIDE=""
 RUN_ROOT=""
 OUT_PATH=""
+KEEP_ARG=""
+OUT_DIR_ARG=""
 INNER=0
 CANONICAL=1
 SPIKE_RUN_ID="${SPIKE_RUN_ID:-}"
@@ -340,6 +485,8 @@ while [ $# -gt 0 ]; do
     --out) OUT_PATH="$2"; CANONICAL=0; shift 2 ;;
     --run-id) SPIKE_RUN_ID="$2"; shift 2 ;;
     --nonce) SPIKE_NONCE="$2"; shift 2 ;;
+    --keep) KEEP_ARG="$2"; shift 2 ;;         # MA-ID-R2-3: prune-run-roots test phase only
+    --out-dir) OUT_DIR_ARG="$2"; shift 2 ;;   # MA-RB-R2-*: prune/cache test phases only (isolated substrate)
     --dotnet-root) shift 2 ;;  # MA-UX-3: pre-scanned above for resolve_sdk; NOT a variance override
     *) echo "run-spike: unknown argument '$1'" >&2; exit 20 ;;
   esac
@@ -354,6 +501,62 @@ cd -- "$SPIKE_ROOT"
 
 # --- generic operator phases (test-visible surface; faults are constructed BY
 # --- tests in test-owned scratch roots, never by SUT flags) -------------------
+
+# MA-ID-R2-3/MA-RB-R2-1/MA-RB-R2-4/MA-UC-R2-1: drive the REAL prune_run_roots
+# (the canonical-start auto-prune, NOT a re-implementation) against an isolated
+# --out-dir with an explicit --keep, so keep-N boundedness + live-PID +
+# out/current-referent protection + the announcement are exercised
+# behaviorally, not source-scanned.
+if [ "$PHASE" = "prune-run-roots" ]; then
+  local_out="${OUT_DIR_ARG:-$SPIKE_ROOT/out}"
+  keep_n="${KEEP_ARG:-5}"
+  case "$keep_n" in ''|*[!0-9]*) echo "run-spike: --keep must be a non-negative integer (prune-run-roots)" >&2; exit 20 ;; esac
+  if [ "$keep_n" -eq 0 ]; then echo "run-spike: --keep 0 refused — prune must retain at least one root (MA-RB-R2-4)" >&2; exit 20; fi
+  if acquire_out_lock 30; then
+    prune_run_roots "$local_out" "$keep_n" ""
+    release_out_lock
+  else
+    echo "run-spike: prune skipped (out/ lock held by a concurrent run)" >&2
+  fi
+  exit 0
+fi
+
+# MA-RB-R2-3/MA-RB-R2-2: drive the REAL publish_cache_staged against an isolated
+# --out-dir cache dir with a --project source tree, so the lock + marker
+# re-check + mv -T no-nesting swap are exercised behaviorally.
+if [ "$PHASE" = "cache-publish" ]; then
+  if [ -z "$OUT_DIR_ARG" ] || [ -z "$PROJECT" ]; then
+    echo "run-spike: --phase cache-publish requires --out-dir and --project (source tree)" >&2; exit 20
+  fi
+  CP_STAGED="$OUT_DIR_ARG/packages.staged.$$"
+  run_cmd mkdir -p -- "$OUT_DIR_ARG" "$CP_STAGED"
+  run_cmd bash -p -c 'set -euo pipefail; tar -C "$1" -cf - . | tar -C "$2" -xf -' _ "$PROJECT" "$CP_STAGED"
+  publish_cache_staged "$OUT_DIR_ARG" "$CP_STAGED"
+  exit 0
+fi
+
+# MA-ID-R2-1: drive the REAL shared_cache_is_trusted consume guard against an
+# isolated --out-dir cache dir, so a marker-less/torn cache is behaviorally
+# proven to be IGNORED (never consumed) and a marker+dir cache is trusted.
+if [ "$PHASE" = "cache-consume" ]; then
+  if [ -z "$OUT_DIR_ARG" ]; then echo "run-spike: --phase cache-consume requires --out-dir" >&2; exit 20; fi
+  if shared_cache_is_trusted "$OUT_DIR_ARG"; then
+    echo "cache-consume: trusted (marker present) — would copy into the run root" >&2
+  else
+    echo "cache-consume: ignored (no completion marker / no package dir) — restoring fresh (MA-UX-5/AP-016)" >&2
+  fi
+  exit 0
+fi
+
+# MA-RB-R2-2: drive the REAL reap_cache_staging against an isolated --out-dir
+# cache dir, so a leaked staged dir with a DEAD pid is reaped while a LIVE
+# seeder's staged dir is preserved.
+if [ "$PHASE" = "reap-cache-staging" ]; then
+  if [ -z "$OUT_DIR_ARG" ]; then echo "run-spike: --phase reap-cache-staging requires --out-dir" >&2; exit 20; fi
+  reap_cache_staging "$OUT_DIR_ARG"
+  exit 0
+fi
+
 if [ "$PHASE" = "restore" ]; then
   if [ -z "$PROJECT" ]; then echo "run-spike: --phase restore requires --project" >&2; exit 20; fi
   PROJ_DIR="$(cd -- "${PROJECT%/*}" && pwd)"
@@ -544,7 +747,15 @@ if [ "$INNER" = 0 ]; then
   # never prune (they run inside the suite and must not delete a sibling's
   # root); scripts/clean-runs.sh is the explicit operator tool.
   if [ "$CANONICAL" = 1 ]; then
-    prune_run_roots 5 "$RUN_ROOT"
+    # MA-RB-R2-1: prune under the coarse out/-level lock so a concurrent
+    # canonical run's start-prune cannot race this one over the shared
+    # substrate; live roots + the out/current referent are additionally skipped.
+    if acquire_out_lock 30; then
+      prune_run_roots "$SPIKE_ROOT/out" 5 "$RUN_ROOT"
+      release_out_lock
+    else
+      echo "run-spike: start-of-run prune skipped (out/ lock held by a concurrent run) — clean-runs.sh reclaims later" >&2
+    fi
   fi
 
   read -r UPTIME_START _ < /proc/uptime
@@ -710,6 +921,12 @@ printf '{ "commit": "%s", "dirty": %s }\n' "$(json_escape "$GIT_COMMIT")" "$GIT_
 run_cmd mv -- "$RUN_ROOT/git-state.json.tmp" "$RUN_ROOT/git-state.json"
 printf '{ "nonce": "%s", "entries": [] }\n' "$SPIKE_NONCE" > "$RUN_ROOT/sentinel/ledger.json.tmp"
 run_cmd mv -- "$RUN_ROOT/sentinel/ledger.json.tmp" "$RUN_ROOT/sentinel/ledger.json"
+
+# MA-RB-R2-2: reap leaked cache staging (packages.staged.<dead-pid> / .old) at
+# controller start — the SIGKILL-mid-seed backstop for the in-line staged
+# cleanup, before the cache consume/seed below touch out/cache. Live seeders'
+# staged dirs (pid alive) are never clobbered.
+reap_cache_staging "$CACHE_DIR"
 
 # --- per-launch environments constructed from the committed profiles (EA-008);
 # --- the EXACT dictionary passed at each launch is recorded in env-audit.json.
@@ -973,7 +1190,7 @@ fi
 # from restore) instead of being copied into every subsequent run root forever.
 CACHE_PKGS="$CACHE_DIR/packages"
 CACHE_MARKER="$CACHE_DIR/packages.complete"
-if [ -f "$CACHE_MARKER" ] && [ -d "$CACHE_PKGS" ]; then
+if shared_cache_is_trusted "$CACHE_DIR"; then
   set +e
   cache_copy "$CACHE_PKGS" "$RUN_ROOT/packages"
   CACHE_COPY_EXIT=$?
@@ -1014,11 +1231,13 @@ else
   [ "$P01_A_EXIT" != 0 ] && RESTORE_FAILED="${RESTORE_FAILED}A "
   [ "$P01_B_EXIT" != 0 ] && RESTORE_FAILED="${RESTORE_FAILED}B "
 fi
-# MA-UX-5/MA-RB-2: seed the shared cache ATOMICALLY — tar into a private staged
-# dir, swap it into place, then write the completion marker LAST, so a crash
-# mid-seed can only ever leave (a) the previous complete cache, or (b) a
-# marker-less staged/partial dir the consume guard above ignores. Never a torn
-# dir presented as complete.
+# MA-UX-5/MA-RB-2 + MA-RB-R2-2/R2-3: seed the shared cache ATOMICALLY — tar into
+# a private PID-unique staged dir, then publish (under the out/-level lock, with
+# mv -T no-nesting swap + the completion marker written LAST) via
+# publish_cache_staged, so a crash mid-seed can only ever leave (a) the previous
+# complete cache, or (b) a marker-less staged/partial dir the consume guard
+# above ignores — never a torn dir presented as complete, and never a nested
+# cache under two concurrent cold seeders.
 if [ ! -f "$CACHE_MARKER" ] && [ "$RESTORE_EXIT" -eq 0 ]; then
   run_cmd mkdir -p -- "$CACHE_DIR"
   CACHE_STAGED="$CACHE_DIR/packages.staged.$$"
@@ -1028,16 +1247,14 @@ if [ ! -f "$CACHE_MARKER" ] && [ "$RESTORE_EXIT" -eq 0 ]; then
   cache_copy "$RUN_ROOT/packages" "$CACHE_STAGED"
   CACHE_SEED_EXIT=$?
   set -e
+  # MA-RB-R2-2: drop the staged copy on ANY non-success BEFORE phase_guard can
+  # fail_run/exit — otherwise a deadline-kill (CACHE_SEED_EXIT=124) leaks
+  # packages.staged.$$ in the never-pruned out/cache. reap_cache_staging is the
+  # backstop for a SIGKILL between mkdir and here.
+  [ "$CACHE_SEED_EXIT" -ne 0 ] && { run_cmd rm -rf -- "$CACHE_STAGED" 2>/dev/null || true; }
   phase_guard cache "$CACHE_SEED_EXIT"
   if [ "$CACHE_SEED_EXIT" -eq 0 ]; then
-    run_cmd rm -rf -- "$CACHE_PKGS.old"
-    [ -d "$CACHE_PKGS" ] && run_cmd mv -- "$CACHE_PKGS" "$CACHE_PKGS.old"
-    run_cmd mv -- "$CACHE_STAGED" "$CACHE_PKGS"
-    run_cmd rm -rf -- "$CACHE_PKGS.old"
-    printf 'seeded\n' > "$CACHE_MARKER.tmp"
-    run_cmd mv -- "$CACHE_MARKER.tmp" "$CACHE_MARKER"
-  else
-    run_cmd rm -rf -- "$CACHE_STAGED"
+    publish_cache_staged "$CACHE_DIR" "$CACHE_STAGED"
   fi
 fi
 

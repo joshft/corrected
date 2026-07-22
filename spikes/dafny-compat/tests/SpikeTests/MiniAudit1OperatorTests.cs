@@ -189,15 +189,18 @@ public class MiniAudit1OperatorTests
     {
         var script = File.ReadAllText(SpikePaths.P("scripts", "run-spike.sh"));
         Assert.Contains("CACHE_MARKER=\"$CACHE_DIR/packages.complete\"", script);
-        // Consume only with the marker present.
-        Assert.Contains("if [ -f \"$CACHE_MARKER\" ] && [ -d \"$CACHE_PKGS\" ]; then", script);
+        // Consume only with the marker present — via the shared guard predicate
+        // (MA-ID-R2-1: production consume + the cache-consume test phase share
+        // shared_cache_is_trusted so there is no drift).
+        Assert.Contains("if shared_cache_is_trusted \"$CACHE_DIR\"; then", script);
         Assert.Contains("has no completion marker", script);
-        // Seed: staged dir, then the marker written LAST (after the swap).
+        // Seed: staged dir, then the marker written LAST (after the mv -T
+        // no-nesting swap) inside publish_cache_staged (MA-RB-R2-3).
         Assert.Contains("CACHE_STAGED=\"$CACHE_DIR/packages.staged.$$\"", script);
-        var markerWriteIdx = script.IndexOf("run_cmd mv -- \"$CACHE_MARKER.tmp\" \"$CACHE_MARKER\"", StringComparison.Ordinal);
-        var swapIdx = script.IndexOf("run_cmd mv -- \"$CACHE_STAGED\" \"$CACHE_PKGS\"", StringComparison.Ordinal);
+        var markerWriteIdx = script.IndexOf("run_cmd mv -- \"$marker.tmp\" \"$marker\"", StringComparison.Ordinal);
+        var swapIdx = script.IndexOf("run_cmd mv -T -- \"$staged\" \"$pkgs\"", StringComparison.Ordinal);
         Assert.True(swapIdx >= 0 && markerWriteIdx > swapIdx,
-            "the completion marker must be written AFTER the staged cache is swapped into place (MA-UX-5/MA-RB-2)");
+            "the completion marker must be written AFTER the staged cache is swapped into place with mv -T (MA-UX-5/MA-RB-2/MA-RB-R2-3)");
         Assert.Contains("recover with: rm -rf out/cache", script);
     }
 

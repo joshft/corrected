@@ -359,6 +359,27 @@ foreach (var (route, path, exit) in reports)
         // report array makes the whole report malformed in BOTH the verdict
         // and the per_probe_results view (never a first-wins TryAdd).
         var keyed = VerdictAggregator.ToKeyedResults(probes);
+        // MA-VI-R2-1: the schema does NOT constrain per_probe_results[].probe to
+        // the manifest probe-id set, so a schema-clean report can carry an
+        // unknown/superset composite key (e.g. P99(A)). ComputeRouteVerdict
+        // already fails such a report closed (INCOMPLETE malformed-report via
+        // its exact-equality unknown-key check), but the per_probe_results view
+        // would still show all-pass and exit_report_matrix=consistent — the
+        // three surfaces would disagree. Detect unknown/superset keys vs the
+        // manifest instantiation HERE (the same catch path duplicates take), so
+        // the verdict, the per-probe view, and the exit/report matrix all read
+        // malformed. (Mirrors ComputeRouteVerdict's `!expectedSet.Contains(key)`
+        // leg at ingestion — INV-006/AP-006 exact equality, never superset.)
+        var instantiationKeys = manifest.InstantiationFor(route)
+            .Select(e => new ProbeKey(e.ProbeId, e.Route)).ToHashSet();
+        var unknownKeys = keyed.Keys.Where(k => !instantiationKeys.Contains(k)).ToList();
+        if (unknownKeys.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"route report carries composite probe key(s) outside the manifest instantiation for route {route}: "
+                + string.Join(", ", unknownKeys.Select(k => k.ToString()))
+                + " — the completed set must be a SUBSET of the manifest instantiation, never a superset (MA-VI-R2-1/INV-006/AP-006)");
+        }
         childProbesByRoute[route] = keyed;
         if (doc.RootElement.GetProperty("deterministic").TryGetProperty("adjudication_records", out var records)
             && records.ValueKind == JsonValueKind.Array)

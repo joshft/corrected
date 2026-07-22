@@ -29,6 +29,105 @@
       "status": "open",
       "deferred_at": "2026-07-22T03:05:00Z",
       "disposition": "user-deferred at QA round 3 (final) disposition gate, 2026-07-22"
+    },
+    {
+      "id": "DF-004",
+      "finding_id": "MA-XC-R2-1",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "The MA-UC-4 fix bound the project-enforcement perimeter across 3 copies (sln <-> SpikePath",
+      "detail": "The MA-UC-4 fix bound the project-enforcement perimeter across 3 copies (sln <-> SpikePaths.Projects <-> run-spike.sh lock-receipt list) but left a 4th unbound: the aggregator's SpikeProjects() (Program.cs), which drives the per-project lockDigests in run-report binding. Consistent today, but on a project addition the sln<->SpikePaths test goes red while SpikeProjects() silently omits the new project's lock digest from evidence - a fail-open narrowing of INV-001 lock-pin binding no test catches.  FIX: Extend the Uc4 test to assert the aggregator's SpikeProjects() name+path set == SpikePaths.Projects. The 'one authoritative source with equality tests against each copy' rule must enumerate ALL copies incl. aggregator-side.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-005",
+      "finding_id": "MA-HI-R2-1",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "env-profiles.json still declares SSL_CERT_FILE/SSL_CERT_DIR as <passthrough> for controlle",
+      "detail": "env-profiles.json still declares SSL_CERT_FILE/SSL_CERT_DIR as <passthrough> for controller/provision/fetch/restore/build/test, but MA-HI-1's env -i strips SSL_CERT_* before the inner controller runs, so build_profile_env's passthrough branch always resolves empty. The launches never receive SSL_CERT_*. Not exploitable/fail-closed (fetches are SHA-256-pinned) but the profile advertises a passthrough the MA-HI-1 contract guarantees can never fire, plus a latent portability failure on minimal hosts.  FIX: Drop the two dead <passthrough> keys from the affected classes, OR add SSL_CERT_FILE/DIR to the MA-HI-1 re-exec allowlist if passthrough is wanted. An env-i allowlist and the profile passthrough set must be reconciled by a static check.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-006",
+      "finding_id": "MA-HI-R2-2",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "The suite receipt carries source_manifest_sha256 (emitted by run-spike.sh, in the Contract",
+      "detail": "The suite receipt carries source_manifest_sha256 (emitted by run-spike.sh, in the ContractTypes contract) but the aggregator reads only run_id/nonce/suite_exit - the field is never validated. Not a hole (run_id+nonce already bind the receipt to this run) but it READS like a source-identity binding while providing none (MA-VI-6's 'source-manifest digest binding' is carried but not enforced).  FIX: Cross-check source_manifest_sha256 against run-context.json's source_set_sha256 so the receipt genuinely attests the source the suite validated, OR drop the field. A receipt field emitted but never consumed by its validator should be enforced or removed.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-007",
+      "finding_id": "MA-ID-R2-5",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "The MA-HI-3 (json_escape control chars) fix is locked only by a source-scan asserting the ",
+      "detail": "The MA-HI-3 (json_escape control chars) fix is locked only by a source-scan asserting the substitution strings \\n/\\t/\\r appear in the function body. A semantic escaping bug that keeps those strings but mis-orders substitutions (a later backslash-escape double-escaping) would emit invalid JSON and stay green - a hostile-input finding where a cheap behavioral test was feasible.  FIX: Feed a --run-root path (or report value) containing a raw newline through the real write_failed_report path and JsonDocument.Parse the emitted report. Hostile-input JSON-emission fixes get a round-trip (emit->parse) test, never a scan of the escaper body alone.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-008",
+      "finding_id": "MA-VI-R2-2",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "The aggregator's --nonce is optional (only --run-id required); every receipt check is 'rec",
+      "detail": "The aggregator's --nonce is optional (only --run-id required); every receipt check is 'receiptRunId != runId || (nonce.Length>0 && receiptNonce != nonce)', so omitting --nonce degrades all receipt binding (suite/restore/build) to run_id-only, and run_id is not secret (it appears in every on-disk report/receipt). Does not breach MA-VI-6's threat (presence of a suite receipt with suite_exit==0 is the real gate; forging needs run-root write access) but the class-fix intent 'receipt-bound to the run mint, never a bare argv claim' is only as strong as run_id unless --nonce is mandatory.  FIX: Require a non-empty --nonce in the aggregator so binding degrades closed rather than silently to run_id.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-009",
+      "finding_id": "MA-UX-R2-3",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "The aggregator terminal summary (advertised in README as 'verdict, failed probes with reas",
+      "detail": "The aggregator terminal summary (advertised in README as 'verdict, failed probes with reasons, report path - no JSON parsing needed') prints 'route A verdict: INCOMPLETE; failed probes: -' whenever all probes pass but final_suite_status != success (every variance run + the MA-VI-6 canonical downgrade) - StateText renders bare INCOMPLETE with an empty failed-probes list. A summary-only reader sees an unexplained INCOMPLETE with no failed probes; the reason is only in the JSON verdict_reason. MA-VI-6's downgrade adds a canonical path to reach it.  FIX: Append the verdict reason to the summary line for non-probe-failure states, e.g. 'INCOMPLETE (suite-failure: final_suite_status=unknown)'. Any 'no JSON parsing needed' summary renders the reason for every non-COMPATIBLE state.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-010",
+      "finding_id": "MA-UX-R2-4",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "run-spike.sh/regen-sample.sh refuse an unhardened (no -p) invocation with exit 30; clean-r",
+      "detail": "run-spike.sh/regen-sample.sh refuse an unhardened (no -p) invocation with exit 30; clean-runs.sh refuses the same class with exit 20; provision-z3.sh has NO -p self-check at all. Docs are consistent (no doc-vs-code contradiction) but a CI wrapper keying on '30=refused-unhardened vs 20=usage' misclassifies clean-runs' hardening refusal, and standalone provision-z3.sh runs unhardened silently.  FIX: Make clean-runs use exit 30 for the unhardened refusal, add the same -p check + exit 30 to provision-z3.sh. One shared 'refuse unhardened -> exit 30' idiom across all four scripts, asserted by a static test.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-011",
+      "finding_id": "MA-ED-R2-1",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "The MA-ED-3 fix_note states the Ed3 test asserts 'no rooted host path (/home,/Users,/tmp,/",
+      "detail": "The MA-ED-3 fix_note states the Ed3 test asserts 'no rooted host path (/home,/Users,/tmp,/opt,/var)', but the implemented assertion only checks four concrete strings (runId, 'run_directory', runRoot, SpikeRoot). A stable system-rooted path (/opt/dotnet, /usr/share/dotnet) leaking into a class-2 value would not be caught. Determinism impact nil (such paths are run-stable; class-2 path-bearing fields are canonicalized + framework/system assemblies excluded). The code comment is accurate; only the audit-artifact fix_note overstates.  FIX: Align the MA-ED-3 fix_note wording to what Ed3 checks, OR add a generic rooted-path regex (^/(opt|var|usr|home|Users|tmp)/ or drive-letter) over the raw class-2 subtree. A 'no rooted path in class-2' assertion should test generically, not by enumerating known roots.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-012",
+      "finding_id": "MA-RB-R2-5",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "list_descendant_sessions lacks the sess==candidate leader-guard its sibling find_session_l",
+      "detail": "list_descendant_sessions lacks the sess==candidate leader-guard its sibling find_session_leader has: for candidate==ancestor it emits sid[candidate] unconditionally. Harmless today because setsid -w (no -f, job control off) doesn't fork so WRAPPER_PID is the inner session leader. Latent: if the setsid call ever forks (adding -f, set -m, or setsid already a group leader), sid[WRAPPER_PID] becomes the OUTER session, and on operator cancel the trap kills -TERM/-KILL -<parent-session> - signaling the outer watchdog's own group, potentially killing the run before the OperatorCancelled synthetic is written. UNCERTAIN (not triggerable in the current invocation contract).  FIX: In list_descendant_sessions, continue when candidate==ancestor, or emit only when sid[candidate]==candidate (mirror find_session_leader). Session-sweep enumerators share one leader-identification helper.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-22",
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
     }
   ]
 }

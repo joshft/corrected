@@ -63,21 +63,48 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$KEEP" in
-  ''|*[!0-9]*) echo "clean-runs: --keep must be a non-negative integer (usage: clean-runs.sh [--keep N] [--out-dir DIR])" >&2; exit 20 ;;
+  ''|*[!0-9]*) echo "clean-runs: --keep must be a positive integer (usage: clean-runs.sh [--keep N] [--out-dir DIR])" >&2; exit 20 ;;
 esac
+# MA-RB-R2-4: --keep 0 is refused — a keep-0 sweep would delete the out/current
+# referent (and every root) with no survivor; prune must retain at least one.
+if [ "$KEEP" -eq 0 ]; then
+  echo "clean-runs: --keep 0 refused — prune must retain at least one root (never the out/current target) (MA-RB-R2-4)" >&2
+  exit 20
+fi
 
 if [ ! -d "$OUT_DIR" ]; then
   echo "clean-runs: nothing to prune ($OUT_DIR does not exist)" >&2
   exit 0
 fi
 
-# Candidate roots: run roots + regen products, NEVER out/current or out/cache.
+# MA-RB-R2-4: resolve the run root the out/current pointer TARGETS and add it to
+# the protect set — a keep-N sweep must NEVER dangle the dev-loop pointer. Reads
+# out/current/spike.runsettings's SPIKE_RUN_CONTEXT (<run-root>/run-context.json)
+# and strips the file name. The comment/message "untouched" means the out/current
+# and out/cache DIRECTORIES and now the pointer's TARGET, backed by this skip.
+REFERENT=""
+RUNSETTINGS="$OUT_DIR/current/spike.runsettings"
+if [ -f "$RUNSETTINGS" ]; then
+  while IFS= read -r line; do
+    case "$line" in
+      *'<SPIKE_RUN_CONTEXT>'*'</SPIKE_RUN_CONTEXT>'*)
+        ctx="${line#*<SPIKE_RUN_CONTEXT>}"
+        ctx="${ctx%%</SPIKE_RUN_CONTEXT>*}"
+        REFERENT="${ctx%/run-context.json}"
+        break ;;
+    esac
+  done < "$RUNSETTINGS"
+fi
+
+# Candidate roots: run roots + regen products, NEVER out/current, out/cache, or
+# the out/current pointer's target (REFERENT).
 dirs=()
 for d in "$OUT_DIR"/runid-* "$OUT_DIR"/regen-*; do
   [ -d "$d" ] || continue
   case "$d" in
     "$OUT_DIR"/current|"$OUT_DIR"/cache) continue ;;
   esac
+  [ -n "$REFERENT" ] && [ "$d" = "$REFERENT" ] && continue
   dirs+=("$d")
 done
 
@@ -94,5 +121,37 @@ for d in "${dirs[@]}"; do
   fi
 done
 
-echo "clean-runs: kept the newest $KEEP run/regen root(s); removed $removed old root(s) under $OUT_DIR (out/current and out/cache untouched)." >&2
+# MA-UX-R2-1: reclaim out/test-scratch — the LARGEST consumer (nested-controller
+# fixture roots, ~10GB on a long-lived tree), unreachable by the runid-*/regen-*
+# sweep. Keep only the newest token dir (a concurrent suite's), delete the rest.
+# Also drop loose out/preprocess.*.xml (MSBuild dumps) and out/*.log stragglers.
+scratch_removed=0
+SCRATCH_DIR="$OUT_DIR/test-scratch"
+if [ -d "$SCRATCH_DIR" ]; then
+  tokens=()
+  for t in "$SCRATCH_DIR"/*; do
+    [ -d "$t" ] || continue
+    tokens+=("$t")
+  done
+  for t in "${tokens[@]}"; do
+    newer=0
+    for other in "${tokens[@]}"; do
+      [ "$other" = "$t" ] && continue
+      [ "$other" -nt "$t" ] && newer=$((newer + 1))
+    done
+    # keep only the newest (newer==0); delete every older token dir.
+    if [ "$newer" -ge 1 ]; then
+      run_cmd rm -rf -- "$t"
+      scratch_removed=$((scratch_removed + 1))
+    fi
+  done
+fi
+loose_removed=0
+for f in "$OUT_DIR"/preprocess.*.xml "$OUT_DIR"/*.log; do
+  [ -f "$f" ] || continue
+  run_cmd rm -f -- "$f"
+  loose_removed=$((loose_removed + 1))
+done
+
+echo "clean-runs: kept the newest $KEEP run/regen root(s); removed $removed old root(s), $scratch_removed stale test-scratch token dir(s), and $loose_removed loose file(s) under $OUT_DIR (the out/current and out/cache directories, and the out/current pointer's target, are untouched)." >&2
 exit 0
