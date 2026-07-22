@@ -9,18 +9,23 @@
     "simplify",
     "qa-round-1",
     "fix-round-1",
-    "qa-round-2"
+    "qa-round-2",
+    "fix-round-2",
+    "qa-round-3",
+    "probe-round"
   ],
-  "current_phase": "fix-round-2-in-progress",
+  "current_phase": "audit-mini",
   "green_attempts": 0,
   "calm_reset_fired": false,
-  "timestamp": "2026-07-22T01:00:00Z",
-  "qa_rounds_done": 2,
+  "timestamp": "2026-07-22T17:23:01Z",
+  "qa_rounds_done": 3,
   "next_steps": [
-    "Fix round 2 agent treating QA-015..QA-024 (all 10 user-dispositioned fix-now; round-2 entries in qa-findings JSON). Constraints: no commits, no sample regeneration (STOP+report if forced), tests strengthen-only, finish with fresh canonical controller run + green suite",
-    "When it reports: hygiene-review diff, commit fix round 2, run fresh canonical controller run at new HEAD (env -i HOME=\"$HOME\" bash -p <abs>/spikes/dafny-compat/scripts/run-spike.sh \u2014 every commit stales substrate per QA-013/GitCommitBinding), verify suite green fresh",
-    "workflow-advance.sh qa, spawn QA round 3 agent (FINAL round at high intensity) diffing fix round 2; if clean -> proceed; if findings -> disposition gate but no further fix+QA cycle is available (defer/accept only)",
-    "Probe round (mutation+config-fuzz, ask user for time budget, default 15 min), then workflow-advance.sh audit-mini, mini-audit 2 rounds x (6 core + top-2 recommended lenses from .correctless/artifacts/lens-recommendations-feature-dafny-compat-spike-06dca9.json)",
-    "done -> suggest /cverify then /cdocs (never auto-invoke)"
+    "PROBE ROUND COMPLETE (5/5 reported, all in .correctless/artifacts/probe-results-feature-dafny-compat-spike-06dca9.json). SURVIVORS: M1 (MapExit tri-state collapse, Components.cs:845 - no test covers incomplete-probe matrix cells; adjacent to deferred DF-003), M2 (aggregator Program.cs:594 - no end-to-end test asserts typed exit 10 for shared P02 failure), M3-by-signal (HarnessCore.cs:1219 digest-prefix weakening undetected). KILLED: F2 7/7, F1 7/7 (C2 slow fail-closed, C6/C7 suite-gate-only). ADVISORY: PR-001 (worktree gitfile FindRepoRoot), PR-002+PR-007 (suite-only enforcement of registry history + pin files), PR-003..PR-006 (startup-anchor/config-validation hardening)",
+    "DISPOSITIONS DECIDED (binding, recorded in probe-results artifact): generate all 3 killing tests NOW; FIX ALL SEVEN PR findings in mini-audit (PR-001 gitfile FindRepoRoot, PR-002 runtime retired-row validation, PR-007 pin files consumed/anchored, PR-003 manifest startup anchor, PR-004 structural run-config validation, PR-005 duplicate-key refusal, PR-006 provision env guard). DF-003 (QA-025 MapExit exit-20+all-pass cell) STAYS deferred - do not reopen",
+    "IN FLIGHT: one-shot killing-test-gen agent (background) writing tests for M1 (MapExit incomplete-probe cells), M2 (aggregator typed exit 10 with failing P02 receipt), M3 (full-64-hex digest comparison, meet-in-the-middle pair). Protocol: pristine-pass -> temp-apply mutation + filtered fail -> revert -> full suite green; only test files may be dirty at end. When it reports: present generated tests to USER for approval (AskUserQuestion), then advance workflow-advance.sh audit-mini. Test commits happen IN audit-mini phase",
+    "Then workflow-advance.sh audit-mini; mini-audit 2 rounds x (6 core + top-2 recommended lenses from .correctless/artifacts/lens-recommendations-feature-dafny-compat-spike-06dca9.json); MA- findings appended to qa-findings JSON with lens field; disposition gates; after commits + green suite refresh sentinel: git rev-parse HEAD > .correctless/artifacts/test-success.sha",
+    "done -> suggest /cverify then /cdocs (never auto-invoke)",
+    "STANDING: QA-025 deferred as DF-003. Any commit stales substrate -> fresh canonical run (env -i HOME=\"$HOME\" bash -p <abs>/spikes/dafny-compat/scripts/run-spike.sh) before suite/gate. dotnet needs DOTNET_ROOT=$HOME/.dotnet exports; set -o pipefail when piping dotnet test. Uncommitted: qa-findings JSON, deferred-findings DF-003, probe-results artifact, checkpoint - commit as a batch at audit-mini. TestResults/ is gitignored (TRX embeds machine name - never commit)",
+    "Worktree cleanup before done: git worktree list currently shows 5 probe worktrees under .claude/worktrees/agent-* (a299..., a5c3..., a7834... detached, aa9f..., afdb...) - remove after survivor test-gen no longer needs their evidence"
   ]
 }

@@ -17,7 +17,18 @@
       "deferred_at": "2026-07-21T02:49:44Z",
       "source_file": ".correctless/specs/dafny-compat-spike.md",
       "finding_id": "DD-007",
-      "summary": "Deferred obligation: promote ADR-0001 from provisional to accepted (or supersede with counter-evidence) — inherited by the final Phase 0.0 feature's spec."
+      "summary": "Deferred obligation: promote ADR-0001 from provisional to accepted (or supersede with counter-evidence) \u2014 inherited by the final Phase 0.0 feature's spec."
+    },
+    {
+      "id": "DF-003",
+      "finding_id": "QA-025",
+      "source_file": ".correctless/artifacts/qa-findings-dafny-compat-spike.json",
+      "title": "Uncovered exit/report-matrix cell: child exit 20 + all-pass report maps to COMPATIBLE/exit-0",
+      "detail": "MapExit default branch assumes a typed cause without checking the report; Aggregate discards the outcome and computes the verdict from the report alone. No current code path can produce the contradiction (child exit derives from the same Results list its report is emitted from); controller exit remains fail-closed. Fix: one MapExit branch + one additive matrix row + one induced test.",
+      "severity": "MEDIUM",
+      "status": "open",
+      "deferred_at": "2026-07-22T03:05:00Z",
+      "disposition": "user-deferred at QA round 3 (final) disposition gate, 2026-07-22"
     }
   ]
 }
