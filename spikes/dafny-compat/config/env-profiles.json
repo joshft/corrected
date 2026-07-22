@@ -16,6 +16,22 @@
       "MSBUILDDISABLENODEREUSE": "1",
       "UseSharedCompilation": "false"
     },
+    "provision": {
+      "PATH": "<constructed:decoy-first>",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "SSL_CERT_FILE": "<passthrough>",
+      "SSL_CERT_DIR": "<passthrough>"
+    },
+    "fetch": {
+      "PATH": "<constructed:decoy-first>",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "SSL_CERT_FILE": "<passthrough>",
+      "SSL_CERT_DIR": "<passthrough>"
+    },
     "restore": {
       "PATH": "<constructed:decoy-first>",
       "DOTNET_CLI_HOME": "<run-root>/dotnet-cli-home",

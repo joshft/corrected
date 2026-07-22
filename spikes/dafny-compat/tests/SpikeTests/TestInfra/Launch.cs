@@ -161,11 +161,24 @@ public static class Launch
         }
         argv.Add(script);
         argv.AddRange(args);
+        // QA-018(b): nested controller runs inherit the parent controller's
+        // remaining wall-clock budget. The canonical controller injects
+        // SPIKE_PARENT_DEADLINE (absolute /proc/uptime deadline) into the suite
+        // phase; the test launcher hands it on unless a test overrides it, so
+        // a killed parent can never orphan nested runs on fresh 30-min budgets.
+        var launchEnv = new Dictionary<string, string>(env is null
+            ? new Dictionary<string, string>()
+            : env.ToDictionary(kv => kv.Key, kv => kv.Value));
+        var parentDeadline = Environment.GetEnvironmentVariable("SPIKE_PARENT_DEADLINE");
+        if (!string.IsNullOrEmpty(parentDeadline) && !launchEnv.ContainsKey("SPIKE_PARENT_DEADLINE"))
+        {
+            launchEnv["SPIKE_PARENT_DEADLINE"] = parentDeadline;
+        }
         return ManagedLauncher.Launch(new LaunchRequest(
             ExecutablePath: "bash",
             Argv: argv,
             WorkingDirectory: SpikePaths.SpikeRoot,
-            EnvironmentProfile: env ?? new Dictionary<string, string>(),
+            EnvironmentProfile: launchEnv,
             TimeoutSeconds: 600));
     }
 

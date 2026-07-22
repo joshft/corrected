@@ -107,10 +107,36 @@ public static class SpikePaths
         || f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
         || f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}");
 
-    /// <summary>Scratch area for tests, inside the untracked out/ area (never /tmp — PRH-005/INV-014).</summary>
+    /// <summary>
+    /// QA-021: one unique scratch token per test-host process, so scratch run
+    /// roots are NEVER reused across suite invocations — a name-keyed root
+    /// reused between runs let a prior (possibly failed) nested-controller
+    /// fixture leak into the next run (digest-mismatch flakes). Prior runs'
+    /// token directories are swept best-effort at first use.
+    /// </summary>
+    private static readonly Lazy<string> _scratchToken = new(() =>
+    {
+        var parent = Path.Combine(SpikeRoot, "out", "test-scratch");
+        Directory.CreateDirectory(parent);
+        var token = "run-" + Guid.NewGuid().ToString("N")[..12];
+        foreach (var stale in Directory.EnumerateDirectories(parent))
+        {
+            try
+            {
+                Directory.Delete(stale, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best-effort sweep only; a locked leftover is left in place.
+            }
+        }
+        return token;
+    });
+
+    /// <summary>Scratch area for tests, inside the untracked out/ area (never /tmp — PRH-005/INV-014); unique per test-host run (QA-021).</summary>
     public static string TestScratch(string name)
     {
-        var dir = Path.Combine(SpikeRoot, "out", "test-scratch", name);
+        var dir = Path.Combine(SpikeRoot, "out", "test-scratch", _scratchToken.Value, name);
         Directory.CreateDirectory(dir);
         return dir;
     }

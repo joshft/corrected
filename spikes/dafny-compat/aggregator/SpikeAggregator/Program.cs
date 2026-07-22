@@ -26,6 +26,7 @@ var solverPath = "";
 var outPath = "";
 var outCopy = "";
 var aggregationReceiptPath = "";
+var printSuiteStatusPath = "";
 var reports = new List<(string Route, string Path, int Exit)>();
 
 for (var i = 0; i < args.Length; i++)
@@ -47,6 +48,7 @@ for (var i = 0; i < args.Length; i++)
         case "--out": outPath = Next(); break;
         case "--out-copy": outCopy = Next(); break;
         case "--aggregation-receipt": aggregationReceiptPath = Next(); break;
+        case "--print-suite-status": printSuiteStatusPath = Next(); break;
         case "--report":
         {
             // route=path:exit — expected report paths flow directly from the
@@ -73,6 +75,42 @@ catch (Exception ex)
 {
     Console.Error.WriteLine($"SpikeAggregator: schema digest validation failed BEFORE any report parse: {ex.Message}");
     return ExitCodes.Incomplete;
+}
+
+if (printSuiteStatusPath.Length > 0)
+{
+    // QA-024: schema-validating read-out mode for scripts (regen-sample.sh).
+    // Scripts that gate committable evidence must not parse JSON with line
+    // greps; this routes the read through the schema-validating contracts code
+    // (the trust-anchor check above already ran). Prints exactly:
+    //   final_suite_status=<value>
+    //   route_verdict route=<r> state=<s> variant=<verdict_reason variant|none>
+    try
+    {
+        var text = File.ReadAllText(printSuiteStatusPath);
+        EvidenceSchema.ValidateReport(text, schemaPath);
+        using var doc = JsonDocument.Parse(text);
+        var det = doc.RootElement.GetProperty("deterministic");
+        Console.WriteLine($"final_suite_status={det.GetProperty("final_suite_status").GetString()}");
+        if (det.TryGetProperty("route_verdicts", out var rvs) && rvs.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var rv in rvs.EnumerateArray())
+            {
+                var variant = rv.TryGetProperty("verdict_reason", out var vr)
+                              && vr.ValueKind == JsonValueKind.Object
+                              && vr.TryGetProperty("variant", out var v)
+                    ? v.GetString() ?? "none"
+                    : "none";
+                Console.WriteLine($"route_verdict route={rv.GetProperty("route").GetString()} state={rv.GetProperty("state").GetString()} variant={variant}");
+            }
+        }
+        return ExitCodes.RouteProbesPassed;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"SpikeAggregator: --print-suite-status failed closed: {ex.Message} (AP-009: a malformed report is its own state)");
+        return ExitCodes.Incomplete;
+    }
 }
 
 if (reportsDir.Length > 0 && reports.Count == 0)
@@ -450,7 +488,12 @@ var exitReportConsistent = reports.All(r =>
     {
         return false;
     }
-    var mapped = AdjudicationStateMachine.MapExit(r.Exit, null, report);
+    // Scoped to child-owned probes, mirroring VerdictAggregator.Aggregate: the
+    // exit/report matrix binds the route CHILD's exit to ITS OWN report;
+    // controller-attested P01 and aggregator-owned shared probes surface as
+    // probe failures, not exit mismatches (QA-022(2)).
+    var childOwned = report.Probes.Where(p => p.Key.Route == r.Route && p.Key.ProbeId != "P01").ToList();
+    var mapped = AdjudicationStateMachine.MapExit(r.Exit, null, report with { Probes = childOwned });
     return mapped.Reason is null or not (VerdictReason.ExitReportMismatch or VerdictReason.Crash);
 });
 
@@ -533,10 +576,33 @@ foreach (var route in manifest.MandatoryRoutes)
     Console.WriteLine($"route {route} verdict: {StateText(outcome)}; failed probes: {(failing.Count == 0 ? "-" : string.Join(", ", failing))}; report: {outPath}");
 }
 
-// QA-008: the aggregator's exit reports AGGREGATION success (report emitted,
-// receipts validated structurally); route verdicts live in the report. The
-// CONTROLLER owns the run-level exit contract (nonzero on suite failure,
-// child probe failure, or any phase/aggregation failure) — see README.
+// QA-016 (closing QA-008's residual fail-open window): the aggregator's exit
+// is fail-closed on ANY non-passing aggregation outcome — a failure DETECTED
+// AT AGGREGATION (P04 post-suite solver substitution, P02 build-receipt
+// mismatch, missing/malformed route report despite child exit 0, run_id-forged
+// report rejection) must never hide behind exit 0 on the CI-facing channel.
+// Exit derives from the EMITTED run report: any per-probe "fail" → 10
+// (probe-failure); any "incomplete" entry or exit/report-matrix inconsistency
+// → 20 (INCOMPLETE); only an all-pass, consistent 22-entry view exits 0 — so
+// variance runs whose probes all pass still exit 0 and nested in-suite
+// launches keep working (their verdicts stay INCOMPLETE via final_suite_status
+// per codex R4-02, which is the CONTROLLER/suite channel, not aggregation).
+// A verdict-level rejection can hide behind an all-pass per-probe view (a
+// forged-run_id report's probes still enter the combined view), so the exit
+// also fails closed on any route verdict that is neither COMPATIBLE nor the
+// suite-channel INCOMPLETE(suite-failure) that every variance run carries.
+var anyProbeFailed = perProbe.Any(p => (string?)p["status"] == "fail");
+var anyProbeNotPass = perProbe.Any(p => (string?)p["status"] != "pass");
+var aggregationDetectedFailure = result.RouteVerdicts.Values.Any(o =>
+    o.State != RouteState.Compatible && o.Reason is not VerdictReason.SuiteFailure);
+if (anyProbeFailed)
+{
+    return ExitCodes.ProbeFailure;
+}
+if (anyProbeNotPass || !exitReportConsistent || aggregationDetectedFailure)
+{
+    return ExitCodes.Incomplete;
+}
 return ExitCodes.RouteProbesPassed;
 
 static string Sha256File(string path)

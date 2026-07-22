@@ -6,6 +6,30 @@
 #
 # Until CI lands, enforcement is local `dotnet test` (EA-004): the Correctless
 # workflow test command runs this suite.
+#
+# HARD REQUIREMENTS the CI feature inherits with DF-001 (QA-023):
+#
+# 1. FULL-HISTORY CHECKOUT — `fetch-depth: 0` is mandatory. The committed test
+#    QA001_CommittedSamples_CleanTreeAncestorCommit shells out to
+#    `git merge-base --is-ancestor <sample-commit> HEAD` and FAILS CLOSED on
+#    any git error: a shallow checkout (actions/checkout default fetch-depth 1)
+#    does not contain the committed samples' generation commit, so the test
+#    fails spuriously on depth-1 clones. Any committed test that shells out to
+#    repo-history-dependent tooling states its checkout-depth requirement here.
+# 2. GIT BINARY — a `git` executable must be on the runner (EA-007): the
+#    controller records the commit binding and the QA001 test invokes git.
+# 3. ENTRY POINT — `scripts/run-spike.sh` is the ONLY test entry point and its
+#    exit code (CONTROLLER_EXIT, fail-closed per QA-008/QA-016) is the gate
+#    signal. A bare `dotnet test` step without a prior controller run fails
+#    every integration test BY DESIGN (DD-008/TA-B13: tests launch only
+#    controller-built, digest-attested artifacts from the run root).
+# 4. WALL-CLOCK HEADROOM — the canonical run's committed 1800s bound
+#    (config/run-config.json) covers provisioning + cold restore + build + the
+#    full suite INCLUDING its nested full-pipeline controller runs. A cold
+#    CI runner 2-3x slower than the dev host approaches that bound and would
+#    synthesize WallClockExpiry INCOMPLETE: MEASURE the run on the chosen
+#    runner class before wiring, and take any bound change through the DD-006
+#    evidence procedure (never a silent config edit).
 name: dafny-compat-spike (permanent conformance job — DD-005/DD-006)
 on:
   workflow_call: {}
@@ -13,9 +37,9 @@ jobs:
   spike:
     runs-on: ubuntu-latest # must be linux-x64 (EA-002)
     steps:
-      - name: checkout
-        run: 'echo "STUB: the CI feature wires real steps here (DF-001)"'
+      - name: checkout (REQUIRED fetch-depth 0 — see QA-023 note 1)
+        run: 'echo "STUB: the CI feature wires actions/checkout with fetch-depth: 0 here (DF-001/QA-023)"'
       - name: pinned SDK 10.0.302 per spikes/dafny-compat/global.json
         run: 'echo "STUB: install exact pinned SDK"'
-      - name: provision -> locked restore -> build -> test (README phase ordering)
+      - name: provision -> locked restore -> build -> test (README phase ordering; controller exit is the gate)
         run: 'echo "STUB: env -i HOME=$HOME bash -p spikes/dafny-compat/scripts/run-spike.sh"'

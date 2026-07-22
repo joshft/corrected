@@ -1182,17 +1182,26 @@ public static class HarnessCore
                "echo 'Z3 version 0.0.0 - 64 bit (decoy)'\n";
     }
 
+    /// <summary>
+    /// QA-015: the exact sanctioned recording-decoy script for a run root,
+    /// public so tests planting decoys into decoys/-named directories can plant
+    /// the digest-matching content (the gate sanctions decoys/-dir candidates
+    /// by EXACT digest only — location alone is never sufficient there).
+    /// </summary>
+    public static string SanctionedDecoyScript(string runRoot) => ExpectedDecoyScript(runRoot);
+
     private static bool IsSanctionedDecoyByDigest(string candidatePath)
     {
-        // QA-012 (primary, digest-based): a candidate whose content EXACTLY
-        // equals the deterministic decoy script this harness would plant for
-        // the candidate's own decoy-dir run root is sanctioned — this is how
-        // the always-on decoy is recognized across run roots, unspoofably.
-        // Secondary (structural, NOT a content marker): a z3 living AT a
-        // sanctioned decoy LOCATION — a "decoys/" directory inside an isolated
-        // run root, or the assembly-adjacent {output}/z3/bin/z3-4.12.1 fallback
-        // path — is a recording decoy fixture (INV-003's "always-on decoys"),
-        // and the zero-invocation ledger assertion is the behavioral backstop.
+        // QA-015 (closing QA-012's dead-code regression): for a candidate in a
+        // decoys/-named directory the ONLY sanctioning predicate is the exact
+        // digest — the candidate's content must EXACTLY equal the deterministic
+        // decoy script this harness would plant for the candidate's own
+        // decoy-dir run root (cross-root safe, unspoofable). A directory merely
+        // NAMED "decoys" sanctions nothing: a wrong-digest z3 there fails the
+        // gate closed. The assembly-adjacent {output}/z3/bin/z3-4.12.1 fallback
+        // location remains location-sanctioned (it sits inside the
+        // controller-built output tree; the zero-invocation decoy-log assertion
+        // is the behavioral backstop there — recorded residual, QA-015).
         // A z3 anywhere else (e.g. a hostile PATH dir) is NEITHER and fails.
         try
         {
@@ -1205,12 +1214,9 @@ public static class HarnessCore
             if (Path.GetFileName(dir) == "decoys")
             {
                 var candidateRunRoot = Path.GetDirectoryName(dir);
-                if (candidateRunRoot is not null
-                    && Sha256File(full) == Sha256Text(ExpectedDecoyScript(candidateRunRoot)))
-                {
-                    return true; // harness-planted always-on decoy: exact digest
-                }
-                return true; // sanctioned decoy LOCATION (recording-decoy fixture)
+                // QA-015: digest predicate ONLY — no location fallthrough.
+                return candidateRunRoot is not null
+                       && Sha256File(full) == Sha256Text(ExpectedDecoyScript(candidateRunRoot));
             }
             // Assembly-adjacent sanctioned fallback location.
             var adjacent = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
@@ -1352,6 +1358,15 @@ public static class HarnessCore
             UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
         return stubPath;
     }
+
+    /// <summary>
+    /// QA-022(1): the QA-011 per-probe sub-nonce tag filter, exposed as the
+    /// public ledger reader so a unit test can prove the filter DISCRIMINATES —
+    /// deleting the tag filter makes that test fail (reversion-failing armor).
+    /// The production chain (P05/P08/P09 ledger windows) calls this same method.
+    /// </summary>
+    public static (string Nonce, int EntriesForNonce, int ForeignEntries) ReadSentinelLedger(string ledgerPath, string? probeTag)
+        => ReadLedger(ledgerPath, probeTag);
 
     private static (string Nonce, int EntriesForNonce, int ForeignEntries) ReadLedger(string ledgerPath, string? probeTag)
     {

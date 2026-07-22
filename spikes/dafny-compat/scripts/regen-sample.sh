@@ -78,6 +78,29 @@ SCRIPT_DIR="$(cd -- "${SCRIPT_SELF%/*}" && pwd)"
 SPIKE_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd -- "$SPIKE_ROOT/../.." && pwd)"
 
+# QA-024: canonical-report fields are read through the schema-validating
+# contracts code (SpikeAggregator --print-suite-status), never a line grep —
+# resolve the pinned SDK muxer the same way run-spike.sh does (stated rule:
+# DOTNET_ROOT, then the HOME-local install, then the cached pointer).
+REGEN_DOTNET=""
+resolve_sdk() {
+  local candidate cached=""
+  if [ -f "$SPIKE_ROOT/out/cache/dotnet-root" ]; then
+    read -r cached < "$SPIKE_ROOT/out/cache/dotnet-root" || true
+  fi
+  for candidate in "${DOTNET_ROOT:-/nonexistent}/dotnet" "${HOME:-/nonexistent}/.dotnet/dotnet" "${cached:-/nonexistent}/dotnet"; do
+    if [ -x "$candidate" ]; then
+      REGEN_DOTNET="$candidate"
+      break
+    fi
+  done
+  if [ -z "$REGEN_DOTNET" ]; then
+    echo "regen-sample: no pinned .NET SDK found (checked DOTNET_ROOT, HOME/.dotnet, out/cache/dotnet-root) — install SDK per README.md (QA-024: the canonical report must be read via the schema-validating contracts code)" >&2
+    exit 20
+  fi
+}
+resolve_sdk
+
 # QA-001: refuse a dirty tree. A committed sample generated from an unclean
 # checkout would carry git_dirty_flag:true (binding-class, excluded from
 # equality — the exact repudiation gap the finding names). Ignore only the
@@ -143,38 +166,83 @@ if [ -z "$CANON_REPORT" ] || [ ! -f "$CANON_REPORT" ]; then
   exit 20
 fi
 
-# Canonicity self-check + bootstrap-pass detection: read the canonical
-# report's recorded final_suite_status (masked in equality, decisive for
-# ADR citation value).
+# Canonicity self-check + bootstrap-pass detection (QA-024): the canonical
+# report is read through the SCHEMA-VALIDATING contracts code — the aggregator
+# built by the canonical run itself, in --print-suite-status mode (trust-anchor
+# digest check + closed-schema validation + real JSON parse). A line-grep JSON
+# "parse" is banned for evidence-gating scripts.
+CANON_ROOT="${CANON_REPORT%/reports/*}"
+AGG_DLL="$CANON_ROOT/build/SpikeAggregator/bin/Debug/net10.0/SpikeAggregator.dll"
+if [ ! -f "$AGG_DLL" ]; then
+  echo "regen-sample: FATAL — the canonical run's SpikeAggregator artifact is missing at build/SpikeAggregator/... under the run root; cannot read the report through the schema-validating contracts code (QA-024). Refusing to publish." >&2
+  exit 20
+fi
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_CLI_HOME="$SPIKE_ROOT/out/regen-cli-home"
+run_cmd mkdir -p -- "$DOTNET_CLI_HOME"
+set +e
+SUITE_OUT="$(run_cmd "$REGEN_DOTNET" exec "$AGG_DLL" --schema "$SPIKE_ROOT/schema/evidence-schema.json" --registry "$SPIKE_ROOT/schema/schema-version-registry.json" --print-suite-status "$CANON_REPORT")"
+SUITE_RC=$?
+set -e
+if [ "$SUITE_RC" -ne 0 ]; then
+  echo "regen-sample: FATAL — the canonical report failed schema-validating readout (exit $SUITE_RC). A report that cannot be read through the contracts code is not committable evidence (QA-024/AP-009)." >&2
+  exit 20
+fi
 CANON_SUITE="unrecorded"
+BAD_VARIANTS=""
+SUITE_FAILURE_VARIANTS=0
 while IFS= read -r line; do
   case "$line" in
-    *'"final_suite_status"'*)
-      v="${line#*\"final_suite_status\"}"
-      v="${v#*\"}"
-      CANON_SUITE="${v%%\"*}"
-      ;;
+    'final_suite_status='*) CANON_SUITE="${line#final_suite_status=}" ;;
+    'route_verdict '*)
+      variant="${line##* variant=}"
+      case "$variant" in
+        none|suite-failure) [ "$variant" = suite-failure ] && SUITE_FAILURE_VARIANTS=$((SUITE_FAILURE_VARIANTS + 1)) ;;
+        *) BAD_VARIANTS="${BAD_VARIANTS}${variant} " ;;
+      esac ;;
   esac
-done < "$CANON_REPORT"
+done <<< "$SUITE_OUT"
 if [ "$CANON_SUITE" = "unknown" ] || [ "$CANON_SUITE" = "unrecorded" ]; then
   echo "regen-sample: FATAL — the 'canonical' run recorded final_suite_status=$CANON_SUITE, meaning the suite phase did not run (variance-mode invocation defect). Refusing to publish a non-canonical sample as canonical (QA-006/INV-009)." >&2
   exit 20
 fi
+# QA-024(3): bootstrap detection accepts ONLY a genuine stale-sample suite
+# failure — every route verdict reason must be the suite-failure variant. A
+# prerequisite-failure/crash/missing-report/probe-failure synthetic is a
+# broken run, never a committable bootstrap pass.
+if [ "$CANON_SUITE" != "success" ]; then
+  if [ -n "$BAD_VARIANTS" ] || [ "$SUITE_FAILURE_VARIANTS" -eq 0 ]; then
+    echo "regen-sample: FATAL — final_suite_status=$CANON_SUITE with route verdict variants [${BAD_VARIANTS:-none}] is NOT a stale-sample bootstrap failure (only suite-failure variants qualify). Refusing to publish a broken-run synthetic as a committable pair (QA-024)." >&2
+    exit 20
+  fi
+fi
 
-# --- (3) publish the PAIR (the FIRST write to any tracked path) --------------
-printf '%s\n' "$(< "$VAR_REPORT")" > "$SAMPLE_DIR/run-report.sample.json.tmp"
-run_cmd mv -- "$SAMPLE_DIR/run-report.sample.json.tmp" "$SAMPLE_DIR/run-report.sample.json"
-printf '%s\n' "$(< "$CANON_REPORT")" > "$SAMPLE_DIR/run-report.canonical.sample.json.tmp"
-run_cmd mv -- "$SAMPLE_DIR/run-report.canonical.sample.json.tmp" "$SAMPLE_DIR/run-report.canonical.sample.json"
+# --- (3) publish the PAIR via a SINGLE staged-directory swap (QA-024(2)) -----
+# Both samples (plus the directory's README) are staged together and swapped
+# into place with directory renames — a failure can leave the OLD pair intact
+# or a loudly-missing samples dir plus a recoverable .old directory, but never
+# a silently MIXED pair (new variance sample beside a stale canonical sample).
+STAGE_DIR="$SAMPLE_DIR.staged.$$"
+OLD_DIR="$SAMPLE_DIR.old.$$"
+run_cmd rm -rf -- "$STAGE_DIR" "$OLD_DIR"
+run_cmd mkdir -p -- "$STAGE_DIR"
+if [ -f "$SAMPLE_DIR/README.md" ]; then
+  printf '%s\n' "$(< "$SAMPLE_DIR/README.md")" > "$STAGE_DIR/README.md"
+fi
+printf '%s\n' "$(< "$VAR_REPORT")" > "$STAGE_DIR/run-report.sample.json"
+printf '%s\n' "$(< "$CANON_REPORT")" > "$STAGE_DIR/run-report.canonical.sample.json"
+run_cmd mv -- "$SAMPLE_DIR" "$OLD_DIR"
+run_cmd mv -- "$STAGE_DIR" "$SAMPLE_DIR"
+run_cmd rm -rf -- "$OLD_DIR"
 
-# --- ADR-0001 record refresh (turnkey per DD-008) ----------------------------
-# The ADR's machine-readable adr_lint block and its per-route adjudication
-# record ids are refreshed from the canonical sample so the AdrLinter's
-# committed-sample check binds to the freshly generated evidence. This mirrors
-# the sample into the ADR's citation block without human transcription.
+# --- ADR-0001 reminder (QA-020: truthful — this is an ECHO, not a mechanism) --
+# There is NO automatic ADR refresh: the operator updates the adr_lint block's
+# verdicts/adjudication-record ids/citations BY HAND when promoting claims, and
+# the AdrLinter committed-sample test is what binds the block to schema-valid
+# records (INV-013/PAT-004). This script only prints the reminder below.
 ADR="$REPO_ROOT/docs/adr/ADR-0001-dafny-integration-boundary.md"
 if [ -f "$ADR" ]; then
-  echo "regen-sample: refresh ADR-0001 adjudication-record ids / citations from the canonical sample before committing (DD-008); the AdrLinter committed-sample test binds them." >&2
+  echo "regen-sample: REMINDER — if ADR-0001 claims change, update its adr_lint block manually and re-run the suite; the AdrLinter committed-sample test binds it (DD-008/INV-013). This script does NOT rewrite the ADR." >&2
 fi
 
 echo "regen-sample: [3/3] PAIR written:" >&2

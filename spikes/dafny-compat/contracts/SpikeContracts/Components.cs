@@ -203,8 +203,15 @@ public static class VerdictAggregator
                         $"report run_id '{report.RunId}' does not match the current run '{runId}' — stale reports are rejected (codex F1)"));
                 continue;
             }
-            // Exit/report consistency precedes the probe-set verdict (INV-013).
-            var exitOutcome = AdjudicationStateMachine.MapExit(report.ExitCode, report.Signal, report);
+            // Exit/report consistency precedes the probe-set verdict (INV-013),
+            // scoped to the probes the ROUTE CHILD itself owns and reports
+            // (P03, P05–P12): P01 is controller-attested and P02/P04 are
+            // aggregator-owned (codex F7), so a controller/shared attestation
+            // failure must surface as that probe's failure by manifest order —
+            // never as a phantom exit/report mismatch against a child whose
+            // exit DID match its own report (QA-022(2) per-partition attribution).
+            var childOwned = report.Probes.Where(p => p.Key.Route == route && p.Key.ProbeId != "P01").ToList();
+            var exitOutcome = AdjudicationStateMachine.MapExit(report.ExitCode, report.Signal, report with { Probes = childOwned });
             if (exitOutcome.Reason is VerdictReason.Crash or VerdictReason.ExitReportMismatch or VerdictReason.MalformedReport)
             {
                 verdicts[route] = exitOutcome;

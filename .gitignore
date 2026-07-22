@@ -38,3 +38,4 @@ dist/
 # the install manifest records the local plugin cache dir)
 .correctless/.install-manifest.json
 .correctless/config/workflow-config.json
+TestResults/

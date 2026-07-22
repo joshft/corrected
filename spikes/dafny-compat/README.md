@@ -62,13 +62,22 @@ Route harness children (`Corrected.Spike.Contracts.ExitCodes`):
 | 20 | INCOMPLETE (typed cause in the report) |
 | unknown code / signal death | crash variant — never pass, never refutation |
 
-Controller (`scripts/run-spike.sh`) run-level exit (QA-008 — fail-closed for CI
-wiring, matching the report/summary):
+Aggregator (`SpikeAggregator`) exit (QA-016 — fail-closed on any non-passing
+AGGREGATION outcome, derived from the emitted run report): 0 only when every
+per-probe entry of the 22-entry manifest view passes AND the exit/report
+matrix is consistent; 10 when any probe failed; 20 when any entry is
+incomplete (missing/malformed/forged-run_id route report, receipt mismatch,
+P02/P04 failure) or the matrix is inconsistent, and on aggregator-internal
+faults. A variance run whose probes all pass still exits 0 (its INCOMPLETE
+route verdicts come from `final_suite_status=unknown`, the suite channel).
+
+Controller (`scripts/run-spike.sh`) run-level exit (QA-008/QA-016 —
+fail-closed for CI wiring, matching the report/summary):
 
 | exit | meaning |
 |------|---------|
-| 0 | all route children passed and (canonical runs) the suite passed |
-| 1 | a route child failed, the aggregator failed, or the suite failed |
+| 0 | all route children passed, aggregation passed, and (canonical runs) the suite passed |
+| 1 | a route child failed, aggregation detected a failure, or the suite failed |
 | 20 | INCOMPLETE — a prerequisite/wall-clock fault (synthetic report emitted) |
 | 30 | refused: unhardened invocation (use `env -i HOME=… bash -p`) |
 
@@ -120,9 +129,12 @@ dotnet test spikes/dafny-compat -noAutoResponse
 spike-local `Directory.Build.rsp` seals directory response files, but only
 `-noAutoResponse` disables the SDK-adjacent `MSBuild.rsp` (codex R3-8).
 
-**A completed controller run must exist first.** Integration tests launch only
-controller-built, digest-attested artifacts (DD-008/TA-B13). Each completed
-controller run atomically publishes `out/current/spike.runsettings`, which
+**A completed CANONICAL controller run must exist first.** Integration tests
+launch only controller-built, digest-attested artifacts (DD-008/TA-B13). Each
+completed **canonical** controller run atomically publishes
+`out/current/spike.runsettings` — nested/variance runs (any `--run-root`/
+`--out`/`--config`/`--solver` override) never touch `out/current` (QA-021:
+only canonical operator runs may publish the shared pointer), which
 `Directory.Build.props` feeds to VSTest so direct `dotnet test` invocations
 receive `SPIKE_RUN_CONTEXT` pointing at the latest run's `run-context.json`.
 On a fresh clone (no `out/current/`), the variable is unset and every

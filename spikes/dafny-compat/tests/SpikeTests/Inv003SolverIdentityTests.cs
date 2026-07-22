@@ -136,16 +136,27 @@ public class Inv003SolverIdentityTests
         Assert.True(provision.ExitCode == 0, $"provisioning failed: {provision.StdErr}");
         WriteLedger(runRoot, $"nonce-{Guid.NewGuid():N}");
 
-        // TEST-constructed decoys, each recording to its own TEST-owned ledger file.
+        // TEST-constructed decoys. The assembly-adjacent decoy records to its
+        // own TEST-owned ledger file (that location is sanctioned by location,
+        // with this zero-invocation check as the behavioral backstop). The
+        // first-on-PATH decoy sits in a decoys/ dir, which QA-015 sanctions by
+        // EXACT DIGEST only — so the test plants the sanctioned recording
+        // script itself (recording to the run root's decoy-invocations log,
+        // the test-owned observable for that leg).
         var artifact = RunContext.Resolve(route == "A" ? "RouteAHarness" : "RouteBHarness");
         var artifactDir = Path.GetDirectoryName(artifact.AbsolutePath)!;
         var adjacentLedger = Path.Combine(runRoot, "decoy-adjacent.log");
-        var pathLedger = Path.Combine(runRoot, "decoy-path.log");
+        var pathLedger = Path.Combine(runRoot, "sentinel", "decoy-invocations.log");
         var adjacentDecoy = SpikePaths.WriteExecutable(Path.Combine(artifactDir, "z3", "bin", "z3-4.12.1"),
             $"echo \"decoy-invoked $*\" >> '{adjacentLedger}'; echo 'Z3 version 0.0.0 - 64 bit'");
         var decoyDir = Path.Combine(runRoot, "decoys");
-        SpikePaths.WriteExecutable(Path.Combine(decoyDir, "z3"),
-            $"echo \"decoy-invoked $*\" >> '{pathLedger}'; echo 'Z3 version 0.0.0 - 64 bit'");
+        var sanctioned = HarnessCore.SanctionedDecoyScript(runRoot);
+        Directory.CreateDirectory(decoyDir);
+        File.WriteAllText(Path.Combine(decoyDir, "z3"), sanctioned);
+        File.SetUnixFileMode(Path.Combine(decoyDir, "z3"),
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
 
         try
         {

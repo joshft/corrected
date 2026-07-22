@@ -347,6 +347,15 @@ if [ "$INNER" = 0 ]; then
   read -r UPTIME_START _ < /proc/uptime
   UPTIME_START="${UPTIME_START%.*}"
   DEADLINE=$((UPTIME_START + WALL_BOUND))
+  # QA-018(b): nested controller runs inherit the PARENT's remaining budget —
+  # SPIKE_PARENT_DEADLINE (an absolute /proc/uptime deadline, injected into the
+  # suite-phase environment and propagated by the test launcher) caps this
+  # run's deadline to min(own bound, parent remaining), so a killed parent can
+  # never leave nested inner controllers running on fresh 30-minute deadlines.
+  case "${SPIKE_PARENT_DEADLINE:-}" in
+    ''|*[!0-9]*) : ;;
+    *) if [ "$SPIKE_PARENT_DEADLINE" -lt "$DEADLINE" ]; then DEADLINE="$SPIKE_PARENT_DEADLINE"; fi ;;
+  esac
   # QA-007: the inner controller's per-phase supervisor owns the exact deadline
   # and writes a phase-specific synthetic report (e.g. "build phase exceeded").
   # The OUTER watchdog is the BACKSTOP for a wedged inner that cannot
@@ -540,6 +549,22 @@ supervise_phase() { # wrapper-pid pgid-file
       SPIKE_PHASE_TIMED_OUT=1
       pgid=""
       [ -f "$pgidfile" ] && read -r pgid < "$pgidfile" || true
+      # QA-018(a): pgid-file race — if the deadline fires between mktemp and
+      # the phase leader writing its pid, killing only the wrapper would leave
+      # the detached setsid phase session running unbounded (the inner then
+      # exits promptly and the outer never sweeps). Poll briefly for the pid,
+      # then fall back to the session leader descended from the wrapper.
+      if [ -z "$pgid" ]; then
+        local retry
+        for retry in 1 2 3 4 5; do
+          run_cmd sleep 1
+          [ -f "$pgidfile" ] && read -r pgid < "$pgidfile" || true
+          [ -n "$pgid" ] && break
+        done
+      fi
+      if [ -z "$pgid" ]; then
+        pgid="$(find_session_leader "$wrapper" || true)"
+      fi
       if [ -n "$pgid" ]; then
         kill -TERM -- "-$pgid" 2>/dev/null || true
         SPIKE_PHASE_SIGNALS="SIGTERM"
@@ -569,10 +594,24 @@ run_with_env() { # class + a full dispatch invocation (audited statically)
       require_env_key MSBUILDDISABLENODEREUSE
       require_env_key UseSharedCompilation
       ;;
+    provision)
+      # QA-017: provisioning now runs under the constructed profile too; the
+      # SPIKE_RID_OVERRIDE fault hook (provision-z3.sh: INV-014 fail-closed
+      # test only) must still reach it when the operator/test set it.
+      if [ -n "${SPIKE_RID_OVERRIDE:-}" ]; then
+        LAUNCH_KEYS+=(SPIKE_RID_OVERRIDE)
+        LAUNCH_VALS+=("$SPIKE_RID_OVERRIDE")
+      fi
+      ;;
   esac
   if [ "$class" = "test" ]; then
     LAUNCH_KEYS+=(SPIKE_RUN_CONTEXT)
     LAUNCH_VALS+=("$RUN_ROOT/run-context.json")
+    # QA-018(b): hand the suite phase this run's absolute /proc/uptime deadline
+    # so nested controller launches performed by tests are budget-capped
+    # (controller-injected, like SPIKE_RUN_CONTEXT — not an SDK injection).
+    LAUNCH_KEYS+=(SPIKE_PARENT_DEADLINE)
+    LAUNCH_VALS+=("$SPIKE_DEADLINE")
   fi
   audit_launch "$class" "$1"
 
@@ -637,10 +676,16 @@ fail_run() { # cause detail — QA-005: each site names its true typed cause
 }
 
 # --- phase: provision ----------------------------------------------------------
+# QA-017: provisioning runs in its OWN setsid session under supervise_phase
+# (run_with_env), exactly like restore/build/test/probes/aggregation — a hang
+# here (stalled fetch, blocked digest read) is independently killable at the
+# single /proc/uptime deadline with typed per-phase attribution, never left to
+# the outer watchdog's generic +20s backstop.
 set +e
-run_cmd bash -p "$SCRIPT_DIR/provision-z3.sh" --run-root "$RUN_ROOT" >&2
+run_with_env provision run_cmd bash -p "$SCRIPT_DIR/provision-z3.sh" --run-root "$RUN_ROOT" >&2
 PROVISION_EXIT=$?
 set -e
+phase_guard provision "$PROVISION_EXIT"
 if [ "$PROVISION_EXIT" -ne 0 ]; then
   fail_run PrerequisiteFailure "provisioning failed (exit $PROVISION_EXIT) — run provisioning first: scripts/provision-z3.sh (BND-002 fail-closed)"
 fi
@@ -767,9 +812,19 @@ NET8_URL="https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.29/dotnet-runti
 NET8_SHA="dba346c5c4357e1befebf14de8c8ee7f09313cc12c7c0015a4cdd4dfd0efba81"
 NET8_ARCHIVE_NAME="dotnet-runtime-8.0.29-linux-x64.tar.gz"
 NET8_ARCHIVE="$CACHE_DIR/$NET8_ARCHIVE_NAME"
+# QA-017: the BND-004 fetch/extract legs run in their own setsid sessions
+# under supervise_phase (launch class "fetch"), so a stalled download or a
+# wedged extraction is independently killable with typed phase attribution.
 if [ ! -f "$NET8_ARCHIVE" ] || [ "$(sha_of "$NET8_ARCHIVE")" != "$NET8_SHA" ]; then
   run_cmd mkdir -p -- "$CACHE_DIR"
-  run_cmd curl --disable -fsSL -o "$NET8_ARCHIVE.download" "$NET8_URL"
+  set +e
+  run_with_env fetch run_cmd curl --disable -fsSL -o "$NET8_ARCHIVE.download" "$NET8_URL"
+  FETCH_EXIT=$?
+  set -e
+  phase_guard fetch "$FETCH_EXIT"
+  if [ "$FETCH_EXIT" -ne 0 ]; then
+    fail_run PrerequisiteFailure "net8 control-runtime fetch failed (exit $FETCH_EXIT) (BND-004 fail-closed; host/TFM adjudication blocked)"
+  fi
   if [ "$(sha_of "$NET8_ARCHIVE.download")" != "$NET8_SHA" ]; then
     fail_run PrerequisiteFailure "net8 control-runtime archive does not match the pinned SHA-256 (BND-004 fail-closed; host/TFM adjudication blocked)"
   fi
@@ -777,7 +832,14 @@ if [ ! -f "$NET8_ARCHIVE" ] || [ "$(sha_of "$NET8_ARCHIVE")" != "$NET8_SHA" ]; t
 fi
 CONTROL_ROOT="$RUN_ROOT/control-runtime"
 run_cmd mkdir -p -- "$CONTROL_ROOT"
-run_cmd tar -xzf "$NET8_ARCHIVE" -C "$CONTROL_ROOT"
+set +e
+run_with_env fetch run_cmd tar -xzf "$NET8_ARCHIVE" -C "$CONTROL_ROOT"
+EXTRACT_EXIT=$?
+set -e
+phase_guard fetch "$EXTRACT_EXIT"
+if [ "$EXTRACT_EXIT" -ne 0 ]; then
+  fail_run PrerequisiteFailure "net8 control-runtime extraction failed (exit $EXTRACT_EXIT) (BND-004 fail-closed; host/TFM adjudication blocked)"
+fi
 
 # --- QA-013: source-set content digest — a canonical run stamps the digest of
 # --- the exact source tree it built so a direct `dotnet test` consumer can
@@ -811,14 +873,21 @@ SRC_DIGEST="$(sha_of "$SRC_MANIFEST")"
 } > "$RUN_ROOT/run-context.json.tmp"
 run_cmd mv -- "$RUN_ROOT/run-context.json.tmp" "$RUN_ROOT/run-context.json"
 
-run_cmd mkdir -p -- "$SPIKE_ROOT/out/current"
-{
-  printf '<?xml version="1.0" encoding="utf-8"?>\n'
-  printf '<RunSettings>\n  <RunConfiguration>\n    <EnvironmentVariables>\n'
-  printf '      <SPIKE_RUN_CONTEXT>%s</SPIKE_RUN_CONTEXT>\n' "$RUN_ROOT/run-context.json"
-  printf '    </EnvironmentVariables>\n  </RunConfiguration>\n</RunSettings>\n'
-} > "$SPIKE_ROOT/out/current/spike.runsettings.tmp"
-run_cmd mv -- "$SPIKE_ROOT/out/current/spike.runsettings.tmp" "$SPIKE_ROOT/out/current/spike.runsettings"
+# QA-021: ONLY canonical operator runs publish the out/current pointer.
+# Nested/variance runs (--run-root/--out/--config/--solver — the form every
+# in-suite launch uses) must never mutate shared cross-run state outside their
+# own run root: republishing out/current from a nested test run left the dev
+# loop's "latest run" pointing at a mutable test-fixture scratch root.
+if [ "${SPIKE_CANONICAL:-0}" = 1 ]; then
+  run_cmd mkdir -p -- "$SPIKE_ROOT/out/current"
+  {
+    printf '<?xml version="1.0" encoding="utf-8"?>\n'
+    printf '<RunSettings>\n  <RunConfiguration>\n    <EnvironmentVariables>\n'
+    printf '      <SPIKE_RUN_CONTEXT>%s</SPIKE_RUN_CONTEXT>\n' "$RUN_ROOT/run-context.json"
+    printf '    </EnvironmentVariables>\n  </RunConfiguration>\n</RunSettings>\n'
+  } > "$SPIKE_ROOT/out/current/spike.runsettings.tmp"
+  run_cmd mv -- "$SPIKE_ROOT/out/current/spike.runsettings.tmp" "$SPIKE_ROOT/out/current/spike.runsettings"
+fi
 
 # --- phase: route probes (route children own P03, P05-P12 only) ------------------
 # Sentinel-configured probes run FIRST: after a real Boogie+Z3 session, the

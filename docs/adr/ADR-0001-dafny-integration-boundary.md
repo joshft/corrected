@@ -36,21 +36,33 @@ adr_lint:
       evidence: null
 ```
 
-## Decision (pending a canonical suite-attested run)
+## Decision (pending — the route selection is a later, human decision)
 
-The boundary decision stays **pending**: a route verdict of COMPATIBLE
-requires `final_suite_status=success` from a canonical operator run of
-`spikes/dafny-compat/scripts/run-spike.sh` (codex R4-02/R3-5), and the
-committed sample is deliberately produced in variance mode
-(`final_suite_status=unknown`, route verdicts INCOMPLETE by construction) so
-the fresh-run-equality comparison is like-for-like. No COMPATIBLE claim is
-made here yet; no rejection claim is made either.
+The boundary decision stays **pending**: selecting a route (or rejecting the
+in-process boundary) is a user decision to be taken later, and the `adr_lint`
+block above deliberately carries `pending` verdicts until that promotion is
+made with schema-valid adjudication records (INV-013/PAT-004).
 
-### Capability observations (bullets 1–3; each backed by the committed sample)
+The committed evidence state (QA-020 correction; true since the convergence
+pair landed): the **canonical** committed sample
+(`spikes/dafny-compat/evidence/samples/run-report.canonical.sample.json`) is a
+**suite-attested canonical run** — `final_suite_status=success`, exit/report
+matrix consistent, and **both route verdicts COMPATIBLE** — produced by a
+canonical operator run of `spikes/dafny-compat/scripts/run-spike.sh` including
+the test-suite phase (codex R4-02/R3-5), and is citable for verdict claims.
+The **variance-mode** committed sample (`run-report.sample.json`,
+`final_suite_status=unknown`, route verdicts INCOMPLETE by construction)
+remains the full-equality reproducibility anchor for the fresh-run-equality
+test. No selection claim is made here yet; no rejection claim is made either.
 
-All claims cite `spikes/dafny-compat/evidence/samples/run-report.sample.json`
-(`deterministic.per_probe_results`, keyed by `(probe, route)`), whose
-deterministic projection a fresh run must reproduce:
+### Capability observations (bullets 1–3; each backed by the committed pair)
+
+Verdict-bearing claims cite the **canonical** sample
+(`spikes/dafny-compat/evidence/samples/run-report.canonical.sample.json`,
+`deterministic.per_probe_results` keyed by `(probe, route)`, with
+`final_suite_status=success`); the variance sample records the identical
+per-probe outcomes and anchors full deterministic-projection equality against
+a fresh run:
 
 - **In-process parse → resolve → Z3-backed verify on a .NET 10 host works on
   both routes**: P06 (ok.dfy, non-vacuous typed Valid outcomes) and P07
@@ -106,9 +118,24 @@ deterministic projection a fresh run must reproduce:
 - `DafnyDriver.dll` and `DafnyPipeline.dll` ship without
   `AssemblyInformationalVersion` attributes; their identity is carried by file
   digest alone (RS-008 note in the expected-loaded sets).
-- A COMPATIBLE, suite-attested run report exists only under the untracked
-  `out/<run_id>/` area of a canonical operator run; the committed sample is
-  variance-mode by design. Promotion (DF-002) should cite a canonical run.
+- The committed **canonical** sample is a suite-attested run report with
+  `final_suite_status=success` and both routes COMPATIBLE (QA-020 correction
+  of the earlier variance-only wording); promotion (DF-002) cites it. The
+  masked suite-status subtree is guarded in-suite by schema validation of both
+  samples, a verdict recomputation from the sample's own per-probe results,
+  and the success/pending consistency check (QA-019 — masked never means
+  unvalidated).
+- Startup-gate sanctioning (QA-015): a z3 in a `decoys/`-named directory is
+  sanctioned by exact script digest only; the assembly-adjacent decoy location
+  remains location-sanctioned with the zero-invocation decoy-log assertion as
+  its behavioral backstop.
+- P01 partition non-veto (QA-022(2) recorded disposition): R4-07's non-veto
+  property holds at the P01 attestation/attribution level — a route-scoped
+  lock fault fails only its own P01 partition in the receipt and the emitted
+  report — but the controller still fails the whole run closed on any restore
+  failure, so no route reaches a verdict in that run. Accepted residual: the
+  fail-closed run-level stop is deliberate; attribution (not verdict
+  computation under a broken restore) is the property preserved.
 
 ## Propagation obligations (DD-007)
 

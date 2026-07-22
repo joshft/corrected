@@ -7,20 +7,20 @@
     "test-audit",
     "green",
     "simplify",
-    "qa-round-1"
+    "qa-round-1",
+    "fix-round-1",
+    "qa-round-2"
   ],
-  "current_phase": "fix-round-1-regen-script-defect",
+  "current_phase": "fix-round-2-in-progress",
   "green_attempts": 0,
   "calm_reset_fired": false,
-  "timestamp": "2026-07-21T21:20:00Z",
-  "qa_rounds_done": 1,
+  "timestamp": "2026-07-22T01:00:00Z",
+  "qa_rounds_done": 2,
   "next_steps": [
-    "Fix agent (a4acf5fceb28aa579) is fixing regen-sample.sh: (1) sequencing \u2014 copy BOTH samples to evidence/samples/ only after both runs complete (variance copy before run 2 dirties the tree, canonical sample bakes git_dirty_flag=true, QA001 fails 199/200); (2) canonicity \u2014 --out sets CANONICAL=0 in run-spike.sh:205 so the 'canonical' run skipped the suite phase (final_suite_status=unknown), contradicting the fix report",
-    "When it reports: revert bad pair (git checkout -- spikes/dafny-compat/evidence/samples/run-report.sample.json; rm run-report.canonical.sample.json), hygiene-review + commit the script fix",
-    "Re-run regen from clean tree: env -i HOME=\"$HOME\" bash -p spikes/dafny-compat/scripts/regen-sample.sh",
-    "Verify full suite 200/200 fresh (NOTE: pipe to tail masks dotnet exit code \u2014 check the Failed:/Passed: line, not exit status), then commit samples (+ ADR record refresh if regen mandates it)",
-    "workflow-advance.sh qa, then spawn QA round 2 agent (independent; diff the fix round vs 4ef9798, re-check all 14 findings + QA-011 flake reproduction; max 3 rounds at high)",
-    "After QA clean: probe round (mutation+config-fuzz, 15-min default), then workflow-advance.sh audit-mini, mini-audit 2 rounds x (6 core + top-2 recommended lenses)",
+    "Fix round 2 agent treating QA-015..QA-024 (all 10 user-dispositioned fix-now; round-2 entries in qa-findings JSON). Constraints: no commits, no sample regeneration (STOP+report if forced), tests strengthen-only, finish with fresh canonical controller run + green suite",
+    "When it reports: hygiene-review diff, commit fix round 2, run fresh canonical controller run at new HEAD (env -i HOME=\"$HOME\" bash -p <abs>/spikes/dafny-compat/scripts/run-spike.sh \u2014 every commit stales substrate per QA-013/GitCommitBinding), verify suite green fresh",
+    "workflow-advance.sh qa, spawn QA round 3 agent (FINAL round at high intensity) diffing fix round 2; if clean -> proceed; if findings -> disposition gate but no further fix+QA cycle is available (defer/accept only)",
+    "Probe round (mutation+config-fuzz, ask user for time budget, default 15 min), then workflow-advance.sh audit-mini, mini-audit 2 rounds x (6 core + top-2 recommended lenses from .correctless/artifacts/lens-recommendations-feature-dafny-compat-spike-06dca9.json)",
     "done -> suggest /cverify then /cdocs (never auto-invoke)"
   ]
 }
