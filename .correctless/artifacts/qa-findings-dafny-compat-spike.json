@@ -11,7 +11,7 @@
       "class_fix": "Unit test asserts committed sample's git_dirty_flag==false and commit is ancestor of HEAD.",
       "status": "fixed",
       "lens": null,
-      "fix_note": "FIXED: regen-sample.sh refuses a dirty tree (exit 40, ignoring only untracked out/ run products) and QA001_CommittedSamples_CleanTreeAncestorCommit asserts git_dirty_flag==false + 40-hex commit + ancestor-of-HEAD. Sample regeneration itself is the orchestrator step (clean tree)."
+      "fix_note": "FIXED: regen-sample.sh refuses a dirty tree (exit 40, ignoring only untracked out/ run products) and QA001_CommittedSamples_CleanTreeAncestorCommit asserts git_dirty_flag==false + 40-hex commit + ancestor-of-HEAD. Sample regeneration itself is the orchestrator step (clean tree). FOLLOW-UP (fix round 1b): regen sequencing corrected — both reports stay under out/ until BOTH runs complete, then the pair is published together; publishing the variance sample before the canonical run had dirtied the tree and baked git_dirty_flag:true into the canonical sample."
     },
     {
       "id": "QA-002",
@@ -66,7 +66,7 @@
       "class_fix": "N/A — inherently spec-level conflict.",
       "status": "fixed",
       "lens": null,
-      "fix_note": "FIXED (spec-amended): schema v2 declares suite_status_mask (additive-only); committed sample PAIR — variance (full equality) + canonical (masked equality via schema-declared fields); DeterministicProjection(applySuiteStatusMask) drops only the schema-declared subtree; fresh-run-equality checks both; regen-sample.sh regenerates the pair; ADR cites the canonical sample."
+      "fix_note": "FIXED (spec-amended): schema v2 declares suite_status_mask (additive-only); committed sample PAIR — variance (full equality) + canonical (masked equality via schema-declared fields); DeterministicProjection(applySuiteStatusMask) drops only the schema-declared subtree; fresh-run-equality checks both; regen-sample.sh regenerates the pair; ADR cites the canonical sample. FOLLOW-UP (fix round 1b): the canonical leg of regen-sample.sh now passes NO overrides (a --out flag was silently flipping run-spike.sh to variance mode, skipping the suite); the report is recovered from the controller completion line, a canonicity self-check refuses to publish a sample with final_suite_status=unknown, and the documented two-pass bootstrap convergence (first pass records suite failure against stale committed samples; commit, re-run once for the citable success-status sample) is detected and reported by the script."
     },
     {
       "id": "QA-007",

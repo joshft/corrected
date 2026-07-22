@@ -9,18 +9,18 @@
     "simplify",
     "qa-round-1"
   ],
-  "current_phase": "fix-round-1-in-progress",
+  "current_phase": "fix-round-1-regen-script-defect",
   "green_attempts": 0,
   "calm_reset_fired": false,
-  "timestamp": "2026-07-22T03:51:58Z",
+  "timestamp": "2026-07-21T21:20:00Z",
   "qa_rounds_done": 1,
   "next_steps": [
-    "1. Fix agent (background) reports treatments of QA-001..014 + expected stale-sample test failures + new v2 schema digest",
-    "2. Hygiene-review + commit fix-round diff (message: fix(dafny-compat-spike): QA round 1 — all 14 findings)",
-    "3. Run spikes/dafny-compat/scripts/regen-sample.sh from the then-clean tree (regenerates BOTH samples of the pair + ADR records)",
-    "4. Verify full suite 188+/188 green via commands.test fresh, then commit samples",
-    "5. workflow-advance.sh qa (gate reruns suite) then spawn QA round 2 agent (independent, diffs the fix round; max 3 rounds at high)",
-    "6. After QA clean: probe round (high: mutation+config-fuzz, 15min default budget), then workflow-advance.sh audit-mini, mini-audit 2 rounds x (6 core + 2 recommended lenses from lens-recommendations-feature-dafny-compat-spike-06dca9.json)",
-    "7. done -> suggest /cverify + /cdocs (never auto-invoke)"
+    "Fix agent (a4acf5fceb28aa579) is fixing regen-sample.sh: (1) sequencing \u2014 copy BOTH samples to evidence/samples/ only after both runs complete (variance copy before run 2 dirties the tree, canonical sample bakes git_dirty_flag=true, QA001 fails 199/200); (2) canonicity \u2014 --out sets CANONICAL=0 in run-spike.sh:205 so the 'canonical' run skipped the suite phase (final_suite_status=unknown), contradicting the fix report",
+    "When it reports: revert bad pair (git checkout -- spikes/dafny-compat/evidence/samples/run-report.sample.json; rm run-report.canonical.sample.json), hygiene-review + commit the script fix",
+    "Re-run regen from clean tree: env -i HOME=\"$HOME\" bash -p spikes/dafny-compat/scripts/regen-sample.sh",
+    "Verify full suite 200/200 fresh (NOTE: pipe to tail masks dotnet exit code \u2014 check the Failed:/Passed: line, not exit status), then commit samples (+ ADR record refresh if regen mandates it)",
+    "workflow-advance.sh qa, then spawn QA round 2 agent (independent; diff the fix round vs 4ef9798, re-check all 14 findings + QA-011 flake reproduction; max 3 rounds at high)",
+    "After QA clean: probe round (mutation+config-fuzz, 15-min default), then workflow-advance.sh audit-mini, mini-audit 2 rounds x (6 core + top-2 recommended lenses)",
+    "done -> suggest /cverify then /cdocs (never auto-invoke)"
   ]
 }
