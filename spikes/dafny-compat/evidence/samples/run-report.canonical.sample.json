@@ -2,10 +2,10 @@
   "evidence_schema_version": 2,
   "evidence_schema_sha256": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
   "probe_manifest_sha256": "4956816b40f2cf4316ab2ba3ad9cbb810bb89e0339187c8add7a7d3c2178b0eb",
-  "run_id": "runid-7ffd93d27215b8ea",
+  "run_id": "runid-451163332fcaf57d",
   "kind": "run-report",
   "binding_identity": {
-    "run_directory": "out/regen-variance-6d4571bf",
+    "run_directory": "out/runid-451163332fcaf57d",
     "git_commit_id": "0bb0966be11ad647a8e25c046f90c1bdc5bdb545",
     "git_dirty_flag": false,
     "host_rid": "linux-x64",
@@ -18,7 +18,7 @@
       "--configfile",
       "NuGet.Config",
       "-noAutoResponse",
-      "-p:SpikeRunRootRel=out/regen-variance-6d4571bf"
+      "-p:SpikeRunRootRel=out/runid-451163332fcaf57d"
     ],
     "solver_path_concrete": "solver/z3-4.12.1/bin/z3"
   },
@@ -29,7 +29,7 @@
         "state": "INCOMPLETE",
         "verdict_reason": {
           "variant": "suite-failure",
-          "detail": "final test-suite status unknown \u2014 the suite phase did not run in this run mode; COMPATIBLE requires final_suite_status=success (codex R4-02)"
+          "detail": "final test-suite exit was failure \u2014 an all-pass probe report accompanied by a failing dotnet test is not citable as COMPATIBLE (codex R3-5)"
         }
       },
       {
@@ -37,19 +37,19 @@
         "state": "INCOMPLETE",
         "verdict_reason": {
           "variant": "suite-failure",
-          "detail": "final test-suite status unknown \u2014 the suite phase did not run in this run mode; COMPATIBLE requires final_suite_status=success (codex R4-02)"
+          "detail": "final test-suite exit was failure \u2014 an all-pass probe report accompanied by a failing dotnet test is not citable as COMPATIBLE (codex R3-5)"
         }
       }
     ],
     "verdict_reasons": [
       {
         "variant": "suite-failure",
-        "detail": "final test-suite status unknown \u2014 the suite phase did not run in this run mode; COMPATIBLE requires final_suite_status=success (codex R4-02)",
+        "detail": "final test-suite exit was failure \u2014 an all-pass probe report accompanied by a failing dotnet test is not citable as COMPATIBLE (codex R3-5)",
         "route": "A"
       },
       {
         "variant": "suite-failure",
-        "detail": "final test-suite status unknown \u2014 the suite phase did not run in this run mode; COMPATIBLE requires final_suite_status=success (codex R4-02)",
+        "detail": "final test-suite exit was failure \u2014 an all-pass probe report accompanied by a failing dotnet test is not citable as COMPATIBLE (codex R3-5)",
         "route": "B"
       }
     ],
@@ -187,7 +187,7 @@
         "detail": null
       }
     ],
-    "final_suite_status": "unknown",
+    "final_suite_status": "failure",
     "exit_report_matrix_outcome": "consistent",
     "fixture_digests": {
       "fixtures/bad.dfy": "d8afe927ca07086d2ad38ebbb94adef41c47622313f3c895c771bcd0e260f973",
@@ -232,7 +232,7 @@
   },
   "volatile": {
     "timestamps": {
-      "aggregated_utc": "2026-07-22T04:15:44.2731896Z"
+      "aggregated_utc": "2026-07-22T04:19:01.0477649Z"
     }
   }
 }
