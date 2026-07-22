@@ -17,7 +17,17 @@ non-production status, not disposability).
 - .NET SDK **10.0.302** exactly, pinned by `global.json`
   (`rollForward: disable`, `allowPrerelease: false`). Install source:
   https://dotnet.microsoft.com/download/dotnet/10.0 (or `dotnet-install.sh`)
-  into a user-local `DOTNET_ROOT`.
+  into a user-local `DOTNET_ROOT`. The controller resolves the SDK from
+  `HOME/.dotnet`, then the cached pointer (`out/cache/dotnet-root`).
+  **System-wide installs (`/usr/share/dotnet`, `PATH`) are NOT auto-discovered**,
+  and the clean-environment contract (MA-HI-1) strips an ambient `DOTNET_ROOT`
+  env var so a version-spoofing wrapper cannot void the pinned SDK. A user whose
+  SDK lives elsewhere names it **explicitly** as an argument (not an env var the
+  re-exec would strip):
+
+  ```
+  env -i HOME="$HOME" bash -p scripts/run-spike.sh --dotnet-root <sdk-root>
+  ```
 - Network access to nuget.org and github.com during the online phase
   (restore + provisioning) only (EA-003).
 
@@ -74,12 +84,48 @@ route verdicts come from `final_suite_status=unknown`, the suite channel).
 Controller (`scripts/run-spike.sh`) run-level exit (QA-008/QA-016 —
 fail-closed for CI wiring, matching the report/summary):
 
+| exit | meaning | report emitted? |
+|------|---------|-----------------|
+| 0 | all route children passed, aggregation passed, and (canonical runs) the suite passed | yes |
+| 1 | a route child failed, aggregation detected a failure, or the suite failed | yes |
+| 20 | INCOMPLETE — a per-run prerequisite/wall-clock/operator-cancel fault (synthetic report emitted) **OR** a PRE-RUN failure that emits NO report (MA-UX-4) | see note |
+| 30 | refused: unhardened invocation, or a non-allowlisted variable present at canonical entry (use `env -i HOME=… bash -p`) | no |
+
+**Exit 20 without a report (MA-UX-4):** exit 20 covers two classes. Once a run
+root exists, prerequisite/wall-clock/operator-cancel faults emit a synthetic
+INCOMPLETE report at the run-report path. But PRE-RUN failures that occur before
+a run root is minted — an unknown/malformed argument, a missing `--project`/
+`--consumer-fixture`, a missing `NuGet.Config`, a missing pinned SDK, a
+corrupt/truncated `run-config` (PR-004), a `run_cmd` DENY — also exit 20 and
+emit **no** report. A CI wrapper or operator that finds exit 20 with no
+synthetic report at the expected path is looking at a pre-run failure (a typo or
+missing prerequisite), distinct from a genuine INCOMPLETE run; the stderr line
+names which.
+
+Provisioning (`scripts/provision-z3.sh`) exit:
+
 | exit | meaning |
 |------|---------|
-| 0 | all route children passed, aggregation passed, and (canonical runs) the suite passed |
-| 1 | a route child failed, aggregation detected a failure, or the suite failed |
-| 20 | INCOMPLETE — a prerequisite/wall-clock fault (synthetic report emitted) |
-| 30 | refused: unhardened invocation (use `env -i HOME=… bash -p`) |
+| 0 | provisioned (or already provisioned — idempotent) |
+| 20 | usage error (missing `--run-root`, unknown argument, `run_cmd` DENY) — no report |
+| 21 | unsupported host RID (fail-closed before any fetch) — no report |
+| 22 | digest mismatch / no digest-valid archive (BND-002 fail-closed) — no report |
+
+Sample regeneration (`scripts/regen-sample.sh`) exit:
+
+| exit | meaning |
+|------|---------|
+| 0 | pair regenerated (review the diff before committing) |
+| 20 | a run produced no/uncitable report, or the readout failed (AP-009) — no report |
+| 30 | refused: unhardened invocation |
+| 40 | refused: dirty tree (QA-001) — commit/stash first |
+
+Run-root cleanup (`scripts/clean-runs.sh`) exit:
+
+| exit | meaning |
+|------|---------|
+| 0 | pruned (or nothing to prune) — maintenance tool, no report |
+| 20 | usage error / unhardened invocation |
 
 The full exit/report consistency matrix (including "failure exit + all-pass
 report ⇒ never COMPATIBLE") is committed in
@@ -122,8 +168,17 @@ run (DD-008). The controller MUST:
 ## Running the test suite directly (EA-004)
 
 ```
-dotnet test spikes/dafny-compat -noAutoResponse
+cd spikes/dafny-compat && dotnet test DafnyCompatSpike.sln -noAutoResponse
 ```
+
+**Run it from `spikes/dafny-compat/` (MA-UX-6).** The .NET muxer walks up from
+the working directory for `global.json`; the repo root has none, so
+`dotnet test spikes/dafny-compat` from the repo root runs the test host under
+whatever newest SDK is installed, bypassing the 10.0.302 pin. `cd`-ing into the
+spike directory first makes `spikes/dafny-compat/global.json` govern the direct
+path. (The artifacts under test are controller-built and digest-attested and
+QA-013 catches source drift, so only the test-host runtime is affected — but the
+pin should govern uniformly.)
 
 `-noAutoResponse` is mandatory on every restore/build/test invocation: the
 spike-local `Directory.Build.rsp` seals directory response files, but only
@@ -167,6 +222,39 @@ against the digest provisioning records in
 `<run-root>/solver/z3-4.12.1/binary.sha256` (so a post-provisioning binary
 substitution fails P04, not just P05–P07).
 
+## Stopping a run (MA-UX-1/MA-RB-4)
+
+A canonical run is long (~13–15 min). To stop it, send **Ctrl-C / SIGINT** (or
+SIGTERM / close the terminal) to the controller. The outer watchdog traps the
+signal, sweeps the entire inner session (the setsid'd inner controller plus the
+active phase's own setsid session) with `SIGTERM`→`SIGKILL`, writes a synthetic
+INCOMPLETE report with a typed `OperatorCancelled` cause, and exits nonzero. It
+does **not** silently orphan the run: without the trap the detached inner would
+keep provisioning/building/aggregating — and, for a canonical run, republish
+`out/current` — minutes after you thought it was dead, racing an immediate
+re-run. `out/current` is published only after the suite phase, which a cancelled
+run never reaches, so the dev-loop pointer is left untouched.
+
+## Disk usage, cleanup, and recovery
+
+- **~1 GB per canonical run.** Each `out/<run_id>/` root holds a package-cache
+  copy, the extracted net8 runtime, the z3 archive, and 5 projects' build
+  output. Run roots are **safe to delete** — run products are regenerated by the
+  next controller run. `rm -rf out` is a safe full reset (it also drops the
+  shared `out/cache`, forcing a one-time cold restore/provision).
+- **Automatic prune.** Every *canonical* run prunes `out/runid-*` at start,
+  keeping the newest 5 (never `out/current`, never `out/cache`, never
+  `out/regen-*`). Variance/nested runs never prune.
+- **On-demand prune.** `env -i HOME="$HOME" bash -p scripts/clean-runs.sh
+  [--keep N]` (default 3) prunes old `out/runid-*` and `out/regen-*` roots,
+  leaving `out/current` and `out/cache` untouched.
+- **Corrupt shared package cache (MA-UX-5/AP-016).** The shared cache
+  (`out/cache/packages`) is trusted only when its `packages.complete` marker is
+  present; a torn seed (deadline KILL / ENOSPC mid-populate) leaves a
+  marker-less dir the controller ignores and rebuilds from restore. If restore
+  still fails against a wedged cache, recover with `rm -rf out/cache` (the
+  restore-failure message names this).
+
 ## Layout
 
 | path | purpose |
@@ -181,7 +269,7 @@ substitution fails P04, not just P05–P07).
 | `manifest/` | spec-owned probe manifest, Option Manifest, expected-loaded sets |
 | `schema/` | evidence schema + append-only version→digest registry (INV-009) |
 | `config/` | run config, Z3 pin, net8 control-runtime pin |
-| `scripts/` | bootstrap controller, provisioning, sample regeneration |
+| `scripts/` | bootstrap controller, provisioning, sample regeneration, run-root cleanup (`clean-runs.sh`) |
 | `ci/spike-ci.yml` | stub CI workflow — handoff artifact for the CI feature (DD-005/DF-001) |
 | `evidence/samples/` | committed evidence samples (hygiene-checked; no host details, PRH-005) |
 | `out/` | untracked run products (gitignored) |

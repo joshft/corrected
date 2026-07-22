@@ -19,9 +19,28 @@ public class Ea008EnvironmentProfileTests
         using var doc = SpikePaths.Json(path);
         var classes = doc.RootElement.GetProperty("launch_classes");
 
-        foreach (var launchClass in new[] { "controller", "restore", "build", "test", "harness", "control", "solver-identity", "sentinel" })
+        // MA-UC-2/MA-XC-6: provision and fetch are enumerated — the BND-004
+        // curl/tar launches must never run under an unconstructed environment.
+        foreach (var launchClass in new[] { "controller", "provision", "fetch", "restore", "build", "test", "harness", "control", "solver-identity", "sentinel" })
         {
             Assert.True(classes.TryGetProperty(launchClass, out _), $"missing launch class '{launchClass}'");
+        }
+
+        // MA-UC-2: the provision/fetch profiles carry the minimum key set —
+        // decoy-first PATH (INV-003), run-root TMPDIR, and SSL passthrough
+        // (the fetch leg performs the BND-002/BND-004 downloads).
+        foreach (var networkClass in new[] { "provision", "fetch" })
+        {
+            var profile = classes.GetProperty(networkClass);
+            string Value(string key)
+            {
+                Assert.True(profile.TryGetProperty(key, out var v), $"launch class '{networkClass}' missing EA-008 key {key}");
+                return v.GetString()!;
+            }
+            Assert.Equal("<constructed:decoy-first>", Value("PATH"));
+            Assert.StartsWith("<run-root>/", Value("TMPDIR"));
+            Assert.Equal("<passthrough>", Value("SSL_CERT_FILE"));
+            Assert.Equal("<passthrough>", Value("SSL_CERT_DIR"));
         }
 
         foreach (var buildClass in new[] { "controller", "restore", "build", "test" })
@@ -49,6 +68,42 @@ public class Ea008EnvironmentProfileTests
         var injected = doc.RootElement.GetProperty("documented_sdk_injected")
             .EnumerateArray().Select(k => k.GetString()).ToList();
         Assert.Contains("DOTNET_HOST_PATH", injected);
+    }
+
+    // Tests EA-008 [unit] (MA-UC-2/MA-XC-6 class fix): the expected class list
+    // DERIVES from the scripts' actual run_with_env call sites (like the
+    // PRH-004 allowlist test does for commands) — a launch class invoked by
+    // any committed script must be profiled, so adding a new launch call site
+    // fails this test until config/env-profiles.json covers it.
+    [Fact]
+    public void EveryRunWithEnvCallSiteClass_IsProfiled()
+    {
+        var invoked = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var script in Directory.EnumerateFiles(SpikePaths.P("scripts"), "*.sh"))
+        {
+            foreach (var line in File.ReadAllLines(script))
+            {
+                var trimmed = line.TrimStart();
+                if (trimmed.StartsWith("#", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"run_with_env\s+([a-z][a-z0-9-]*)\b");
+                if (match.Success)
+                {
+                    invoked.Add(match.Groups[1].Value);
+                }
+            }
+        }
+        Assert.Contains("provision", invoked);
+        Assert.Contains("fetch", invoked);
+        var profiled = SpikePaths.Json(SpikePaths.P("config", "env-profiles.json"))
+            .RootElement.GetProperty("launch_classes").EnumerateObject().Select(p => p.Name).ToHashSet();
+        foreach (var cls in invoked)
+        {
+            Assert.True(profiled.Contains(cls),
+                $"scripts invoke run_with_env class '{cls}' but config/env-profiles.json does not profile it — the launch would run under an unconstructed environment (EA-008/MA-UC-2)");
+        }
     }
 
     // Tests EA-008 [unit]: contracts constants and the committed file agree —

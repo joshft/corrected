@@ -43,6 +43,19 @@ public static class ControlCore
             return ExitCodes.Incomplete;
         }
 
+        // PR-007: the committed net8 control pin is startup-anchored by the
+        // control cell itself — a corrupted pin file is a fast typed refusal
+        // at runtime, not only a canonical-suite finding.
+        try
+        {
+            PinFiles.ValidateNet8ControlPin(FindSpikeRoot());
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"control: startup trust anchor rejected: {ex.Message}");
+            return ExitCodes.Incomplete;
+        }
+
         var corelibPath = typeof(object).Assembly.Location;
         var corelibDir = Path.GetDirectoryName(corelibPath)!;
         var runtimeVersion = Path.GetFileName(corelibDir);

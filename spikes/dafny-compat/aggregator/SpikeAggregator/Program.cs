@@ -121,11 +121,74 @@ if (reportsDir.Length > 0 && reports.Count == 0)
     return ExitCodes.Incomplete;
 }
 
+// PR-003/PR-007 startup anchors: the probe manifest digest and the committed
+// pin files are validated BEFORE any receipt or report is consumed.
+try
+{
+    VerdictAggregator.ValidateProbeManifestFile(manifestPath);
+    var aggSpikeRoot = FindSpikeRoot();
+    PinFiles.ValidateZ3Pin(aggSpikeRoot);
+    PinFiles.ValidateNet8ControlPin(aggSpikeRoot);
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"SpikeAggregator: startup trust anchor rejected: {ex.Message}");
+    return ExitCodes.Incomplete;
+}
+
 var manifest = ProbeManifest.Load(manifestPath);
 if (runId.Length == 0)
 {
     Console.Error.WriteLine("SpikeAggregator: --run-id is required (codex F1)");
     return ExitCodes.Incomplete;
+}
+
+// MA-VI-6: final_suite_status is DERIVED from the controller's nonce-bound
+// suite receipt (RunLayout.SuiteReceiptRelativePath — see the coordination
+// contract there); --suite-status is at most a cross-check. With a receipt:
+// run_id/nonce must bind and a mismatching --suite-status claim is REFUSED.
+// Without a receipt: a bare argv claim of "success" is never trusted — it is
+// downgraded to "unknown" (fail-closed: verdicts stay INCOMPLETE), so an
+// out-of-band re-invocation with a forged --suite-status can never mint a
+// COMPATIBLE run report.
+var suiteReceiptPath = runRoot.Length > 0
+    ? Path.Combine(runRoot, RunLayout.SuiteReceiptRelativePath.Replace('/', Path.DirectorySeparatorChar))
+    : "";
+string? receiptDerivedStatus = null;
+if (suiteReceiptPath.Length > 0 && File.Exists(suiteReceiptPath))
+{
+    try
+    {
+        using var suiteReceipt = JsonDocument.Parse(File.ReadAllText(suiteReceiptPath));
+        var receiptRunId = suiteReceipt.RootElement.GetProperty("run_id").GetString();
+        var receiptNonce = suiteReceipt.RootElement.GetProperty("nonce").GetString();
+        if (receiptRunId != runId || (nonce.Length > 0 && receiptNonce != nonce))
+        {
+            throw new InvalidOperationException(
+                $"suite receipt run_id/nonce mismatch (receipt {receiptRunId}) — stale/forged suite receipts are rejected (MA-VI-6)");
+        }
+        var suiteExit = suiteReceipt.RootElement.GetProperty("suite_exit").GetInt32();
+        receiptDerivedStatus = suiteExit == 0 ? "success" : "failure";
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"SpikeAggregator: suite receipt invalid: {ex.Message} — refusing (MA-VI-6 fail-closed)");
+        return ExitCodes.Incomplete;
+    }
+    if (suiteStatusText is "success" or "failure" && suiteStatusText != receiptDerivedStatus)
+    {
+        Console.Error.WriteLine(
+            $"SpikeAggregator: --suite-status '{suiteStatusText}' contradicts the nonce-bound suite receipt ('{receiptDerivedStatus}') — a forged suite-status claim is refused (MA-VI-6)");
+        return ExitCodes.Incomplete;
+    }
+    suiteStatusText = receiptDerivedStatus;
+}
+else if (suiteStatusText == "success")
+{
+    Console.Error.WriteLine(
+        "SpikeAggregator: --suite-status success carries no nonce-bound suite receipt "
+        + $"({RunLayout.SuiteReceiptRelativePath}) — the unvalidated claim is downgraded to 'unknown' (MA-VI-6 fail-closed; the controller emits the receipt after the test phase)");
+    suiteStatusText = "unknown";
 }
 
 // Validate the controller's nonce-bound receipts (the aggregator validates,
@@ -193,6 +256,7 @@ string? solverArchiveSha = null;
     var detail = new List<string>();
     var solver = solverPath.Length > 0 ? solverPath : Path.Combine(runRoot, SolverLayout.SolverRelativePath.Replace('/', Path.DirectorySeparatorChar));
     var pass = true;
+    var provisioningCrossCheckRan = false;
     if (!File.Exists(solver))
     {
         pass = false;
@@ -215,6 +279,7 @@ string? solverArchiveSha = null;
             }
             else
             {
+                provisioningCrossCheckRan = true;
                 var recorded = File.ReadAllText(provisioningRecord).Trim();
                 if (recorded != executedSolverSha)
                 {
@@ -241,8 +306,20 @@ string? solverArchiveSha = null;
             detail.Add($"banner did not report 4.12.1 (exit {banner.ExitCode}: {banner.StdOut.Trim()})");
         }
     }
-    probeResults.Add(new ProbeResult(new ProbeKey("P04", "shared"), pass ? ProbeStatus.Pass : ProbeStatus.Incomplete,
-        pass ? null : string.Join("; ", detail)));
+    // MA-VI-7: a --solver override outside the standard layout silently skips
+    // the installed-binary-vs-provisioning cross-check — an unqualified P04
+    // pass is then unreachable: the probe records Incomplete with the skipped
+    // sub-check named, never a wrong-reason pass (AP-010).
+    if (pass && !provisioningCrossCheckRan)
+    {
+        probeResults.Add(new ProbeResult(new ProbeKey("P04", "shared"), ProbeStatus.Incomplete,
+            "override path: provisioning cross-check not applicable — banner/archive checks ran, but P04 pass requires the binary.sha256 comparison (MA-VI-7)"));
+    }
+    else
+    {
+        probeResults.Add(new ProbeResult(new ProbeKey("P04", "shared"), pass ? ProbeStatus.Pass : ProbeStatus.Incomplete,
+            pass ? null : string.Join("; ", detail)));
+    }
 }
 
 // Route reports: only from performed launches; run_id bound. Malformed
@@ -254,6 +331,7 @@ var consumedPaths = new List<string>();
 var malformedRoutes = new Dictionary<string, string>(StringComparer.Ordinal);
 var routeAdjudicationRecords = new List<(string Route, JsonElement Record)>();
 var routeRecordDocuments = new List<JsonDocument>();
+var childProbesByRoute = new Dictionary<string, IReadOnlyDictionary<ProbeKey, ProbeResult>>(StringComparer.Ordinal);
 foreach (var (route, path, exit) in reports)
 {
     if (!File.Exists(path))
@@ -276,6 +354,12 @@ foreach (var (route, path, exit) in reports)
                 Enum.Parse<ProbeStatus>(p.GetProperty("status").GetString()!, ignoreCase: true),
                 p.TryGetProperty("detail", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null));
         }
+        // MA-VI-1: the spec-named duplicate-key rejection runs ON THE
+        // PRODUCTION INGESTION PATH — a duplicate composite key in the raw
+        // report array makes the whole report malformed in BOTH the verdict
+        // and the per_probe_results view (never a first-wins TryAdd).
+        var keyed = VerdictAggregator.ToKeyedResults(probes);
+        childProbesByRoute[route] = keyed;
         if (doc.RootElement.GetProperty("deterministic").TryGetProperty("adjudication_records", out var records)
             && records.ValueKind == JsonValueKind.Array)
         {
@@ -293,7 +377,8 @@ foreach (var (route, path, exit) in reports)
     catch (Exception ex)
     {
         Console.Error.WriteLine($"SpikeAggregator: malformed route report {path}: {ex.Message}");
-        malformedRoutes[route] = $"route report failed closed-schema validation/parsing: {ex.GetType().Name} (AP-009: malformed is its own state)";
+        malformedRoutes[route] = $"route report failed closed-schema validation/parsing: {ex.GetType().Name}: {ex.Message} (AP-009: malformed is its own state)";
+        childProbesByRoute.Remove(route);
         routeReports.Add(new RouteReport(runId, route, Array.Empty<ProbeResult>(), exit, null, path));
     }
 }
@@ -342,24 +427,38 @@ foreach (var kv in aggregateResult.RouteVerdicts)
 }
 var result = new RunResult(runId, finalVerdicts, suiteStatus);
 
-// Combined 22-entry per-probe view (manifest order).
-var byKey = new Dictionary<ProbeKey, ProbeResult>();
-foreach (var r in probeResults)
-{
-    byKey[r.Key] = r;
-}
-foreach (var report in routeReports)
-{
-    foreach (var p in report.Probes)
-    {
-        byKey.TryAdd(p.Key, p);
-    }
-}
+// Combined 22-entry per-probe view (manifest order). MA-VI-1: source
+// selection is an EXPLICIT OWNERSHIP check against the manifest's committed
+// owner column — controller/aggregator-attested entries (P01/P02/P04) come
+// only from probeResults; route-child entries come only from that route's own
+// (duplicate-rejected) report — never TryAdd insertion-order precedence. A
+// route whose report was rejected as malformed contributes NOTHING here, so
+// the per-probe view and the verdict agree on the malformed-report state.
 var perProbe = new List<Dictionary<string, object?>>();
 foreach (var entry in manifest.Entries)
 {
     var key = new ProbeKey(entry.ProbeId, entry.Route);
-    if (byKey.TryGetValue(key, out var r))
+    ProbeResult? r = null;
+    if (entry.Owner is "controller" or "aggregator")
+    {
+        r = probeResults.FirstOrDefault(p => p.Key == key);
+    }
+    else if (malformedRoutes.ContainsKey(entry.Route))
+    {
+        perProbe.Add(new Dictionary<string, object?>
+        {
+            ["probe"] = key.ProbeId,
+            ["route"] = key.Route,
+            ["status"] = "incomplete",
+            ["detail"] = $"route report rejected as malformed — {malformedRoutes[entry.Route]}",
+        });
+        continue;
+    }
+    else if (childProbesByRoute.TryGetValue(entry.Route, out var childKeyed) && childKeyed.TryGetValue(key, out var childResult))
+    {
+        r = childResult;
+    }
+    if (r is not null)
     {
         perProbe.Add(new Dictionary<string, object?>
         {
@@ -494,7 +593,8 @@ var exitReportConsistent = reports.All(r =>
     // probe failures, not exit mismatches (QA-022(2)).
     var childOwned = report.Probes.Where(p => p.Key.Route == r.Route && p.Key.ProbeId != "P01").ToList();
     var mapped = AdjudicationStateMachine.MapExit(r.Exit, null, report with { Probes = childOwned });
-    return mapped.Reason is null or not (VerdictReason.ExitReportMismatch or VerdictReason.Crash);
+    // MA-VI-4: a null MapExit result IS the consistent cell (a non-verdict).
+    return mapped is null || mapped.Reason is not (VerdictReason.ExitReportMismatch or VerdictReason.Crash);
 });
 
 var runDirectory = Path.GetRelativePath(spikeRoot, Path.GetFullPath(runRoot)).Replace('\\', '/');
@@ -517,6 +617,10 @@ var reportObject = new Dictionary<string, object?>
         ["actual_runtime_version"] = Environment.Version.ToString(),
         ["restore_argv_concrete"] = restoreArgvJson is null ? new List<string>() : JsonSerializer.Deserialize<List<string>>(restoreArgvJson),
         ["solver_path_concrete"] = SolverLayout.SolverRelativePath,
+        // MA-ED-2/PR-007: glibc_floor (EA-002 "recorded in evidence") is READ
+        // from the startup-validated z3 pin file — the pin is consumed by the
+        // execution path, and the floor reaches the run report's binding class.
+        ["glibc_floor"] = PinFiles.ValidateZ3Pin(spikeRoot).GlibcFloor,
     },
     ["deterministic"] = new Dictionary<string, object?>
     {

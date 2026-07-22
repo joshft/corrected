@@ -23,22 +23,12 @@ public static class SpikePaths
 
     public static string SpikeRoot => _spikeRoot.Value;
 
-    public static string RepoRoot
-    {
-        get
-        {
-            var dir = new DirectoryInfo(SpikeRoot);
-            while (dir is not null)
-            {
-                if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
-                {
-                    return dir.FullName;
-                }
-                dir = dir.Parent!;
-            }
-            throw new InvalidOperationException("Could not locate repo root (.git) above the spike root.");
-        }
-    }
+    public static string RepoRoot =>
+        // Gitfile merge group (PR-001/MA-XC-1): the test side consumes the SAME
+        // shared gitfile-aware resolver as production — a linked worktree's
+        // .git FILE is a repo boundary; fail closed when none exists.
+        Corrected.Spike.Contracts.GitResolver.FindRepoRoot(SpikeRoot)
+        ?? throw new InvalidOperationException("Could not locate repo root (.git directory or gitfile) above the spike root.");
 
     public static string P(params string[] segments) => Path.Combine(new[] { SpikeRoot }.Concat(segments).ToArray());
 
@@ -208,32 +198,25 @@ public static class SpikePaths
         }
     }
 
-    /// <summary>Test-side git HEAD reader (TA-A11) — no git binary dependency; resolves symbolic refs and packed-refs.</summary>
-    public static string GitHeadCommit()
+    /// <summary>Test-side git HEAD reader (TA-A11) — no git binary dependency; delegates to the shared gitfile-aware resolver (worktree-correct: gitdir + commondir).</summary>
+    public static string GitHeadCommit() =>
+        Corrected.Spike.Contracts.GitResolver.ReadHeadCommit(RepoRoot);
+
+    /// <summary>
+    /// MA-ED-4: RID-scope gate for tests whose guarantee is proven only on the
+    /// pinned linux-x64 host (EA-002/RS-005). On any other host this THROWS —
+    /// a loud non-pass outcome — so an environment-scoped test can never
+    /// record success while its scoped body did not run (AP-013). A meta-test
+    /// bans the silent early-return pattern in test sources.
+    /// </summary>
+    public static void RequireProvenRid()
     {
-        var gitDir = Repo(".git");
-        var head = File.ReadAllText(Path.Combine(gitDir, "HEAD")).Trim();
-        if (!head.StartsWith("ref: ", StringComparison.Ordinal))
+        if (!IsLinuxX64)
         {
-            return head;
+            throw new InvalidOperationException(
+                "skipped: unproven RID "
+                + System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier
+                + " — this guarantee is scoped to the pinned linux-x64 host and was NOT proven here (EA-002/RS-005/MA-ED-4)");
         }
-        var refName = head["ref: ".Length..].Trim();
-        var refFile = Path.Combine(gitDir, refName.Replace('/', Path.DirectorySeparatorChar));
-        if (File.Exists(refFile))
-        {
-            return File.ReadAllText(refFile).Trim();
-        }
-        var packed = Path.Combine(gitDir, "packed-refs");
-        if (File.Exists(packed))
-        {
-            foreach (var line in File.ReadAllLines(packed))
-            {
-                if (line.EndsWith(" " + refName, StringComparison.Ordinal))
-                {
-                    return line.Split(' ')[0];
-                }
-            }
-        }
-        throw new InvalidOperationException($"cannot resolve git ref {refName}");
     }
 }

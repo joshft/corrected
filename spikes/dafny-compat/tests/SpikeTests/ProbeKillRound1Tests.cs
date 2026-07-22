@@ -40,7 +40,8 @@ public class ProbeKillRound1MapExitTests
 
         var outcome = AdjudicationStateMachine.MapExit(ExitCodes.RouteProbesPassed, null, report);
 
-        Assert.Equal(RouteState.Incomplete, outcome.State);
+        Assert.NotNull(outcome); // MA-VI-4: only CONSISTENT cells are null
+        Assert.Equal(RouteState.Incomplete, outcome!.State);
         var mismatch = Assert.IsType<VerdictReason.ExitReportMismatch>(outcome.Reason);
         Assert.Equal(ExitCodes.RouteProbesPassed, mismatch.ExitCode);
     }
@@ -64,7 +65,8 @@ public class ProbeKillRound1MapExitTests
 
         var outcome = AdjudicationStateMachine.MapExit(ExitCodes.ProbeFailure, null, report);
 
-        Assert.Equal(RouteState.Incomplete, outcome.State);
+        Assert.NotNull(outcome); // MA-VI-4: only CONSISTENT cells are null
+        Assert.Equal(RouteState.Incomplete, outcome!.State);
         var attribution = Assert.IsType<VerdictReason.ProbeFailure>(outcome.Reason);
         Assert.Equal(new ProbeKey("P06", "A"), attribution.FirstFailingByManifestOrder);
     }

@@ -207,13 +207,11 @@ public class QaFixRound1Tests
         var report = Path.Combine(runRoot, "report.json");
         var result = Launch.Harness("A", "--probe", "P05", "--run-root", runRoot, "--out", report);
         Assert.Equal(ExitCodes.RouteProbesPassed, result.ExitCode);
-        using var ledger = Launch.Ledger(runRoot);
-        // P05 recorded its OWN sub-nonce entry (fresh), proving its pass did not
-        // rest on the pre-planted foreign-sub-nonce entry.
-        var freshForP05 = ledger.RootElement.GetProperty("entries").EnumerateArray()
-            .Count(e => e.GetProperty("nonce").GetString() == nonce
-                        && e.GetProperty("argv").GetArrayLength() > 0
-                        && e.GetProperty("argv")[0].GetString()!.StartsWith("probe:P05", StringComparison.Ordinal));
+        // P05 recorded its OWN sub-nonce entry (fresh, in the MA-RB-3
+        // append-only entry files), proving its pass did not rest on the
+        // pre-planted foreign-sub-nonce entry.
+        var freshForP05 = Launch.LedgerFileEntries(runRoot)
+            .Count(e => e.Nonce == nonce && e.ProbeTag.StartsWith("probe:P05", StringComparison.Ordinal));
         Assert.True(freshForP05 >= 1, "P05 recorded no entry under its own P05 sub-nonce (QA-011 scoping broken)");
     }
 
@@ -257,23 +255,89 @@ public class QaFixRound1Tests
             "run-context.json carries no source_set_sha256 — QA-013 substrate-identity anchor missing");
         Assert.Matches("^[0-9a-f]{64}$|^unknown$", digest.GetString()!);
 
-        // The manifest (path column) files must currently hash to the recorded
-        // digest column — else the tree changed since the controller run.
+        // MA-UC-1: the substrate-identity check is FULL BIDIRECTIONAL set
+        // equality — the test recomputes the current tree's file list with the
+        // SAME patterns the controller uses (parsed from run-spike.sh, the
+        // single source) and asserts recorded == recomputed in BOTH directions,
+        // so files ADDED by an upgrade (invisible to a row-by-row walk over the
+        // recorded side) and DELETED files (previously silently skipped) both
+        // surface as staleness. Per-file digests are then compared row by row.
         var manifest = Path.Combine(RunContext.RunRoot(), ".source-manifest");
-        if (File.Exists(manifest))
+        Assert.True(File.Exists(manifest),
+            "controller run recorded no .source-manifest — the QA-013 substrate-identity guard has nothing to verify (AP-003)");
+
+        var recorded = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in File.ReadAllLines(manifest).Where(l => l.Length > 0))
         {
-            foreach (var line in File.ReadAllLines(manifest).Where(l => l.Length > 0))
-            {
-                var parts = line.Split("  ", 2);
-                if (parts.Length != 2) { continue; }
-                var full = SpikePaths.P(parts[1].Split('/'));
-                if (File.Exists(full))
-                {
-                    Assert.True(SpikePaths.Sha256File(full) == parts[0],
-                        $"source file {parts[1]} changed since the controller run — binaries are stale; re-run scripts/run-spike.sh (QA-013/AP-003).");
-                }
-            }
+            var parts = line.Split("  ", 2);
+            Assert.True(parts.Length == 2, $"malformed source-manifest row: '{line}'");
+            recorded[parts[1]] = parts[0];
         }
+        Assert.NotEmpty(recorded);
+
+        var patterns = SourceManifestPatterns();
+        var recomputed = GitTrackedFilesMatching(patterns);
+        Assert.NotEmpty(recomputed);
+        var missingFromRecorded = recomputed.Except(recorded.Keys).OrderBy(p => p, StringComparer.Ordinal).ToList();
+        var vanishedFromTree = recorded.Keys.Except(recomputed).OrderBy(p => p, StringComparer.Ordinal).ToList();
+        Assert.True(missingFromRecorded.Count == 0,
+            $"files present in the current tree but absent from the controller run's source manifest (upgrade-added; binaries are stale — re-run scripts/run-spike.sh): {string.Join(", ", missingFromRecorded)} (QA-013/MA-UC-1)");
+        Assert.True(vanishedFromTree.Count == 0,
+            $"files recorded by the controller run but no longer in the tree (deleted since; binaries are stale — re-run scripts/run-spike.sh): {string.Join(", ", vanishedFromTree)} (QA-013/MA-UC-1)");
+
+        foreach (var (rel, sha) in recorded)
+        {
+            var full = SpikePaths.P(rel.Split('/'));
+            Assert.True(File.Exists(full) && SpikePaths.Sha256File(full) == sha,
+                $"source file {rel} changed since the controller run — binaries are stale; re-run scripts/run-spike.sh (QA-013/AP-003).");
+        }
+
+        // Coordination (MA-UC-1, LAST assertion so the set-equality machinery
+        // above is proven independently): the solution file is a real build
+        // input; the controller's pattern list must cover *.sln so an upgrade
+        // that adds a project cannot green-validate pre-upgrade binaries.
+        // (The pattern addition in scripts/run-spike.sh is the shell/operator
+        // slice of this fix round.)
+        Assert.Contains("*.sln", patterns);
+    }
+
+    /// <summary>Parses the controller's git ls-files pattern list from scripts/run-spike.sh (single source — MA-UC-1).</summary>
+    private static IReadOnlyList<string> SourceManifestPatterns()
+    {
+        var script = File.ReadAllLines(SpikePaths.P("scripts", "run-spike.sh"));
+        var line = script.SingleOrDefault(l => l.Contains("git -C \"$SPIKE_ROOT\" ls-files --", StringComparison.Ordinal));
+        Assert.False(line is null, "run-spike.sh no longer builds the QA-013 source manifest via git ls-files — the substrate-identity guard lost its source (MA-UC-1)");
+        var patterns = System.Text.RegularExpressions.Regex.Matches(line!, "'([^']+)'")
+            .Select(m => m.Groups[1].Value).ToList();
+        Assert.NotEmpty(patterns);
+        return patterns;
+    }
+
+    /// <summary>Recomputes the current tree's manifest file set with the controller's own patterns (read-only git invocation).</summary>
+    private static IReadOnlySet<string> GitTrackedFilesMatching(IReadOnlyList<string> patterns)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("git")
+        {
+            WorkingDirectory = SpikePaths.SpikeRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("-C");
+        psi.ArgumentList.Add(SpikePaths.SpikeRoot);
+        psi.ArgumentList.Add("ls-files");
+        psi.ArgumentList.Add("--");
+        foreach (var pattern in patterns)
+        {
+            psi.ArgumentList.Add(pattern);
+        }
+        using var proc = System.Diagnostics.Process.Start(psi)!;
+        var stdout = proc.StandardOutput.ReadToEnd();
+        proc.WaitForExit(30000);
+        Assert.Equal(0, proc.ExitCode);
+        return stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Where(f => File.Exists(SpikePaths.P(f.Split('/')))) // mirror the controller's [ -f ] guard
+            .ToHashSet();
     }
 
     // QA-007 class fix: a NON-probe phase hang (test-planted slow build target)

@@ -232,6 +232,20 @@ public static class RunLayout
     /// <summary>Environment audit receipt: the constructed per-launch environments actually applied (EA-008/TA-B9).</summary>
     public const string EnvAuditReceiptRelativePath = "receipts/env-audit.json";
     public const string BuildReceiptRelativePath = "receipts/build-receipt.json";
+    /// <summary>
+    /// MA-VI-6: nonce-bound SUITE receipt — the controller emits this
+    /// (atomically) after the test phase of a canonical run; the aggregator
+    /// DERIVES final_suite_status from it and treats --suite-status as at most
+    /// a cross-check, refusing on mismatch. COORDINATION CONTRACT (shell
+    /// agent): emit JSON at this path with fields
+    ///   { "run_id": &lt;SPIKE_RUN_ID&gt;, "nonce": &lt;SPIKE_NONCE&gt;,
+    ///     "suite_exit": &lt;int dotnet-test exit&gt;,
+    ///     "source_manifest_sha256": &lt;SRC_DIGEST or "unknown"&gt; }
+    /// via write-temp-then-mv, ONLY when the suite phase actually ran
+    /// (canonical runs). Variance runs emit nothing (final_suite_status stays
+    /// unknown). Derivation: suite_exit==0 → success, else failure.
+    /// </summary>
+    public const string SuiteReceiptRelativePath = "receipts/suite-receipt.json";
     public const string ReportsDirRelativePath = "reports";
     /// <summary>Committed per-launch environment profiles (EA-008/TA-B11).</summary>
     public const string EnvProfilesRelativePath = "config/env-profiles.json";
@@ -366,6 +380,9 @@ public sealed record HygieneReport(
 /// <summary>Sentinel-solver nonce ledger row (INV-003/RS-003d): pre-created, nonce-bound, initialized to zero.</summary>
 public sealed record SentinelLedger(string Nonce, int InvocationCount, IReadOnlyList<string> RecordedArgv);
 
+/// <summary>One decoded append-only sentinel ledger entry (MA-RB-3/MA-HI-2): per-writer-unique file, base64 fields round-tripping arbitrary argv bytes.</summary>
+public sealed record SentinelLedgerEntry(string Nonce, string ProbeTag, IReadOnlyList<string> Argv);
+
 /// <summary>
 /// EA-008: committed per-launch environment profiles — environment is
 /// constructed, not sanitized by prohibition. Values referencing roots use
@@ -402,6 +419,13 @@ public static class EnvironmentProfiles
 /// </summary>
 public static class BootstrapAllowlist
 {
+    // ADJUDICATION NOTE (MA-XC-3): `rm` is a recorded widening of the
+    // spec-enumerated PRH-004 layer-1 list, adjudicated with QA-014 (run-root
+    // housekeeping: provisioning scratch/.corrupt/.download cleanup). The
+    // spec-side record of this deviation is the shell/operator layer's
+    // obligation (ADR-0001 residual list); this constant is the enforcement
+    // copy the static test certifies. Any further widening needs its own
+    // adjudication record — the three-point-change discipline applies.
     public static readonly IReadOnlyList<string> Commands = new[]
     {
         "bash", "dotnet", "curl", "sha256sum", "tar", "unzip", "git",

@@ -85,6 +85,44 @@ public static class VerdictAggregator
     public const string EvidenceSchemaSha256TrustAnchor =
         "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509"; // = SHA-256 of schema/evidence-schema.json (registry row v2 — QA fix round 1: solver_archive_sha256 field + suite_status_mask block; v1 row a630b1aa… frozen append-only).
 
+    /// <summary>
+    /// PR-002: compiled-in append-only HISTORY anchor for RETIRED registry
+    /// rows. Runtime validation (route-child startup + aggregation) rejects a
+    /// falsified retired row — history falsification is no longer suite-only
+    /// enforced. Appending schema v(N+1) adds v(N)'s digest HERE as part of the
+    /// DD-006 anchor procedure; retired rows are never mutated or removed.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<int, string> RetiredSchemaRegistryRows = new Dictionary<int, string>
+    {
+        [1] = "a630b1aa10294b688867ee0cd73574f7c12c15050a2724245b43b3e8b4650259",
+    };
+
+    /// <summary>
+    /// PR-003: compiled-in trust anchor for the spec-owned probe manifest
+    /// (manifest/probe-manifest.json), validated at route-child STARTUP and at
+    /// aggregator startup — a tampered manifest is refused before any probe
+    /// runs, not only at late aggregation. The test suite asserts this equals
+    /// its own SpecConstants.ProbeManifestSha256 (RS-002 three-point change).
+    /// </summary>
+    public const string ProbeManifestSha256TrustAnchor =
+        "4956816b40f2cf4316ab2ba3ad9cbb810bb89e0339187c8add7a7d3c2178b0eb";
+
+    /// <summary>PR-003: recomputes and validates the committed probe manifest's digest against the compiled-in anchor; throws a typed refusal on mismatch.</summary>
+    public static void ValidateProbeManifestFile(string manifestPath)
+    {
+        if (!File.Exists(manifestPath))
+        {
+            throw new InvalidOperationException($"probe manifest missing at {manifestPath} (INV-006/PR-003)");
+        }
+        var actual = ProbeManifest.ComputeSha256(manifestPath);
+        if (actual != ProbeManifestSha256TrustAnchor)
+        {
+            throw new InvalidOperationException(
+                $"probe manifest digest mismatch: {manifestPath} has SHA-256 {actual}, compiled-in trust anchor is " +
+                $"{ProbeManifestSha256TrustAnchor} — a tampered manifest is refused at startup (RS-002/PR-003)");
+        }
+    }
+
     public static RouteOutcome ComputeRouteVerdict(
         ProbeManifest manifest,
         string route,
@@ -142,13 +180,26 @@ public static class VerdictAggregator
         }
 
         // Exact equality holds; now every probe must individually pass.
+        // MA-VI-2: the verdict_reason variant follows the first non-passing
+        // probe's STATUS — a Fail is a probe-failure; an Incomplete entry
+        // carries a typed prerequisite cause (solver-unavailable, sentinel
+        // missing, unreadable fixture, P04 identity fault) and must surface as
+        // prerequisite-failure with the probe key + its typed detail, never be
+        // relabeled probe-failure (INV-013 union / schema exit-20 row).
         var byKey = relevant.ToDictionary(p => p.Key, p => p);
         foreach (var key in expected) // MANIFEST order, never completion order (INV-013)
         {
-            if (byKey[key].Status != ProbeStatus.Pass)
+            var probe = byKey[key];
+            if (probe.Status == ProbeStatus.Fail)
             {
                 return new RouteOutcome(RouteState.Incomplete, null,
                     new VerdictReason.ProbeFailure(key));
+            }
+            if (probe.Status == ProbeStatus.Incomplete)
+            {
+                return new RouteOutcome(RouteState.Incomplete, null,
+                    new VerdictReason.PrerequisiteFailure(IncompleteCause.PrerequisiteFailure,
+                        $"{key}: {probe.Detail ?? "probe recorded INCOMPLETE with no detail"} (MA-VI-2: prerequisite/incomplete faults are never relabeled probe-failure)"));
             }
         }
 
@@ -212,7 +263,8 @@ public static class VerdictAggregator
             // exit DID match its own report (QA-022(2) per-partition attribution).
             var childOwned = report.Probes.Where(p => p.Key.Route == route && p.Key.ProbeId != "P01").ToList();
             var exitOutcome = AdjudicationStateMachine.MapExit(report.ExitCode, report.Signal, report with { Probes = childOwned });
-            if (exitOutcome.Reason is VerdictReason.Crash or VerdictReason.ExitReportMismatch or VerdictReason.MalformedReport)
+            if (exitOutcome is not null
+                && exitOutcome.Reason is VerdictReason.Crash or VerdictReason.ExitReportMismatch or VerdictReason.MalformedReport)
             {
                 verdicts[route] = exitOutcome;
                 continue;
@@ -276,6 +328,33 @@ public static class EvidenceSchema
         {
             throw new InvalidOperationException(
                 $"schema version {declaredVersion} digest {actual} does not match its registry row {row.Sha} — a version may never be reused with a different digest (INV-009/codex R3-6)");
+        }
+
+        // PR-002: retired-row history is validated at RUNTIME against the
+        // compiled-in append-only anchor — a falsified retired row is refused
+        // at route-child startup / aggregation, not only by the canonical suite.
+        foreach (var retired in rows.Where(r => r.Version != declaredVersion))
+        {
+            if (!VerdictAggregator.RetiredSchemaRegistryRows.TryGetValue(retired.Version, out var anchoredSha))
+            {
+                throw new InvalidOperationException(
+                    $"schema-version registry carries row v{retired.Version} that the compiled-in retired-row history does not know — " +
+                    "append-only history violation (INV-009/PR-002)");
+            }
+            if (anchoredSha != retired.Sha)
+            {
+                throw new InvalidOperationException(
+                    $"retired registry row v{retired.Version} digest {retired.Sha} does not match the compiled-in history anchor {anchoredSha} — " +
+                    "a falsified retired row is refused at runtime (INV-009/PR-002)");
+            }
+        }
+        foreach (var anchored in VerdictAggregator.RetiredSchemaRegistryRows)
+        {
+            if (!rows.Any(r => r.Version == anchored.Key && r.Sha == anchored.Value))
+            {
+                throw new InvalidOperationException(
+                    $"schema-version registry is missing the anchored retired row v{anchored.Key} — retired rows may never be removed (INV-009/PR-002)");
+            }
         }
     }
 
@@ -540,6 +619,18 @@ public static class EvidenceSchema
         foreach (var value in replacements.Where(v => !string.IsNullOrEmpty(v)).OrderByDescending(v => v.Length))
         {
             canonical = canonical.Replace(value, "<run-root>");
+        }
+        // MA-ED-1 (same codex R2-1 rule as run_id/run-root): the per-run
+        // sentinel nonce is run-mint binding identity; where a class-2 field
+        // (sentinel_ledger_outcomes) echoes it, the VALUE is canonicalized to a
+        // fixed token so route-report projections are cross-run comparable.
+        if (root.TryGetProperty("binding_identity", out var bindingForNonce)
+            && bindingForNonce.ValueKind == JsonValueKind.Object
+            && bindingForNonce.TryGetProperty("sentinel_nonce", out var nonceEl)
+            && nonceEl.ValueKind == JsonValueKind.String
+            && !string.IsNullOrEmpty(nonceEl.GetString()))
+        {
+            canonical = canonical.Replace(nonceEl.GetString()!, "<sentinel-nonce>");
         }
         return canonical;
     }
@@ -822,8 +913,15 @@ public static class AdjudicationStateMachine
         }
     }
 
-    /// <summary>Maps a child-process exit (code or signal) + report presence to the committed exit/report consistency table.</summary>
-    public static RouteOutcome MapExit(int? exitCode, string? signal, RouteReport? report)
+    /// <summary>
+    /// Maps a child-process exit (code or signal) + report presence to the
+    /// committed exit/report consistency table. Returns NULL for the
+    /// consistent cells ("no finding" — the probe-set verdict still applies);
+    /// MA-VI-4: consistency is NOT encoded as the optimistic member of the
+    /// verdict algebra, so no caller can ever read a consistency check as a
+    /// COMPATIBLE route verdict.
+    /// </summary>
+    public static RouteOutcome? MapExit(int? exitCode, string? signal, RouteReport? report)
     {
         var route = report?.Route ?? "unknown";
         // Precedence (committed): signal death / unknown code → crash, never ambiguously (codex F7).
@@ -846,7 +944,7 @@ public static class AdjudicationStateMachine
         switch (exitCode)
         {
             case ExitCodes.RouteProbesPassed when !anyFailed:
-                return new RouteOutcome(RouteState.Compatible, null, null); // consistent; the probe-set verdict still applies
+                return null; // consistent — a non-verdict; the probe-set verdict still applies (MA-VI-4)
             case ExitCodes.RouteProbesPassed:
                 return new RouteOutcome(RouteState.Incomplete, null,
                     new VerdictReason.ExitReportMismatch(exitCode.Value, "success exit with a failing probe in the report"));

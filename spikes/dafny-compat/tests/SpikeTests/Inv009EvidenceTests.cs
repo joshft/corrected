@@ -459,11 +459,9 @@ public class Inv009EvidenceTests
     [Fact]
     public void CommittedSample_Exists_AndFreshRunProjectionEqual_RidScoped()
     {
-        if (!SpikePaths.IsLinuxX64)
-        {
-            _output.WriteLine("skipped: unproven RID — the fresh-run-equality claim is scoped to linux-x64 (EA-002/RS-005)");
-            return;
-        }
+        // MA-ED-4: the scope gate is a LOUD non-pass outcome (throws on any
+        // non-linux-x64 host) — never a green pass with zero comparisons run.
+        SpikePaths.RequireProvenRid();
 
         // QA-006 PAIR: the variance-mode sample compares under FULL class-2
         // equality; the canonical-run sample under the schema-declared

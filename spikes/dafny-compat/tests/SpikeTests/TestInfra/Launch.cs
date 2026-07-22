@@ -206,6 +206,31 @@ public static class Launch
         return SpikePaths.Json(path);
     }
 
+    /// <summary>
+    /// MA-RB-3/MA-HI-2: TEST-SIDE decoder for the append-only sentinel entry
+    /// FILES (sentinel/entries/entry-*) — an independent implementation of the
+    /// committed one-line base64 format (b64(nonce) b64(probe:tag) b64(argv…)),
+    /// never the production reader, preserving TA-B1's file-observable
+    /// discipline.
+    /// </summary>
+    public static IReadOnlyList<(string Nonce, string ProbeTag, IReadOnlyList<string> Argv)> LedgerFileEntries(string runRoot)
+    {
+        var entriesDir = Path.Combine(runRoot, "sentinel", "entries");
+        var decoded = new List<(string, string, IReadOnlyList<string>)>();
+        if (!Directory.Exists(entriesDir))
+        {
+            return decoded;
+        }
+        foreach (var file in Directory.EnumerateFiles(entriesDir, "entry-*").OrderBy(f => f, StringComparer.Ordinal))
+        {
+            var fields = File.ReadAllText(file).TrimEnd('\n').Split(' ');
+            Assert.True(fields.Length >= 2, $"malformed sentinel entry file {file}: fewer than two fields");
+            string D(string b64) => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+            decoded.Add((D(fields[0]), D(fields[1]), fields.Skip(2).Select(D).ToList()));
+        }
+        return decoded;
+    }
+
     /// <summary>Reads a receipt file from a run root (TA-B9/TA-A4/TA-A9 test-side observables).</summary>
     public static JsonDocument Receipt(string runRoot, string relativePath)
     {

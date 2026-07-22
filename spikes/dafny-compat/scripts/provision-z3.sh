@@ -113,7 +113,11 @@ if ! archive_valid "$ARCHIVE"; then
     run_cmd tar -C "$CACHE_DIR" -cf - "$Z3_ARCHIVE_NAME" | run_cmd tar -C "$RUN_ROOT" -xf -
   else
     TMP_DL="$ARCHIVE.download"
+    # MA-UX-7: announce the fetch (source + approx size) so first-run dead air on
+    # a slow link is attributable to the download, not a hang.
+    echo "provision-z3: downloading Z3 $Z3_VERSION (~46MB) from github.com ..." >&2
     run_cmd curl --disable -fsSL -o "$TMP_DL" "$Z3_URL"
+    echo "provision-z3: Z3 archive downloaded; verifying pinned digest ..." >&2
     if [ "$(sha_of "$TMP_DL")" != "$Z3_SHA256" ]; then
       echo "provision-z3: downloaded asset does not match the pinned SHA-256 $Z3_SHA256 — aborting fail-closed (BND-002)" >&2
       exit 22

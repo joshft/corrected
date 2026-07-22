@@ -77,12 +77,12 @@ public class Inv003SolverIdentityTests
         var result = Launch.Harness(route, "--probe", "P05", "--run-root", runRoot, "--out", report);
         Assert.Equal(ExitCodes.RouteProbesPassed, result.ExitCode);
 
-        // TEST-SIDE observable: the ledger file itself.
+        // TEST-SIDE observable: the ledger file + append-only entry files
+        // (MA-RB-3 layout), decoded independently of the production reader.
         using var ledger = Launch.Ledger(runRoot);
         Assert.Equal(nonce, ledger.RootElement.GetProperty("nonce").GetString());
-        var entries = ledger.RootElement.GetProperty("entries").EnumerateArray()
-            .Where(e => e.GetProperty("nonce").GetString() == nonce).ToList();
-        Assert.True(entries.Count >= 1, "no sentinel invocation recorded in the LEDGER FILE for this test's nonce");
+        var entries = Launch.LedgerFileEntries(runRoot).Where(e => e.Nonce == nonce).ToList();
+        Assert.True(entries.Count >= 1, "no sentinel invocation recorded in the LEDGER entry files for this test's nonce");
 
         // Cross-check: the report's binding identity carries the same nonce.
         using var doc = Launch.Report(report);

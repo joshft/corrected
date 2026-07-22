@@ -367,16 +367,14 @@ internal static class SeamCommon
 
     private static string FindRepoRoot()
     {
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        while (dir is not null)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
-            {
-                return dir.FullName;
-            }
-            dir = dir.Parent;
-        }
-        return Directory.GetCurrentDirectory();
+        // PR-001 (gitfile merge group): route through the ONE shared
+        // gitfile-aware resolver — a linked worktree's `.git` FILE resolves
+        // like a `.git` directory. FAIL CLOSED when no boundary exists: a
+        // silent CWD fallback would emit wrong repo-relative closure paths
+        // as INV-012 evidence.
+        return Corrected.Spike.Contracts.GitResolver.FindRepoRoot(Directory.GetCurrentDirectory())
+               ?? throw new InvalidOperationException(
+                   "no git repo boundary above the working directory — repo-relative closure paths are impossible (PR-001/INV-012 fail-closed)");
     }
 
     internal static NodeTable BuildNodeTable(Program parsedProgram, ResolutionResult resolution)

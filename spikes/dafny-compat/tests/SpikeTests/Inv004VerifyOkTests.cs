@@ -50,6 +50,35 @@ public class Inv004VerifyOkTests
 
         using var doc = Launch.Report(reportPath);
         var det = doc.RootElement.GetProperty("deterministic");
+
+        // MA-ID-2: the Exit contract ("emitted evidence shows P06 pass, zero
+        // frontend errors") is asserted FROM THE EMITTED EVIDENCE (mirroring
+        // the Inv005 pattern) — the exit code above is a second channel, never
+        // the sole one. A harness that records P06 non-pass yet exits 0 fails here.
+        var p06 = det.GetProperty("per_probe_results").EnumerateArray()
+            .Single(p => p.GetProperty("probe").GetString() == "P06");
+        Assert.Equal("pass", p06.GetProperty("status").GetString());
+        // Zero non-verification (frontend) diagnostics for ok.dfy: the node
+        // table carries frontend diagnostics as stage=parse/resolution rows —
+        // none may exist on the provable fixture's P06 run.
+        if (det.TryGetProperty("node_table", out var nodeTable) && nodeTable.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var row in nodeTable.EnumerateArray())
+            {
+                if (row.TryGetProperty("stage", out var stage))
+                {
+                    Assert.Equal("verification", stage.GetString());
+                }
+            }
+        }
+
+        // MA-ID-1: the spec-named in-run Z3-execution observable is ASSERTED —
+        // solver_resource_usage_observed must be true for fixtures/ok.dfy
+        // (RS-004 fail-closed observability; the harness-side predicate enters
+        // INV-013 as absent-capability when false).
+        Assert.True(det.GetProperty("solver_resource_usage_observed").GetProperty("fixtures/ok.dfy").GetBoolean(),
+            $"route {route}: solver_resource_usage_observed is not true for fixtures/ok.dfy — the typed surface did not prove in-run Z3 execution (INV-004/MA-ID-1)");
+
         var targetSets = det.GetProperty("verification_target_sets").GetProperty("fixtures/ok.dfy");
         var actualTargets = targetSets.EnumerateArray().Select(t => t.GetString()!).OrderBy(t => t, StringComparer.Ordinal).ToList();
         Assert.Equal(expectedTargets, actualTargets);

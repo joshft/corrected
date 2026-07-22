@@ -129,6 +129,31 @@ a fresh run:
   sanctioned by exact script digest only; the assembly-adjacent decoy location
   remains location-sanctioned with the zero-invocation decoy-log assertion as
   its behavioral backstop.
+- Layer-1 allowlist `rm` widening (MA-XC-3, citing QA-014): spec PRH-004
+  enumerates bash, dotnet, curl, sha256sum, tar, unzip, git, mkdir, mktemp, mv,
+  chmod, setsid, kill, sleep; the implementation additionally allows `rm`,
+  needed by the QA-014 provisioning/junk cleanup and the MA-UX-2/MA-RB-2 prune
+  and cache-staging paths. Recorded here as the adjudicated deviation (the
+  three-point-change discipline's spec point); `BootstrapAllowlist.Commands`
+  carries the matching enforcement-copy comment.
+- Clean-environment contract (MA-HI-1): the canonical entry re-execs under
+  `env -i` so only an allowlist survives. Toolchain/resolution-steering
+  variables (DOTNET_ROOT, DOTNET_HOST_PATH, NUGET_PACKAGES, SSL_CERT_*, GIT_*)
+  are stripped — the false-COMPATIBLE vector. `SPIKE_PARENT_DEADLINE` (deadline
+  inheritance) and `SPIKE_RID_OVERRIDE` (the provisioning fault-injection hook
+  the committed QA-005 test drives) are PRESERVED as sanctioned inputs that can
+  only ever fail CLOSED (a spurious INCOMPLETE, never a false COMPATIBLE).
+  Accepted residual: `SPIKE_RID_OVERRIDE` remains honored from the environment
+  (it is a test/operator fault hook, fail-closed only); the finding's proposed
+  `DOTNET_ROOT` env pass-through for system-wide installs is replaced by the
+  explicit `--dotnet-root <path>` argument (MA-UX-3), which survives the re-exec
+  and cannot be ambiently inherited — a strictly stronger form.
+- Suite-status receipt (MA-VI-6): the controller emits a nonce-bound
+  `receipts/suite-receipt.json` after the test phase of a canonical run; the
+  aggregator DERIVES `final_suite_status` from it and downgrades an unvalidated
+  `--suite-status` to `unknown` when it is absent, so a COMPATIBLE verdict is
+  only reachable for a suite-attested canonical run whose receipt binds to the
+  run.
 - P01 partition non-veto (QA-022(2) recorded disposition): R4-07's non-veto
   property holds at the P01 attestation/attribution level — a route-scoped
   lock fault fails only its own P01 partition in the receipt and the emitted

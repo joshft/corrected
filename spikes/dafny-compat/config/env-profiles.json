@@ -100,6 +100,12 @@
       "TMPDIR": "<run-root>/tmp",
       "LC_ALL": "C.UTF-8",
       "LANG": "C.UTF-8"
+    },
+    "cache": {
+      "PATH": "<constructed:decoy-first>",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8"
     }
   }
 }

@@ -65,8 +65,8 @@
         "target": "spikes/dafny-compat/contracts/SpikeContracts/Components.cs:845 (AdjudicationStateMachine.MapExit exit/report-consistency matrix)",
         "mutation": "anyFailed predicate enum-comparison swap: p.Status != ProbeStatus.Pass -> p.Status == ProbeStatus.Fail, collapsing the tri-state probe status to binary inside the matrix. A child exiting 0 while its report admits an Incomplete probe is no longer flagged ExitReportMismatch (fail-closed cell weakened); exit 10 with only-incomplete probes gets the wrong diagnostic. Honest-harness paths unchanged (harness maps any Incomplete to exit 20, bypassing anyFailed), so not trivially fatal.",
         "verdict": "SURVIVED",
-        "detail": "Pristine-baseline failure-set diff (PR-001 methodology): mechanical set diff of failing test names vs recorded baseline is EMPTY — both runs fail exactly the 6 known environmental worktree tests (Inv006 ForgedExtraReportOnDisk, Inv009 CommittedSample, Inv010 RunTwice, Inv012 P12 A+B, Inv014 StaleRepoLocalArtifacts), 212/218 passing including every MapExit/verdict-matrix test (Inv006, Inv013, QA-019, QA-022, QA-024). Zero failures attributable to the mutation.",
-        "why_missed": "The only test constructing a ProbeStatus.Incomplete probe (ProhibitionTests.cs:26) goes through ComputeRouteVerdict, never MapExit; no test covers the matrix cells 'exit 0 + incomplete probe in report' or 'exit 10 + only-incomplete probes'. The existing mismatch test (Inv006VerdictTests.cs:250-259) covers only the exit-10-with-all-pass cell. Adjacent to deferred DF-003 (QA-025: exit 20 + all-pass report cell uncovered) — the MapExit matrix has a cluster of untested cells; killing tests and the DF-003 fix could land together.",
+        "detail": "Pristine-baseline failure-set diff (PR-001 methodology): mechanical set diff of failing test names vs recorded baseline is EMPTY \u2014 both runs fail exactly the 6 known environmental worktree tests (Inv006 ForgedExtraReportOnDisk, Inv009 CommittedSample, Inv010 RunTwice, Inv012 P12 A+B, Inv014 StaleRepoLocalArtifacts), 212/218 passing including every MapExit/verdict-matrix test (Inv006, Inv013, QA-019, QA-022, QA-024). Zero failures attributable to the mutation.",
+        "why_missed": "The only test constructing a ProbeStatus.Incomplete probe (ProhibitionTests.cs:26) goes through ComputeRouteVerdict, never MapExit; no test covers the matrix cells 'exit 0 + incomplete probe in report' or 'exit 10 + only-incomplete probes'. The existing mismatch test (Inv006VerdictTests.cs:250-259) covers only the exit-10-with-all-pass cell. Adjacent to deferred DF-003 (QA-025: exit 20 + all-pass report cell uncovered) \u2014 the MapExit matrix has a cluster of untested cells; killing tests and the DF-003 fix could land together.",
         "killing_test_candidate": "Unit-level MapExit matrix tests: (a) child exit 0 + report containing an Incomplete probe -> assert ExitReportMismatch; (b) child exit 10 + only-incomplete probes -> assert correct attribution (not the all-pass-mismatch diagnostic).",
         "wall_clock_minutes": 5.4
       },
@@ -103,6 +103,38 @@
       "PR-002_PR-007": "fix in mini-audit (runtime validation of retired registry rows; execution path consumes / startup-anchors the z3+net8 pin files)",
       "PR-003_PR-004_PR-005_PR-006": "fix all in mini-audit (probe-manifest startup anchor, structural run-config validation at startup, duplicate-key refusal, provision-class env guard)"
     },
-    "summary": "5/5 probes reported. Survivors: M1 (MapExit tri-state collapse untested), M2 (aggregator typed-exit contract for shared-probe failure untested), M3 survivor-by-signal (digest-prefix weakening undetected; M3 run itself INVALID per PR-001). Killed: F2 7/7, F1 7/7 (fail-closed, 3 slow/late). Advisory findings PR-001..PR-007."
+    "summary": "5/5 probes reported. Survivors: M1 (MapExit tri-state collapse untested), M2 (aggregator typed-exit contract for shared-probe failure untested), M3 survivor-by-signal (digest-prefix weakening undetected; M3 run itself INVALID per PR-001). Killed: F2 7/7, F1 7/7 (fail-closed, 3 slow/late). Advisory findings PR-001..PR-007.",
+    "fix_status_mini_audit_1": {
+      "recorded_at": "2026-07-22",
+      "recorded_by": "fix agent (INTEGRITY-CORE slice)",
+      "PR-001": {
+        "status": "fixed (C# slice)",
+        "note": "Gitfile-aware discovery extracted into the ONE shared resolver contracts/SpikeContracts/GitResolver.cs (gitdir: + commondir aware) and routed through SeamCommon.FindRepoRoot (the named site), HarnessCore (startup fail-closed + ReadGitState/ReadHeadCommit), and test-side SpikePaths.RepoRoot/GitHeadCommit \u2014 merge group with MA-XC-1/MA-VI-5/MA-UC-3. Fabricated linked-worktree test + '.git'-literal source-scan lock added (MiniAudit1GitfileTests). Shell-side worktree concerns (if any in scripts) remain the shell agent's."
+      },
+      "PR-002": {
+        "status": "fixed",
+        "note": "EvidenceSchema.ValidateSchemaFile now validates RETIRED registry rows at runtime against the compiled-in append-only history anchor VerdictAggregator.RetiredSchemaRegistryRows (v1=a630b1aa...): a falsified OR removed retired row is refused at route-child startup and aggregation, not only by the canonical suite. Test: Pr002_FalsifiedOrRemovedRetiredRegistryRow_RefusedAtRuntime. DD-006 procedure note: appending schema v(N+1) adds v(N) to this compiled map."
+      },
+      "PR-003": {
+        "status": "fixed",
+        "note": "Probe-manifest STARTUP anchor: VerdictAggregator.ProbeManifestSha256TrustAnchor (compiled, asserted equal to SpecConstants.ProbeManifestSha256) validated by VerdictAggregator.ValidateProbeManifestFile at route-child startup (HarnessCore.Run, before any probe) AND aggregator startup. Test: Pr003_ProbeManifestStartupAnchor_RefusesTamperedManifest_AndIsWired (tamper refusal + wiring scan)."
+      },
+      "PR-007": {
+        "status": "fixed (C# slice)",
+        "note": "Pin files are CONSUMED by the execution path via contracts/SpikeContracts/PinFiles.cs: ValidateZ3Pin (version/sha256/install-path anchored to SolverLayout; supplies glibc_floor to the run report) at route-child startup + aggregator startup; ValidateNet8ControlPin (runtime_version/sha256 anchored; net8_expected_identities required) at aggregator startup + net8 control-cell startup (ControlCore.Run). Corrupting either file is now a fast typed runtime refusal on variance runs too. Test: Pr007_PinFiles_AnchoredAndConsumed_CorruptionRefused. The URL/SHA literals inside run-spike.sh/provision-z3.sh remain the shell agent's to source from these files. SHELL SLICE (this round): the hardcoded z3 URL/SHA in provision-z3.sh and the net8 URL/SHA in run-spike.sh were verified BYTE-CONSISTENT with config/z3-pin.json and config/net8-control-pin.json respectively (no drift); PinFiles.cs anchors them at startup, so any future drift is a fast typed runtime refusal on variance runs too."
+      },
+      "PR-004": {
+        "status": "fixed (shell slice)",
+        "note": "run-spike.sh validate_run_config performs a fast STRUCTURAL check of the committed run-config at startup (present, JSON object start{/end}, balanced braces, numeric wall_clock_bound_seconds present) BEFORE the pipeline \u2014 a corrupt/truncated config is a fast typed exit-20 refusal instead of config_int falling open to the 1800s default and failing slow via the end-of-run suite. Test Pr004_CorruptRunConfig_FastTypedRefusal (fast exit-20 with 'PR-004'; on reversion the run proceeds slow and exits 0)."
+      },
+      "PR-005": {
+        "status": "fixed (shell slice)",
+        "note": "config_int now resolves a duplicate JSON key to its LAST occurrence (JSON last-wins) \u2014 it scans the whole file and keeps the last numeric value, so a hostile duplicate can no longer steer the effective bound to the attacker's first value. Test Pr005_DuplicateConfigKey_LastWins (first 1800 / last 4: correct last-wins kills the run at ~4s; reverted first-wins runs the full variance pipeline to exit 0)."
+      },
+      "PR-006": {
+        "status": "fixed (shell slice)",
+        "note": "run_with_env guards the provision AND fetch launch classes with require_env_key PATH + require_env_key TMPDIR, so neither can launch under an empty/unconstructed environment (no decoy-first PATH, no run-root TMPDIR) \u2014 a deleted/renamed profile class fails closed BEFORE the launch, not one phase later at restore. Test Pr006_ProvisionAndFetch_HaveRuntimeEnvGuards (source-anchored); the committed-file class-coverage armor is the MA-UC-2/MA-XC-6 Ea008 test (Agent 1)."
+      }
+    }
   }
 }

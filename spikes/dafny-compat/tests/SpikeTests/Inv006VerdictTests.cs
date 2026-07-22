@@ -254,7 +254,8 @@ public class Inv006VerdictTests
             FullPassingSet().Where(p => p.Key.Route is "A" or "shared").ToList(),
             ExitCodes.ProbeFailure, null, "<run-root>/a.json");
         var outcome = AdjudicationStateMachine.MapExit(ExitCodes.ProbeFailure, null, report);
-        Assert.NotEqual(RouteState.Compatible, outcome.State);
+        Assert.NotNull(outcome); // MA-VI-4: only CONSISTENT cells are null
+        Assert.NotEqual(RouteState.Compatible, outcome!.State);
         Assert.IsType<VerdictReason.ExitReportMismatch>(outcome.Reason);
     }
 

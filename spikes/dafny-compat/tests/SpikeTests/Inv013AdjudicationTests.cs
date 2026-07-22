@@ -180,7 +180,8 @@ public class Inv013AdjudicationTests
     public void SignalDeathWithoutReport_ResolvesToCrashVariant()
     {
         var outcome = AdjudicationStateMachine.MapExit(exitCode: null, signal: "SIGKILL", report: null);
-        Assert.NotEqual(RouteState.Compatible, outcome.State);
+        Assert.NotNull(outcome); // MA-VI-4: only CONSISTENT cells are null
+        Assert.NotEqual(RouteState.Compatible, outcome!.State);
         var reason = Assert.IsType<VerdictReason.Crash>(outcome.Reason);
         Assert.Equal("SIGKILL", reason.Signal);
     }
@@ -189,7 +190,8 @@ public class Inv013AdjudicationTests
     public void UnknownExitCode_MapsToCrashVariant_NeverPassOrRefutation()
     {
         var outcome = AdjudicationStateMachine.MapExit(exitCode: 137, signal: null, report: null);
-        Assert.NotEqual(RouteState.Compatible, outcome.State);
+        Assert.NotNull(outcome); // MA-VI-4: only CONSISTENT cells are null
+        Assert.NotEqual(RouteState.Compatible, outcome!.State);
         Assert.IsType<VerdictReason.Crash>(outcome.Reason);
     }
 
@@ -199,7 +201,8 @@ public class Inv013AdjudicationTests
     public void MissingReport_HasOwnVariant_NotCrash()
     {
         var outcome = AdjudicationStateMachine.MapExit(exitCode: ExitCodes.RouteProbesPassed, signal: null, report: null);
-        Assert.IsType<VerdictReason.MissingReport>(outcome.Reason);
+        Assert.NotNull(outcome); // MA-VI-4: only CONSISTENT cells are null
+        Assert.IsType<VerdictReason.MissingReport>(outcome!.Reason);
     }
 
     // Tests INV-013 [integration]: induced-failure test — every

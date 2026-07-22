@@ -101,6 +101,16 @@ resolve_sdk() {
 }
 resolve_sdk
 
+# MA-RB-7: glob-clean staged/old leftovers a CRASHED prior regen may have left
+# in the TRACKED evidence/ parent BEFORE the dirty-tree check — the PID-suffixed
+# publish staging (samples.staged.$$ / samples.old.$$) means a crash leaves
+# names no LATER regen's own-PID cleanup could ever remove, permanently blocking
+# every future regen behind a dirty-tree refusal. Removing them here is safe:
+# they are never-committed transient publish state.
+for leftover in "$SPIKE_ROOT"/evidence/samples.staged.* "$SPIKE_ROOT"/evidence/samples.old.*; do
+  [ -e "$leftover" ] && run_cmd rm -rf -- "$leftover"
+done
+
 # QA-001: refuse a dirty tree. A committed sample generated from an unclean
 # checkout would carry git_dirty_flag:true (binding-class, excluded from
 # equality — the exact repudiation gap the finding names). Ignore only the
@@ -114,7 +124,7 @@ while IFS= read -r line; do
   esac
 done < <(run_cmd git -C "$REPO_ROOT" status --porcelain)
 if [ -n "$DIRTY" ]; then
-  echo "regen-sample: REFUSING to regenerate from a dirty tree (QA-001) — commit or stash first so the committed sample records git_dirty_flag:false at a real HEAD ancestor. Outstanding changes:" >&2
+  echo "regen-sample: REFUSING to regenerate from a dirty tree (QA-001) — commit or stash first so the committed sample records git_dirty_flag:false at a real HEAD ancestor. (Stale evidence/samples.staged.*/.old.* from a crashed prior regen are auto-cleaned at startup and are NOT the cause here — MA-RB-7.) Outstanding changes:" >&2
   printf '%s' "$DIRTY" >&2
   exit 40
 fi

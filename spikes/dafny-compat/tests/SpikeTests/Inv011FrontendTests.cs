@@ -71,12 +71,14 @@ public class Inv011FrontendTests
         Assert.Equal(0, det.GetProperty("verification_target_sets").GetProperty(fixture).GetArrayLength());
 
         // "No solver launch" defined observably (RS-004b, TA-B1): the TEST reads
-        // the ledger FILE it pre-created and counts entries for its own nonce.
+        // the ledger FILE it pre-created plus the append-only entry FILES
+        // (MA-RB-3 layout) and counts entries for its own nonce.
         using var ledger = Launch.Ledger(runRoot);
         Assert.Equal(nonce, ledger.RootElement.GetProperty("nonce").GetString());
         var invocations = ledger.RootElement.GetProperty("entries").EnumerateArray()
-            .Count(e => e.GetProperty("nonce").GetString() == nonce);
-        Assert.True(invocations == 0, $"sentinel LEDGER FILE records {invocations} solver invocations despite a frontend failure (INV-011)");
+                              .Count(e => e.GetProperty("nonce").GetString() == nonce)
+                          + Launch.LedgerFileEntries(runRoot).Count(e => e.Nonce == nonce);
+        Assert.True(invocations == 0, $"sentinel LEDGER records {invocations} solver invocations despite a frontend failure (INV-011)");
 
         // The effective solver path recorded is the sentinel stub — the variance
         // from the Option Manifest is explicit and reviewable.
@@ -102,9 +104,7 @@ public class Inv011FrontendTests
         var result = Launch.Harness("A", "--probe", "P05", "--run-root", runRoot, "--out", reportPath);
         Assert.Equal(ExitCodes.RouteProbesPassed, result.ExitCode);
 
-        using var ledger = Launch.Ledger(runRoot);
-        var fresh = ledger.RootElement.GetProperty("entries").EnumerateArray()
-            .Count(e => e.GetProperty("nonce").GetString() == nonce);
+        var fresh = Launch.LedgerFileEntries(runRoot).Count(e => e.Nonce == nonce);
         Assert.True(fresh >= 1,
             "P05 passed with zero fresh-nonce ledger entries — it was satisfied by the TEST-planted stale recording (RS-003d violation)");
     }

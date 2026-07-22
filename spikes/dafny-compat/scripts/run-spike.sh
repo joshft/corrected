@@ -4,10 +4,19 @@
 #
 # INVOCATION CONTRACT (PRH-004, codex R4-08, TA-B9):
 #   env -i HOME="$HOME" bash -p scripts/run-spike.sh
-# Hardening is self-enforcing: privileged mode makes bash ignore BASH_ENV; when
-# invoked WITHOUT it (plain `bash scripts/run-spike.sh`), the controller
-# refuses to run (fail-closed, nonzero exit) — it never proceeds under a shell
-# that may already have executed a poisoned BASH_ENV.
+# Two hardening mechanisms actually RUN at entry (MA-HI-1 — the earlier
+# "self-enforcing" claim overstated what was enforced):
+#  (1) PRIVILEGED-MODE refusal: invoked WITHOUT -p (plain
+#      `bash scripts/run-spike.sh`) the controller refuses (exit 30) — it never
+#      proceeds under a shell that may already have executed a poisoned BASH_ENV.
+#  (2) CLEAN-ENVIRONMENT re-exec: `bash -p` only neutralizes BASH_ENV/ENV;
+#      every OTHER inherited variable survives, and toolchain-steering ones
+#      (DOTNET_ROOT selects the SDK muxer resolve_sdk uses first — a
+#      version-spoofing wrapper would void the AP-015 exact-SDK pin, a
+#      FALSE-COMPATIBLE threat, TB-004) must not be honored from an inherited
+#      environment. The controller re-execs itself under `env -i` so only an
+#      explicit allowlist survives, then asserts nothing outside it is present
+#      (a forged re-exec sentinel is caught by the assertion, fail-closed).
 #
 # PRH-004 LAYER-1 DISPATCH (TA-B8): every external command launch goes through
 # run_cmd; the first argument must resolve into ALLOWLIST (stated resolution
@@ -72,6 +81,37 @@ case "$-" in
     exit 30 ;;
 esac
 
+# --- MA-HI-1: CLEAN-ENVIRONMENT enforcement for the canonical entry -----------
+# On the FIRST (non-re-exec) entry we re-exec ourselves under `env -i` so only an
+# explicit allowlist survives — every toolchain/resolution-steering variable
+# (DOTNET_ROOT, DOTNET_HOST_PATH, NUGET_PACKAGES, SSL_CERT_*, GIT_*, …) is
+# stripped. SPIKE_PARENT_DEADLINE (deadline inheritance, QA-018) and
+# SPIKE_RID_OVERRIDE (the provisioning fault-injection hook the committed
+# QA-005 test exercises) are SANCTIONED and can only ever fail CLOSED (a
+# spurious INCOMPLETE, never a false COMPATIBLE), so they are preserved across
+# the re-exec; the false-COMPATIBLE vector (DOTNET_ROOT et al.) is closed. The
+# sentinel proves the re-exec ran; the assertion below catches a forged sentinel
+# that skipped it (a poisoned variable would still be present) and fails closed.
+PATH="/usr/bin:/bin"; export PATH
+if [ -z "${SPIKE_REEXEC_SENTINEL:-}" ]; then
+  reexec_argv=(/usr/bin/env -i HOME="${HOME:-}" PATH="/usr/bin:/bin" SPIKE_REEXEC_SENTINEL=clean)
+  case "${SPIKE_PARENT_DEADLINE:-}" in
+    ''|*[!0-9]*) : ;;
+    *) reexec_argv+=("SPIKE_PARENT_DEADLINE=${SPIKE_PARENT_DEADLINE}") ;;
+  esac
+  if [ -n "${SPIKE_RID_OVERRIDE:-}" ]; then reexec_argv+=("SPIKE_RID_OVERRIDE=${SPIKE_RID_OVERRIDE}"); fi
+  exec "${reexec_argv[@]}" bash -p -- "$0" "$@"
+fi
+for reexec_var in $(compgen -e); do
+  case "$reexec_var" in
+    HOME|PATH|OLDPWD|PWD|SHLVL|_|SPIKE_REEXEC_SENTINEL|SPIKE_PARENT_DEADLINE|SPIKE_RID_OVERRIDE) : ;;
+    SPIKE_CANONICAL|SPIKE_PID_FILE|SPIKE_DEADLINE) : ;;  # set by our own watchdog->inner dispatch
+    *)
+      echo "run-spike: refusing — inherited variable '$reexec_var' present at canonical entry; the clean-environment contract strips toolchain-steering inheritance like DOTNET_ROOT via env -i (use: env -i HOME=\"\$HOME\" bash -p scripts/run-spike.sh) (MA-HI-1/TB-004)" >&2
+      exit 30 ;;
+  esac
+done
+
 set -euo pipefail
 PATH="/usr/bin:/bin"
 export PATH
@@ -82,8 +122,25 @@ SPIKE_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd -- "$SPIKE_ROOT/../.." && pwd)"
 CACHE_DIR="$SPIKE_ROOT/out/cache"
 
-# --- .NET SDK resolution (stated rule): DOTNET_ROOT, then the HOME-local
-# --- install, then the pointer a previous controller run cached under out/.
+# MA-UX-3: an EXPLICIT `--dotnet-root <path>` argument re-establishes DOTNET_ROOT
+# for SDK resolution. The clean-environment contract (MA-HI-1) strips an AMBIENT
+# DOTNET_ROOT env var to close the toolchain-hijack vector, so a user whose SDK
+# lives outside HOME/.dotnet (e.g. a system-wide install) passes it as an
+# argument — explicit intent that cannot be ambiently inherited — rather than as
+# an env var that the re-exec would strip. Pre-scanned here (read-only) so it is
+# honored BEFORE resolve_sdk runs; the main arg parser consumes it below.
+prev_arg=""
+for scan_arg in "$@"; do
+  # set (do NOT export) so resolve_sdk in THIS shell honors it while the value
+  # never leaks into the inner dispatch (which would then trip the MA-HI-1
+  # clean-environment assertion); the inner resolves via the cached pointer.
+  if [ "$prev_arg" = "--dotnet-root" ]; then DOTNET_ROOT="$scan_arg"; fi
+  prev_arg="$scan_arg"
+done
+
+# --- .NET SDK resolution (stated rule): DOTNET_ROOT (env or --dotnet-root),
+# --- then the HOME-local install, then the pointer a previous controller run
+# --- cached under out/.
 SPIKE_DOTNET_BIN=""
 SPIKE_DOTNET_ROOT=""
 resolve_sdk() {
@@ -98,7 +155,7 @@ resolve_sdk() {
     fi
   done
   if [ -z "$SPIKE_DOTNET_BIN" ]; then
-    echo "run-spike: no pinned .NET SDK found (checked DOTNET_ROOT, HOME/.dotnet, out/cache/dotnet-root) — install SDK 10.0.302 per README.md" >&2
+    echo "run-spike: no pinned .NET SDK found (checked DOTNET_ROOT, HOME/.dotnet, out/cache/dotnet-root) — install SDK 10.0.302 per README.md. System-wide installs (/usr/share/dotnet, PATH) are NOT auto-discovered; the clean-environment contract strips an ambient DOTNET_ROOT (MA-HI-1), so name it EXPLICITLY: env -i HOME=\"\$HOME\" bash -p scripts/run-spike.sh --dotnet-root <sdk-root> (MA-UX-3)" >&2
     exit 20
   fi
   SPIKE_DOTNET_ROOT="${SPIKE_DOTNET_BIN%/*}"
@@ -110,9 +167,19 @@ resolve_sdk() {
 }
 resolve_sdk
 
+# MA-HI-3: escape JSON control characters, not only \ and ". Path-input- and
+# tool-output-derived values (a --run-root with a raw newline, a hijacked
+# `dotnet --version`) would otherwise emit invalid JSON the aggregator cannot
+# parse. Backslash first, then quote, then the C0 controls that realistically
+# appear (newline/CR/tab/backspace/formfeed); rarer C0 bytes are left raw.
 json_escape() {
   local s="${1//\\/\\\\}"
   s="${s//\"/\\\"}"
+  s="${s//$'\t'/\\t}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\b'/\\b}"
+  s="${s//$'\f'/\\f}"
   printf '%s' "$s"
 }
 
@@ -162,9 +229,76 @@ find_session_leader() { # ancestor-pid -> prints leader pid or nothing
   return 1
 }
 
+# MA-UX-1/MA-RB-4: enumerate EVERY session leader descended from an ancestor
+# (the inner controller session PLUS each per-phase setsid session). On a
+# cancellation signal a plain kill of the inner controller's own group would
+# orphan the active phase's detached setsid session; sweeping all descendant
+# sessions while they are still parented under the wrapper closes that gap.
+list_descendant_sessions() { # ancestor-pid -> prints unique session-leader pids
+  local ancestor="$1" statfile content rest pid ppid sess
+  local -A parent=() sid=()
+  for statfile in /proc/[0-9]*/stat; do
+    [ -r "$statfile" ] || continue
+    content="$(< "$statfile")" 2>/dev/null || continue
+    pid="${content%% *}"
+    rest="${content##*) }"
+    read -r _ ppid _ sess _ <<< "$rest"
+    parent[$pid]="$ppid"
+    sid[$pid]="$sess"
+  done
+  local candidate cur depth
+  local -A emitted=()
+  for candidate in "${!parent[@]}"; do
+    cur="$candidate"
+    depth=0
+    while [ -n "${parent[$cur]:-}" ] && [ "$depth" -lt 64 ]; do
+      if [ "$cur" = "$ancestor" ] || [ "${parent[$cur]}" = "$ancestor" ]; then
+        local leader="${sid[$candidate]:-}"
+        if [ -n "$leader" ] && [ -z "${emitted[$leader]:-}" ]; then
+          emitted[$leader]=1
+          printf '%s\n' "$leader"
+        fi
+        break
+      fi
+      cur="${parent[$cur]}"
+      depth=$((depth + 1))
+    done
+  done
+}
 
+# MA-UX-2/MA-RB-1: keep-last-N prune of out/runid-* (old canonical run roots,
+# ~1GB each), NEVER the out/current pointer target and NEVER out/regen-* (a live
+# regen holds its own regen-variance root — clean-runs.sh prunes those under
+# operator control). Newest-N kept by mtime comparison (bash -nt; no ls/stat/find
+# — those are not on the layer-1 allowlist).
+prune_run_roots() { # keep-count [keep-this-root]
+  local keep="$1" protect="${2:-}" d other newer dirs=()
+  for d in "$SPIKE_ROOT"/out/runid-*; do
+    [ -d "$d" ] || continue
+    # NEVER prune the live run root (defensive: it is the newest so keep-N would
+    # retain it anyway, but an explicit skip removes any mtime-ordering risk).
+    [ -n "$protect" ] && [ "$d" = "$protect" ] && continue
+    dirs+=("$d")
+  done
+  for d in "${dirs[@]}"; do
+    newer=0
+    for other in "${dirs[@]}"; do
+      [ "$other" = "$d" ] && continue
+      [ "$other" -nt "$d" ] && newer=$((newer + 1))
+    done
+    if [ "$newer" -ge "$keep" ]; then
+      run_cmd rm -rf -- "$d"
+    fi
+  done
+}
+
+
+# PR-005: resolve a duplicate JSON key to its LAST occurrence (JSON last-wins),
+# never the first — a hostile duplicate can no longer silently steer the
+# effective value to the attacker's first entry. Scans the whole file and keeps
+# the last numeric value seen for the key.
 config_int() { # file key default
-  local line value
+  local line value result="$3" found=""
   while IFS= read -r line; do
     case "$line" in
       *"\"$2\""*)
@@ -172,11 +306,12 @@ config_int() { # file key default
         value="${value%%,*}"
         case "$value" in
           ''|*[!0-9]*) : ;;
-          *) printf '%s' "$value"; return 0 ;;
+          *) result="$value"; found=1 ;;
         esac ;;
     esac
   done < "$1"
-  printf '%s' "$3"
+  printf '%s' "$result"
+  [ -n "$found" ] || return 0
 }
 
 # --- argument parsing --------------------------------------------------------
@@ -205,6 +340,7 @@ while [ $# -gt 0 ]; do
     --out) OUT_PATH="$2"; CANONICAL=0; shift 2 ;;
     --run-id) SPIKE_RUN_ID="$2"; shift 2 ;;
     --nonce) SPIKE_NONCE="$2"; shift 2 ;;
+    --dotnet-root) shift 2 ;;  # MA-UX-3: pre-scanned above for resolve_sdk; NOT a variance override
     *) echo "run-spike: unknown argument '$1'" >&2; exit 20 ;;
   esac
 done
@@ -242,6 +378,10 @@ if [ "$PHASE" = "preprocess-audit" ]; then
   export DOTNET_ROOT="$SPIKE_DOTNET_ROOT" DOTNET_HOST_PATH="$SPIKE_DOTNET_BIN"
   run_cmd mkdir -p -- "$SPIKE_ROOT/out"
   PP_FILE="$(run_cmd mktemp "$SPIKE_ROOT/out/preprocess.XXXXXX.xml")"
+  # MA-RB-5: the ~1-3MB MSBuild dump must not leak under out/ (missed by both the
+  # RUN_ROOT junk glob and the test-scratch sweep) — trap EXIT so refusal paths
+  # clean up too.
+  trap 'run_cmd rm -f "$PP_FILE" 2>/dev/null || true' EXIT
   run_cmd dotnet msbuild "$SPIKE_ROOT/harness/RouteAHarness/RouteAHarness.csproj" -noAutoResponse -preprocess:"$PP_FILE" >&2
   while IFS= read -r line; do
     line="${line%$'\r'}"
@@ -284,9 +424,63 @@ if [ "$PHASE" = "negative-compile" ]; then
 fi
 
 # --- full pipeline -----------------------------------------------------------
+# PR-004: structural validation of the committed run-config BEFORE the pipeline
+# runs, so a corrupt/truncated config gets a fast typed refusal instead of
+# config_int silently falling open to the 1800s default and failing slow via the
+# end-of-run suite (>9 min). No jq/python (deny-set); a lightweight structural
+# check: present, a JSON object (starts { / ends }, balanced braces), and a
+# numeric wall_clock_bound_seconds key actually present.
+validate_run_config() { # file
+  local f="$1" content trimmed opens closes
+  if [ ! -f "$f" ]; then
+    echo "run-spike: run-config missing at $f — a committed run config is required (PR-004)" >&2
+    exit 20
+  fi
+  content="$(< "$f")"
+  trimmed="${content#"${content%%[![:space:]]*}"}"      # ltrim
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"       # rtrim
+  case "$trimmed" in
+    '{'*'}') : ;;
+    *) echo "run-spike: run-config at $f is not a JSON object (truncated/corrupt) — fast typed refusal (PR-004)" >&2; exit 20 ;;
+  esac
+  opens="${content//[!\{]/}"; closes="${content//[!\}]/}"
+  if [ "${#opens}" != "${#closes}" ]; then
+    echo "run-spike: run-config at $f has unbalanced braces (truncated/corrupt) — fast typed refusal (PR-004)" >&2
+    exit 20
+  fi
+  case "$content" in
+    *'"wall_clock_bound_seconds"'*) : ;;
+    *) echo "run-spike: run-config at $f is missing wall_clock_bound_seconds — refusing to fall open to the default (PR-004)" >&2; exit 20 ;;
+  esac
+  # the value must be numeric on its own line (config_int would otherwise skip it silently)
+  local line hit=""
+  while IFS= read -r line; do
+    case "$line" in
+      *'"wall_clock_bound_seconds"'*:*)
+        local v="${line##*: }"; v="${v%%,*}"
+        case "$v" in ''|*[!0-9]*) : ;; *) hit=1 ;; esac ;;
+    esac
+  done < "$f"
+  if [ -z "$hit" ]; then
+    echo "run-spike: run-config wall_clock_bound_seconds is non-numeric or malformed (corrupt) — fast typed refusal (PR-004)" >&2
+    exit 20
+  fi
+}
+validate_run_config "$CONFIG_FILE"
 WALL_BOUND="$(config_int "$CONFIG_FILE" wall_clock_bound_seconds 1800)"
 SCHEMA_SHA="$(sha_of "$SPIKE_ROOT/schema/evidence-schema.json")"
 MANIFEST_SHA="$(sha_of "$SPIKE_ROOT/manifest/probe-manifest.json")"
+# MA-XC-7: the synthetic write_failed_report must not carry a hardcoded schema
+# version that a future schema bump would leave stale beside a fresh digest.
+# Read the version from the schema file (already read for its digest above).
+EVIDENCE_SCHEMA_VERSION=2
+while IFS= read -r line; do
+  case "$line" in
+    *'"evidence_schema_version"'*:\ [0-9]*)
+      value="${line##*: }"; value="${value%%,*}"
+      case "$value" in ''|*[!0-9]*) : ;; *) EVIDENCE_SCHEMA_VERSION="$value"; break ;; esac ;;
+  esac
+done < "$SPIKE_ROOT/schema/evidence-schema.json"
 SDK_PIN="unknown"
 while IFS= read -r line; do
   case "$line" in
@@ -303,7 +497,7 @@ write_failed_report() { # path cause detail-prefix detail-suffix
   if [ "$target_dir" != "$target" ]; then run_cmd mkdir -p -- "$target_dir"; fi
   {
     printf '{\n'
-    printf '  "evidence_schema_version": 2,\n'
+    printf '  "evidence_schema_version": %s,\n' "$EVIDENCE_SCHEMA_VERSION"
     printf '  "evidence_schema_sha256": "%s",\n' "$SCHEMA_SHA"
     printf '  "probe_manifest_sha256": "%s",\n' "$MANIFEST_SHA"
     printf '  "run_id": "%s",\n' "$SPIKE_RUN_ID"
@@ -344,6 +538,15 @@ if [ "$INNER" = 0 ]; then
     OUT_PATH="$RUN_ROOT/reports/run-report.json"
   fi
 
+  # MA-UX-2/MA-RB-1: bound out/ growth — a canonical operator run prunes old
+  # runid-* roots (keeping the newest few, this fresh one included) so a dev
+  # tree cannot silently fill to ENOSPC across many runs. Variance/nested runs
+  # never prune (they run inside the suite and must not delete a sibling's
+  # root); scripts/clean-runs.sh is the explicit operator tool.
+  if [ "$CANONICAL" = 1 ]; then
+    prune_run_roots 5 "$RUN_ROOT"
+  fi
+
   read -r UPTIME_START _ < /proc/uptime
   UPTIME_START="${UPTIME_START%.*}"
   DEADLINE=$((UPTIME_START + WALL_BOUND))
@@ -372,6 +575,47 @@ if [ "$INNER" = 0 ]; then
   export SPIKE_DEADLINE="$DEADLINE"
   run_cmd setsid -w bash -p -- "$SCRIPT_SELF" "${INNER_ARGS[@]}" &
   WRAPPER_PID=$!
+
+  # MA-UX-1/MA-RB-4: Ctrl-C / SIGTERM / terminal-close must STOP the run, not
+  # silently orphan the setsid'd inner controller (which would keep provisioning,
+  # building, aggregating — and, for a canonical run, republish out/current —
+  # minutes after the operator thinks it is dead). The outer watchdog is the
+  # parent of the inner session, so it traps the operator signals, sweeps every
+  # descendant session (inner controller + the active phase's detached setsid
+  # session) with TERM->KILL, writes a typed OperatorCancelled synthetic
+  # INCOMPLETE, and exits nonzero. out/current is published only AFTER the suite
+  # phase, which the swept inner never reaches, so the shared pointer is left
+  # untouched.
+  on_operator_signal() { # signal-name
+    local sig="$1" leader delivered="" leaders
+    trap - INT TERM HUP  # idempotent: a second signal must not re-enter
+    leaders="$(list_descendant_sessions "$WRAPPER_PID" || true)"
+    if [ -z "$leaders" ] && [ -f "$PID_FILE" ]; then
+      read -r leader < "$PID_FILE" 2>/dev/null && leaders="$leader" || true
+    fi
+    if [ -n "$leaders" ]; then
+      for leader in $leaders; do kill -TERM -- "-$leader" 2>/dev/null || true; done
+      delivered="SIGTERM"
+      run_cmd sleep 3
+      for leader in $leaders; do
+        if kill -0 -- "-$leader" 2>/dev/null; then
+          kill -KILL -- "-$leader" 2>/dev/null || true
+          delivered="SIGTERM then SIGKILL"
+        fi
+      done
+    fi
+    kill -KILL "$WRAPPER_PID" 2>/dev/null || true
+    GIT_COMMIT="$(run_cmd git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+    write_failed_report "$OUT_PATH" OperatorCancelled "INCOMPLETE: run cancelled by operator (SIG$sig); the inner session was swept " "$delivered (MA-UX-1/MA-RB-4)"
+    if [ "$OUT_PATH" != "$RUN_ROOT/reports/run-report.json" ]; then
+      write_failed_report "$RUN_ROOT/reports/run-report.json" OperatorCancelled "INCOMPLETE: run cancelled by operator (SIG$sig); the inner session was swept " "$delivered (MA-UX-1/MA-RB-4)"
+    fi
+    echo "run-spike: INCOMPLETE — run cancelled by operator (SIG$sig); inner session terminated ($delivered)" >&2
+    exit 20
+  }
+  trap 'on_operator_signal INT' INT
+  trap 'on_operator_signal TERM' TERM
+  trap 'on_operator_signal HUP' HUP
 
   DELIVERED=""
   TIMED_OUT=0
@@ -441,9 +685,14 @@ fi
 # ultimate backstop parenting this session.
 : "${SPIKE_DEADLINE:?inner requires SPIKE_DEADLINE from the watchdog parent}"
 
+# MA-XC-5: classify a wall-clock timeout by the OUT-OF-BAND supervisor flag
+# (SPIKE_PHASE_TIMED_OUT), never by the exit code alone — a phase child that
+# itself exits 124 (timeout(1) convention, conceivable from a tool wrapper) must
+# not be misread as WallClockExpiry. run_with_env resets the flag per phase and
+# supervise_phase sets it only on a real deadline kill.
 phase_guard() { # phase-name exit-code
-  if [ "$2" = 124 ]; then
-    fail_run WallClockExpiry "$1 phase exceeded the ${WALL_BOUND}s wall-clock bound on the /proc/uptime monotonic deadline; per-phase supervisor delivered ${SPIKE_PHASE_SIGNALS:-SIGKILL} (QA-007/RS-015)"
+  if [ "${SPIKE_PHASE_TIMED_OUT:-0}" = 1 ]; then
+    fail_run WallClockExpiry "$1 phase exceeded the ${WALL_BOUND}s wall-clock bound on the /proc/uptime monotonic deadline; per-phase supervisor delivered ${SPIKE_PHASE_SIGNALS:-SIGKILL} (QA-007/RS-015/MA-XC-5)"
   fi
 }
 case "$RUN_ROOT" in
@@ -585,6 +834,9 @@ run_with_env() { # class + a full dispatch invocation (audited statically)
   local class="$1"; shift
   if [ "$1" = "run_cmd" ]; then shift; fi
   build_profile_env "$class"
+  # MA-XC-5: reset the out-of-band timeout flag per phase so phase_guard reads
+  # THIS phase's supervisor state, not a prior phase's.
+  SPIKE_PHASE_TIMED_OUT=0
   case "$class" in
     restore|build|test)
       # Documented SDK injections (EA-008): enumerated, never contradicting the
@@ -595,13 +847,24 @@ run_with_env() { # class + a full dispatch invocation (audited statically)
       require_env_key UseSharedCompilation
       ;;
     provision)
-      # QA-017: provisioning now runs under the constructed profile too; the
-      # SPIKE_RID_OVERRIDE fault hook (provision-z3.sh: INV-014 fail-closed
-      # test only) must still reach it when the operator/test set it.
+      # PR-006: provisioning must never launch under an empty/unconstructed
+      # environment (no decoy-first PATH, no run-root TMPDIR) — guard the minimum
+      # profile keys so a deleted/renamed provision class fails closed BEFORE the
+      # launch, not one phase later at restore.
+      require_env_key PATH
+      require_env_key TMPDIR
+      # QA-017: the SPIKE_RID_OVERRIDE fault hook (provision-z3.sh: INV-014
+      # fail-closed test only) must still reach it when the operator/test set it.
       if [ -n "${SPIKE_RID_OVERRIDE:-}" ]; then
         LAUNCH_KEYS+=(SPIKE_RID_OVERRIDE)
         LAUNCH_VALS+=("$SPIKE_RID_OVERRIDE")
       fi
+      ;;
+    fetch)
+      # PR-006 (fetch sibling): the BND-004 curl/tar legs must not launch under
+      # an unconstructed environment either.
+      require_env_key PATH
+      require_env_key TMPDIR
       ;;
   esac
   if [ "$class" = "test" ]; then
@@ -675,6 +938,19 @@ fail_run() { # cause detail — QA-005: each site names its true typed cause
   exit 20
 }
 
+# MA-RB-6/MA-XC-4: the shared-package-cache tar copies run as ONE supervised
+# phase (launch class "cache") under setsid + the /proc/uptime deadline, so a
+# wedge there is independently killable with typed attribution instead of being
+# caught only by the outer watchdog's generic +20s backstop. The tar|tar copy
+# idiom runs inside a single allowlisted `bash` so the phase is one process
+# group.
+cache_copy() { # src-dir dst-dir
+  run_with_env cache run_cmd bash -p -c '
+    set -euo pipefail
+    tar -C "$1" -cf - . | tar -C "$2" -xf -
+  ' cache-copy "$1" "$2"
+}
+
 # --- phase: provision ----------------------------------------------------------
 # QA-017: provisioning runs in its OWN setsid session under supervise_phase
 # (run_with_env), exactly like restore/build/test/probes/aggregation — a hang
@@ -691,8 +967,20 @@ if [ "$PROVISION_EXIT" -ne 0 ]; then
 fi
 
 # --- phase: locked restore (evidentiary; spike-local packages folder, EA-008) ---
-if [ -d "$CACHE_DIR/packages" ]; then
-  run_cmd tar -C "$CACHE_DIR/packages" -cf - . | run_cmd tar -C "$RUN_ROOT/packages" -xf -
+# MA-UX-5/MA-RB-2: the shared package cache is trusted ONLY when its completion
+# marker is present. A torn seed (deadline KILL / ENOSPC mid-populate) leaves a
+# partial dir with NO marker, which is treated as no-cache (the run rebuilds
+# from restore) instead of being copied into every subsequent run root forever.
+CACHE_PKGS="$CACHE_DIR/packages"
+CACHE_MARKER="$CACHE_DIR/packages.complete"
+if [ -f "$CACHE_MARKER" ] && [ -d "$CACHE_PKGS" ]; then
+  set +e
+  cache_copy "$CACHE_PKGS" "$RUN_ROOT/packages"
+  CACHE_COPY_EXIT=$?
+  set -e
+  phase_guard cache "$CACHE_COPY_EXIT"
+elif [ -d "$CACHE_PKGS" ]; then
+  echo "run-spike: shared package cache at $CACHE_PKGS has no completion marker (partial/torn seed) — ignoring it and restoring fresh; recover a wedged cache with: rm -rf out/cache (MA-UX-5/AP-016)" >&2
 fi
 RESTORE_ARGV=(dotnet restore DafnyCompatSpike.sln --configfile NuGet.Config -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL")
 set +e
@@ -726,9 +1014,31 @@ else
   [ "$P01_A_EXIT" != 0 ] && RESTORE_FAILED="${RESTORE_FAILED}A "
   [ "$P01_B_EXIT" != 0 ] && RESTORE_FAILED="${RESTORE_FAILED}B "
 fi
-if [ ! -d "$CACHE_DIR/packages" ] && [ "$RESTORE_EXIT" -eq 0 ]; then
-  run_cmd mkdir -p -- "$CACHE_DIR/packages"
-  run_cmd tar -C "$RUN_ROOT/packages" -cf - . | run_cmd tar -C "$CACHE_DIR/packages" -xf -
+# MA-UX-5/MA-RB-2: seed the shared cache ATOMICALLY — tar into a private staged
+# dir, swap it into place, then write the completion marker LAST, so a crash
+# mid-seed can only ever leave (a) the previous complete cache, or (b) a
+# marker-less staged/partial dir the consume guard above ignores. Never a torn
+# dir presented as complete.
+if [ ! -f "$CACHE_MARKER" ] && [ "$RESTORE_EXIT" -eq 0 ]; then
+  run_cmd mkdir -p -- "$CACHE_DIR"
+  CACHE_STAGED="$CACHE_DIR/packages.staged.$$"
+  run_cmd rm -rf -- "$CACHE_STAGED"
+  run_cmd mkdir -p -- "$CACHE_STAGED"
+  set +e
+  cache_copy "$RUN_ROOT/packages" "$CACHE_STAGED"
+  CACHE_SEED_EXIT=$?
+  set -e
+  phase_guard cache "$CACHE_SEED_EXIT"
+  if [ "$CACHE_SEED_EXIT" -eq 0 ]; then
+    run_cmd rm -rf -- "$CACHE_PKGS.old"
+    [ -d "$CACHE_PKGS" ] && run_cmd mv -- "$CACHE_PKGS" "$CACHE_PKGS.old"
+    run_cmd mv -- "$CACHE_STAGED" "$CACHE_PKGS"
+    run_cmd rm -rf -- "$CACHE_PKGS.old"
+    printf 'seeded\n' > "$CACHE_MARKER.tmp"
+    run_cmd mv -- "$CACHE_MARKER.tmp" "$CACHE_MARKER"
+  else
+    run_cmd rm -rf -- "$CACHE_STAGED"
+  fi
 fi
 
 RESTORE_ARGV_JSON=""
@@ -756,14 +1066,24 @@ done
 } > "$RUN_ROOT/receipts/restore-receipt.json.tmp"
 run_cmd mv -- "$RUN_ROOT/receipts/restore-receipt.json.tmp" "$RUN_ROOT/receipts/restore-receipt.json"
 if [ "$RESTORE_EXIT" -ne 0 ]; then
-  fail_run PrerequisiteFailure "locked restore failed (failing projects: $RESTORE_FAILED; NU1004/NU1102-class locked-mode mismatches are fail-closed, INV-001)"
+  fail_run PrerequisiteFailure "locked restore failed (failing projects: $RESTORE_FAILED; NU1004/NU1102-class locked-mode mismatches are fail-closed, INV-001; if the shared package cache is corrupt, recover with: rm -rf out/cache — MA-UX-5)"
 fi
 
 # --- phase: build (everything beneath the run root — DD-008) --------------------
+# MA-XC-2: capture `dotnet --version` via a TEMP FILE, not a command
+# substitution — a `$(run_with_env build …)` runs audit_launch in a subshell,
+# whose env-audit.json write is then overwritten by the next parent-side
+# audit_launch rebuilding from the parent's stale AUDIT_ENTRIES, silently
+# dropping the build-class launch from the receipt. Running run_with_env in the
+# parent shell (output redirected to a file) keeps the audit entry.
 set +e
-SDK_ACTUAL="$(run_with_env build run_cmd dotnet --version)"
+SDK_VER_FILE="$RUN_ROOT/receipts/.sdk-version"
+run_with_env build run_cmd dotnet --version > "$SDK_VER_FILE"
 SDK_VER_RC=$?
 set -e
+SDK_ACTUAL=""
+[ -f "$SDK_VER_FILE" ] && read -r SDK_ACTUAL < "$SDK_VER_FILE" || true
+run_cmd rm -f "$SDK_VER_FILE" 2>/dev/null || true
 phase_guard build "$SDK_VER_RC"   # a deadline already passed here is a build-phase timeout
 set +e
 run_with_env build run_cmd dotnet build DafnyCompatSpike.sln --no-restore -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL" >&2
@@ -817,6 +1137,9 @@ NET8_ARCHIVE="$CACHE_DIR/$NET8_ARCHIVE_NAME"
 # wedged extraction is independently killable with typed phase attribution.
 if [ ! -f "$NET8_ARCHIVE" ] || [ "$(sha_of "$NET8_ARCHIVE")" != "$NET8_SHA" ]; then
   run_cmd mkdir -p -- "$CACHE_DIR"
+  # MA-UX-7: announce the fetch (source + approx size) so first-run dead air on
+  # a slow link is attributable, and confirm completion.
+  echo "run-spike: fetching net8 control runtime (~28MB) from builds.dotnet.microsoft.com ..." >&2
   set +e
   run_with_env fetch run_cmd curl --disable -fsSL -o "$NET8_ARCHIVE.download" "$NET8_URL"
   FETCH_EXIT=$?
@@ -829,6 +1152,7 @@ if [ ! -f "$NET8_ARCHIVE" ] || [ "$(sha_of "$NET8_ARCHIVE")" != "$NET8_SHA" ]; t
     fail_run PrerequisiteFailure "net8 control-runtime archive does not match the pinned SHA-256 (BND-004 fail-closed; host/TFM adjudication blocked)"
   fi
   run_cmd mv -- "$NET8_ARCHIVE.download" "$NET8_ARCHIVE"
+  echo "run-spike: net8 control runtime fetched and digest-verified." >&2
 fi
 CONTROL_ROOT="$RUN_ROOT/control-runtime"
 run_cmd mkdir -p -- "$CONTROL_ROOT"
@@ -851,7 +1175,7 @@ SRC_MANIFEST="$RUN_ROOT/.source-manifest"
 # sort is needed — the manifest is stable across runs on the same tree.
 while IFS= read -r f; do
   [ -f "$SPIKE_ROOT/$f" ] && printf '%s  %s\n' "$(sha_of "$SPIKE_ROOT/$f")" "$f" >> "$SRC_MANIFEST"
-done < <(run_cmd git -C "$SPIKE_ROOT" ls-files -- '*.cs' '*.csproj' '*.dfy' 'schema' 'manifest' 'config' 'scripts' 'Directory.Build.props' 'Directory.Build.targets' 'Directory.Packages.props' 'global.json' 'NuGet.Config' 2>/dev/null)
+done < <(run_cmd git -C "$SPIKE_ROOT" ls-files -- '*.cs' '*.csproj' '*.sln' '*.dfy' 'schema' 'manifest' 'config' 'scripts' 'Directory.Build.props' 'Directory.Build.targets' 'Directory.Build.rsp' 'Directory.Packages.props' 'global.json' 'NuGet.Config' 2>/dev/null)
 SRC_DIGEST="$(sha_of "$SRC_MANIFEST")"
 [ -z "$SRC_DIGEST" ] && SRC_DIGEST="unknown"
 
@@ -920,6 +1244,17 @@ if [ "${SPIKE_CANONICAL:-0}" = 1 ]; then
   set -e
   phase_guard test "$SUITE_EXIT"
   if [ "$SUITE_EXIT" -eq 0 ]; then SUITE_STATUS="success"; else SUITE_STATUS="failure"; fi
+  # MA-VI-6 (coordination item A): emit the NONCE-BOUND suite receipt the
+  # aggregator DERIVES final_suite_status from (RunLayout.SuiteReceiptRelativePath).
+  # Only canonical runs reach here (the suite phase actually ran); variance runs
+  # emit nothing and final_suite_status stays "unknown". Without this receipt the
+  # aggregator downgrades an unvalidated --suite-status=success to "unknown", so
+  # a COMPATIBLE verdict is only ever computable once this receipt is present and
+  # its run_id/nonce bind to the current run. Atomic (write-temp-then-mv).
+  SUITE_RECEIPT="$RUN_ROOT/receipts/suite-receipt.json"
+  printf '{ "run_id": "%s", "nonce": "%s", "suite_exit": %s, "source_manifest_sha256": "%s" }\n' \
+    "$SPIKE_RUN_ID" "$SPIKE_NONCE" "$SUITE_EXIT" "$(json_escape "${SRC_DIGEST:-unknown}")" > "$SUITE_RECEIPT.tmp"
+  run_cmd mv -- "$SUITE_RECEIPT.tmp" "$SUITE_RECEIPT"
 fi
 
 # --- phase: aggregation (the managed aggregator VALIDATES the receipts) ----------

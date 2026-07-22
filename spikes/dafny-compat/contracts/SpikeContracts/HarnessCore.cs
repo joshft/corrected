@@ -83,6 +83,12 @@ public static class HarnessCore
         public int LedgerEntriesBefore;
         public int LedgerEntriesAfter;
         public int ForeignNonceEntries;
+        public (string Path, string Sha)? HostfxrIdentity;
+        public (string Path, string Sha)? CorelibIdentity;
+        public List<string> FamilySweepViolations = new();
+        public string? LoadExtraAssembly;
+        public Dictionary<string, string> RawGeneratedFileDigests = new(StringComparer.Ordinal);
+        public Dictionary<string, string> NormalizedDepsJsonDigests = new(StringComparer.Ordinal);
         public DateTime Started = DateTime.UtcNow;
     }
 
@@ -98,7 +104,10 @@ public static class HarnessCore
             RunRoot = "",
             ReportPath = "",
         };
-        state.RepoRoot = FindRepoRoot(state.SpikeRoot);
+        // Gitfile merge group (PR-001/MA-XC-1/MA-UC-3): the ONE shared resolver;
+        // FAIL CLOSED below when no repo boundary exists — never a spike-root
+        // fallback that later reads the wrong (or no) repo's HEAD.
+        state.RepoRoot = GitResolver.FindRepoRoot(state.SpikeRoot) ?? "";
         state.RunId = "runid-" + Guid.NewGuid().ToString("N")[..16];
 
         try
@@ -122,6 +131,27 @@ public static class HarnessCore
         catch (Exception ex)
         {
             Console.Error.WriteLine($"route {routeId} verdict: INCOMPLETE; schema trust anchor rejected: {ex.Message}");
+            return ExitCodes.Incomplete;
+        }
+
+        // Further startup anchors, all BEFORE any probe runs:
+        // - PR-003: the spec-owned probe manifest against the compiled digest;
+        // - PR-007: the committed z3 pin file (it feeds P04/solver identity);
+        // - gitfile fail-closed rule (MA-UC-3): no repo boundary → refusal,
+        //   never evidence bound to an unknowable tree state.
+        try
+        {
+            VerdictAggregator.ValidateProbeManifestFile(Path.Combine(state.SpikeRoot, "manifest", "probe-manifest.json"));
+            PinFiles.ValidateZ3Pin(state.SpikeRoot);
+            if (state.RepoRoot.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "no git repo boundary (.git directory or gitfile) above the spike root — evidence git binding is impossible; refusing to run (INV-009/MA-UC-3 fail-closed)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"route {routeId} verdict: INCOMPLETE; startup trust anchor rejected: {ex.Message}");
             return ExitCodes.Incomplete;
         }
 
@@ -222,8 +252,16 @@ public static class HarnessCore
                 Console.Error.WriteLine($"prerequisite failure: sentinel ledger missing at {ledgerPath}");
                 return ExitCodes.Incomplete;
             }
-            (state.SentinelNonce, state.LedgerEntriesBefore, state.ForeignNonceEntries) = ReadLedger(ledgerPath, null);
+            (state.SentinelNonce, state.LedgerEntriesBefore, state.ForeignNonceEntries, _) = ReadLedger(ledgerPath, null);
             state.SentinelLedgerPath = ledgerPath;
+        }
+
+        if (state.LoadExtraAssembly is not null)
+        {
+            // Induced-failure hook (MA-VI-3 test armor, like --force-probe-exception):
+            // loads an assembly OUTSIDE the deps.json universe so the capture-layer
+            // family sweep can be exercised end-to-end in a child-harness run.
+            _ = Assembly.LoadFile(Path.GetFullPath(state.LoadExtraAssembly));
         }
 
         foreach (var probeId in state.Probes)
@@ -477,12 +515,59 @@ public static class HarnessCore
                 "not every task outcome is a solver-produced Valid (INV-004)"));
             return;
         }
+        // MA-ID-1: the RS-004 fail-closed observability rule is ENFORCED, not
+        // just recorded — if the typed surface stopped exposing solver resource
+        // usage, P06 fails and enters INV-013 as the absent-capability variant
+        // of UNADJUDICATED_IN_PROCESS_FAILURE (never a silent pass).
+        var absentUsage = AbsentResourceUsageCapability(run);
+        if (absentUsage is not null)
+        {
+            var payload = new UnadjudicatedInProcessFailure(
+                UnadjudicatedVariant.AbsentRequiredCapability,
+                new ProbeKey("P06", state.RouteId),
+                Stage: "verification",
+                MinimalInputs: fixture,
+                TypedDiagnostic: absentUsage,
+                IdentityEvidence: BuildIdentityEvidence(state, effectiveSolver));
+            _ = AdjudicationStateMachine.EnterInProcessFailure(payload);
+            state.AdjudicationRecords.Add(new Dictionary<string, object?>
+            {
+                ["adjudication_record_id"] = $"unadj-P06-{state.RouteId}-absent-capability",
+                ["route"] = state.RouteId,
+                ["terminal_state"] = "UnadjudicatedInProcessFailure",
+                ["probe"] = "P06",
+                ["variant"] = "absent-required-capability",
+                ["stage"] = "verification",
+                ["minimal_inputs"] = fixture,
+                ["typed_diagnostic"] = absentUsage,
+                ["identity_evidence_p01_p04"] = new Dictionary<string, object?>
+                {
+                    ["restore_identity"] = payload.IdentityEvidence!.RestoreIdentity,
+                    ["sdk_build_identity"] = payload.IdentityEvidence.SdkBuildIdentity,
+                    ["loaded_assembly_identity"] = payload.IdentityEvidence.LoadedAssemblyIdentity,
+                    ["solver_identity"] = payload.IdentityEvidence.SolverIdentity,
+                },
+            });
+            state.Results.Add(new ProbeResult(new ProbeKey("P06", state.RouteId), ProbeStatus.Fail,
+                $"UNADJUDICATED_IN_PROCESS_FAILURE (absent-capability): {absentUsage}"));
+            return;
+        }
         // Executed-solver identity: the digest of the binary actually executed
         // is recorded in evidence (executed_solver_sha256); the ARCHIVE pin
         // (SolverLayout.Z3PinnedSha256) is verified by provisioning at intake
         // (BND-002) — an archive digest can never equal its extracted member's.
         state.Results.Add(new ProbeResult(new ProbeKey("P06", state.RouteId), ProbeStatus.Pass));
     }
+
+    /// <summary>
+    /// MA-ID-1: P06's required-observable gate, public so a unit test locks the
+    /// fail direction (a task whose typed surface exposed no resource usage →
+    /// typed absent-capability detail; RunP06 consumes this same method).
+    /// </summary>
+    public static string? AbsentResourceUsageCapability(VerificationRun run) =>
+        run.Tasks.Count > 0 && run.Tasks.Any(t => !t.SolverResourceUsageObserved)
+            ? "typed surface did not expose solver resource usage for every task (solver_resource_usage_observed=false) — required observable absent, INV-013 absent-capability variant (INV-004/RS-004/MA-ID-1)"
+            : null;
 
     private static void RunP07(RunState state, string fixture, string fixtureKey, Dictionary<string, string?> options)
     {
@@ -533,7 +618,7 @@ public static class HarnessCore
     {
         JoinPendingSentinelLeg(state);
         var ledgerPathBefore = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
-        var (_, before, _) = ReadLedger(ledgerPathBefore, probeTag);
+        var (_, before, _, malformedBefore) = ReadLedger(ledgerPathBefore, probeTag);
         var run = state.Adapter.Verify(new FixtureInput(fixture, options));
         RecordRun(state, fixtureKey, run);
         state.TargetSets[fixtureKey] = run.TargetNames.ToList();
@@ -551,26 +636,31 @@ public static class HarnessCore
         }
 
         var ledgerPath = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
-        var (_, after, _) = ReadLedger(ledgerPath, probeTag);
-        var (_, allNonceAfter, _) = ReadLedger(ledgerPath, null);
+        var (_, after, _, malformedAfter) = ReadLedger(ledgerPath, probeTag);
+        var (_, allNonceAfter, _, _) = ReadLedger(ledgerPath, null);
         state.LedgerEntriesAfter = allNonceAfter;
         var delta = after - before;
+        // MA-RB-3/MA-HI-2 declared contract: a malformed entry appearing in
+        // this window can be a mangled RECORD of a genuine invocation — the
+        // zero-invocation assertion must fail loudly, never skip it silently.
+        var malformedDelta = malformedAfter - malformedBefore;
 
         var pass = diag is not null
                    && !string.IsNullOrWhiteSpace(diag.Message)
                    && run.TargetNames.Count == 0
                    && run.Tasks.Count == 0
-                   && delta == 0;
+                   && delta == 0
+                   && malformedDelta == 0;
         state.Results.Add(new ProbeResult(new ProbeKey(probeId, state.RouteId),
             pass ? ProbeStatus.Pass : ProbeStatus.Fail,
-            pass ? null : $"stage-typed diagnostic present={diag is not null}, targets={run.TargetNames.Count}, tasks={run.Tasks.Count}, sentinel-invocations={delta} (INV-011)"));
+            pass ? null : $"stage-typed diagnostic present={diag is not null}, targets={run.TargetNames.Count}, tasks={run.Tasks.Count}, sentinel-invocations={delta}, malformed-ledger-entries={malformedDelta} (INV-011)"));
     }
 
     private static void RunP05(RunState state, string fixture, string fixtureKey, Dictionary<string, string?> options, string probeTag)
     {
         JoinPendingSentinelLeg(state);
         var ledgerPathBefore = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
-        var (_, beforeThisProbe, _) = ReadLedger(ledgerPathBefore, probeTag);
+        var (_, beforeThisProbe, _, malformedBefore) = ReadLedger(ledgerPathBefore, probeTag);
         // The recording sentinel is not a real solver: the prover pipe dying
         // mid-protocol is an EXPECTED consequence of the probe design, and on
         // some orderings Boogie's completion events never settle after the
@@ -598,16 +688,18 @@ public static class HarnessCore
         }
 
         var ledgerPath = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
-        var (_, after, foreign) = ReadLedger(ledgerPath, probeTag);
-        var (_, allNonceEntries, _) = ReadLedger(ledgerPath, null);
+        var (_, after, foreign, malformedAfter) = ReadLedger(ledgerPath, probeTag);
+        var (_, allNonceEntries, _, _) = ReadLedger(ledgerPath, null);
         state.LedgerEntriesAfter = allNonceEntries;
         var delta = after - beforeThisProbe;
+        var malformedDelta = malformedAfter - malformedBefore;
         // RS-003d: only entries under THIS run's nonce count; a stale recording
-        // from a prior run can never satisfy this run.
-        var pass = delta >= 1;
+        // from a prior run can never satisfy this run. MA-RB-3/MA-HI-2: a
+        // malformed entry in the window fails loudly — it is never evidence.
+        var pass = delta >= 1 && malformedDelta == 0;
         state.Results.Add(new ProbeResult(new ProbeKey("P05", state.RouteId),
             pass ? ProbeStatus.Pass : ProbeStatus.Fail,
-            pass ? null : $"sentinel ledger shows {delta} fresh-nonce invocations (foreign-nonce entries: {foreign}) — the solver-path option did not select the executed binary (INV-003)"));
+            pass ? null : $"sentinel ledger shows {delta} fresh-nonce invocations (foreign-nonce entries: {foreign}, malformed entries in window: {malformedDelta}) — the solver-path option did not select the executed binary (INV-003)"));
     }
 
     /// <summary>QA-011: bounded join of an abandoned sentinel verification leg before a new ledger window opens.</summary>
@@ -878,6 +970,16 @@ public static class HarnessCore
         var expected = LoadExpectedSet(expectedPath);
         RequireDeclaredUniversePredicate(expected, expectedPath);
         var evidence = CaptureRuntimeIdentity(state);
+        // MA-VI-3: the unfiltered family sweep gates FIRST, independent of the
+        // declared equality universe — an out-of-universe Dafny*/Boogie* load
+        // can never pass vacuously through the filtered set equality.
+        if (state.FamilySweepViolations.Count > 0)
+        {
+            state.Results.Add(new ProbeResult(new ProbeKey("P03", state.RouteId), ProbeStatus.Fail,
+                "out-of-universe family-named assembly detected by the unfiltered capture sweep: "
+                + string.Join("; ", state.FamilySweepViolations)));
+            return;
+        }
         var status = P03Evaluator.Evaluate(evidence, expected);
 
         // deps.json → spike-local package-asset trace with hash comparison
@@ -951,6 +1053,51 @@ public static class HarnessCore
     private static P03Evidence CaptureRuntimeIdentity(RunState state)
     {
         var packageAssets = PackageRuntimeAssets();
+
+        // MA-VI-3: SECOND, NON-FILTERED sweep — INV-002's "any loaded
+        // Dafny/Boogie-family assembly outside that mapping fails P03" runs on
+        // the UNFILTERED observation source, independent of the declared
+        // equality universe. A family-named assembly with an empty location
+        // (byte-array load), a name outside the deps.json asset map, or a file
+        // location outside the sanctioned roots (harness output tree /
+        // spike-local packages folder) is a typed P03 failure.
+        var sanctionedRoots = new List<string> { Path.GetFullPath(AppContext.BaseDirectory) };
+        var packagesRoot = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
+        if (!string.IsNullOrEmpty(packagesRoot) && Directory.Exists(packagesRoot))
+        {
+            sanctionedRoots.Add(Path.GetFullPath(packagesRoot));
+        }
+        bool UnderSanctionedRoot(string fullPath) => sanctionedRoots.Any(root =>
+            fullPath.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+        state.FamilySweepViolations = new List<string>();
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic)
+            {
+                continue;
+            }
+            var sweepName = assembly.GetName().Name ?? "";
+            var isFamily = sweepName.StartsWith("Dafny", StringComparison.OrdinalIgnoreCase)
+                           || sweepName.StartsWith("Boogie", StringComparison.OrdinalIgnoreCase);
+            if (!isFamily)
+            {
+                continue;
+            }
+            var sweepLocation = assembly.Location;
+            if (string.IsNullOrEmpty(sweepLocation))
+            {
+                state.FamilySweepViolations.Add(
+                    $"{sweepName}: family-named assembly loaded with an EMPTY location (byte-array/dynamic-context load) — outside the deps.json mapping (INV-002/MA-VI-3)");
+                continue;
+            }
+            var sweepFull = Path.GetFullPath(sweepLocation);
+            if (!packageAssets.ContainsKey(sweepName) || !UnderSanctionedRoot(sweepFull))
+            {
+                state.FamilySweepViolations.Add(
+                    $"{sweepName}: family-named assembly loaded from '{CanonicalizeValue(state, sweepFull)}' — outside the deps.json package-asset mapping (INV-002/MA-VI-3)");
+            }
+        }
+
         var loaded = new List<LoadedAssemblyIdentity>();
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
@@ -988,6 +1135,17 @@ public static class HarnessCore
         }
 
         var (frameworkName, rollForward) = ReadRuntimeConfig();
+        var hostfxrSha = File.Exists(hostfxr) ? Sha256File(hostfxr) : "";
+        var corelibSha = Sha256File(corelib);
+        // MA-ED-2: the identities the P03 predicate consumes are PERSISTED into
+        // the route report's binding identity (hostfxr_identity_concrete /
+        // corelib_identity_concrete) — computed-then-discarded identity is
+        // unauditable (codex R4-03).
+        if (hostfxrSha.Length == 64)
+        {
+            state.HostfxrIdentity = (hostfxr, hostfxrSha);
+        }
+        state.CorelibIdentity = (corelib, corelibSha);
         return new P03Evidence(
             state.RouteId,
             state.HarnessTfm ?? "",
@@ -995,9 +1153,9 @@ public static class HarnessCore
             frameworkName,
             rollForward,
             hostfxr,
-            File.Exists(hostfxr) ? Sha256File(hostfxr) : "",
+            hostfxrSha,
             corelib,
-            Sha256File(corelib),
+            corelibSha,
             loaded.OrderBy(a => a.SimpleName, StringComparer.Ordinal).ToList());
     }
 
@@ -1319,44 +1477,60 @@ public static class HarnessCore
     private static string WriteSentinelStub(RunState state, string ledgerPath, string nonce, string probeTag)
     {
         // QA-011: every sentinel probe gets its OWN stub carrying a per-probe
-        // sub-nonce as the first recorded argv element, so each probe's
-        // ledger-delta assertion is scoped to its own window — an abandoned
-        // earlier leg (e.g. a timed-out P05 prover) can never leak entries
-        // into another probe's count.
+        // sub-nonce, so each probe's ledger-delta assertion is scoped to its
+        // own window — an abandoned earlier leg (e.g. a timed-out P05 prover)
+        // can never leak entries into another probe's count.
         var stubPath = Path.Combine(state.RunRoot, "sentinel", $"sentinel-z3-{probeTag}");
-        var script =
-            "#!/bin/sh\n" +
-            "# Nonce-recording sentinel solver stub (INV-003/RS-003d). Version probes\n" +
-            "# (options processing) are answered without recording; every SOLVER\n" +
-            "# invocation appends a nonce-bound entry to the pre-created ledger FILE\n" +
-            "# with this stub's per-probe sub-nonce as argv[0] (QA-011).\n" +
-            "if [ \"$1\" = \"-version\" ] || [ \"$1\" = \"--version\" ]; then\n" +
-            "  echo 'Z3 version 4.12.1 - 64 bit'\n" +
-            "  exit 0\n" +
-            "fi\n" +
-            $"LEDGER='{ledgerPath}'\n" +
-            $"NONCE='{nonce}'\n" +
-            $"ARGS='\"probe:{probeTag}\"'\n" +
-            "for a in \"$@\"; do\n" +
-            "  esc=$(printf '%s' \"$a\" | tr -d '\\\\\"')\n" +
-            "  ARGS=\"$ARGS, \\\"$esc\\\"\"\n" +
-            "done\n" +
-            "ENTRY=\"{ \\\"nonce\\\": \\\"$NONCE\\\", \\\"argv\\\": [$ARGS] }\"\n" +
-            "CONTENT=$(tr -d '\\n' < \"$LEDGER\")\n" +
-            "case \"$CONTENT\" in\n" +
-            "  *'\"entries\": []'*)\n" +
-            "    NEW=$(printf '%s' \"$CONTENT\" | sed 's|\"entries\": \\[\\]|\"entries\": [ '\"$ENTRY\"' ]|') ;;\n" +
-            "  *)\n" +
-            "    NEW=$(printf '%s' \"$CONTENT\" | sed 's|\\(.*\\)\\]|\\1, '\"$ENTRY\"' ]|') ;;\n" +
-            "esac\n" +
-            "printf '%s\\n' \"$NEW\" > \"$LEDGER.tmp\" && mv \"$LEDGER.tmp\" \"$LEDGER\"\n" +
-            "exit 0\n";
-        File.WriteAllText(stubPath, script);
+        File.WriteAllText(stubPath, SentinelStubScript(ledgerPath, nonce, probeTag));
         File.SetUnixFileMode(stubPath,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
             UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
             UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
         return stubPath;
+    }
+
+    /// <summary>
+    /// MA-RB-3/MA-HI-2: the sentinel ledger writer is APPEND-ONLY with
+    /// per-writer-unique entry files and byte-safe (base64) field encoding —
+    /// never a shared-tmp read-modify-write (whose last-mv-wins race silently
+    /// dropped entries, a nondeterministic fail-open of the INV-011
+    /// zero-invocation observable) and never tr/sed string-interpolated JSON
+    /// (whose &amp;, |, ], and newline handling corrupted the ledger). Each
+    /// invocation writes ONE mktemp-named file under sentinel/entries/ holding
+    /// a single line of space-separated base64 fields:
+    ///   base64(nonce) base64("probe:&lt;tag&gt;") base64(argv1) base64(argv2)…
+    /// base64 round-trips arbitrary argv bytes; concurrent writers can never
+    /// clobber each other. Public so tests can race two real stub invocations
+    /// and prove both entries survive.
+    /// </summary>
+    public static string SentinelStubScript(string ledgerPath, string nonce, string probeTag)
+    {
+        var entriesDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ledgerPath))!, "entries");
+        var nonceB64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(nonce));
+        var tagB64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("probe:" + probeTag));
+        return
+            "#!/bin/sh\n" +
+            "# Nonce-recording sentinel solver stub (INV-003/RS-003d). Version probes\n" +
+            "# (options processing) are answered without recording; every SOLVER\n" +
+            "# invocation writes its OWN append-only mktemp-named entry file under\n" +
+            "# sentinel/entries/ with base64-encoded fields (MA-RB-3/MA-HI-2):\n" +
+            "#   b64(nonce) b64(probe:<tag>) b64(argv...)\n" +
+            "if [ \"$1\" = \"-version\" ] || [ \"$1\" = \"--version\" ]; then\n" +
+            "  echo 'Z3 version 4.12.1 - 64 bit'\n" +
+            "  exit 0\n" +
+            "fi\n" +
+            $"ENTRIES_DIR='{entriesDir}'\n" +
+            "mkdir -p \"$ENTRIES_DIR\" || exit 0\n" +
+            "ENTRY_FILE=$(mktemp \"$ENTRIES_DIR/entry-XXXXXXXX\") || exit 0\n" +
+            "{\n" +
+            $"  printf '%s' '{nonceB64}'\n" +
+            $"  printf ' %s' '{tagB64}'\n" +
+            "  for a in \"$@\"; do\n" +
+            "    printf ' %s' \"$(printf '%s' \"$a\" | base64 | tr -d '\\n')\"\n" +
+            "  done\n" +
+            "  printf '\\n'\n" +
+            "} > \"$ENTRY_FILE\"\n" +
+            "exit 0\n";
     }
 
     /// <summary>
@@ -1366,36 +1540,140 @@ public static class HarnessCore
     /// The production chain (P05/P08/P09 ledger windows) calls this same method.
     /// </summary>
     public static (string Nonce, int EntriesForNonce, int ForeignEntries) ReadSentinelLedger(string ledgerPath, string? probeTag)
+    {
+        var (nonce, forNonce, foreign, _) = ReadLedger(ledgerPath, probeTag);
+        return (nonce, forNonce, foreign);
+    }
+
+    /// <summary>MA-RB-3/MA-HI-2: the full reader including the malformed-entry count (declared contract: skip-and-count; the sentinel pass predicates fail loudly on any malformed entry).</summary>
+    public static (string Nonce, int EntriesForNonce, int ForeignEntries, int MalformedEntries) ReadSentinelLedgerDetailed(string ledgerPath, string? probeTag)
         => ReadLedger(ledgerPath, probeTag);
 
-    private static (string Nonce, int EntriesForNonce, int ForeignEntries) ReadLedger(string ledgerPath, string? probeTag)
+    /// <summary>Decodes every well-formed entry (nonce, probe tag, argv) — the round-trip observable for the MA-HI-2 byte-safety tests.</summary>
+    public static IReadOnlyList<SentinelLedgerEntry> ReadSentinelEntries(string ledgerPath)
     {
-        // QA-011: with a probeTag, only entries whose recorded argv[0] carries
-        // that probe's sub-nonce count — every ledger-delta assertion is scoped
-        // per probe, never per run.
-        using var doc = JsonDocument.Parse(File.ReadAllText(ledgerPath));
-        var nonce = doc.RootElement.GetProperty("nonce").GetString()!;
+        var entries = new List<SentinelLedgerEntry>();
+        foreach (var line in EnumerateEntryLines(ledgerPath))
+        {
+            if (TryDecodeEntryLine(line, out var entry))
+            {
+                entries.Add(entry!);
+            }
+        }
+        return entries;
+    }
+
+    private static (string Nonce, int EntriesForNonce, int ForeignEntries, int MalformedEntries) ReadLedger(string ledgerPath, string? probeTag)
+    {
+        // The pre-created ledger FILE (single-writer: controller/test mint)
+        // declares the run nonce; entries live as append-only per-writer files
+        // under sentinel/entries/ (MA-RB-3). Legacy embedded "entries" arrays
+        // (test fixtures) still count — the multi-writer stub no longer writes
+        // them. QA-011: with a probeTag, only entries carrying that probe's
+        // sub-nonce tag count — every ledger-delta assertion is scoped per
+        // probe, never per run. Malformed entry files are counted, never
+        // silently dropped and never allowed to zero the whole ledger.
+        string nonce;
         var forNonce = 0;
         var foreign = 0;
-        foreach (var entry in doc.RootElement.GetProperty("entries").EnumerateArray())
+        var malformed = 0;
+        using (var doc = JsonDocument.Parse(File.ReadAllText(ledgerPath)))
         {
-            if (entry.GetProperty("nonce").GetString() != nonce)
+            nonce = doc.RootElement.GetProperty("nonce").GetString()!;
+            if (doc.RootElement.TryGetProperty("entries", out var embedded) && embedded.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in embedded.EnumerateArray())
+                {
+                    if (entry.GetProperty("nonce").GetString() != nonce)
+                    {
+                        foreign++;
+                        continue;
+                    }
+                    if (probeTag is not null)
+                    {
+                        var argv = entry.GetProperty("argv");
+                        var first = argv.GetArrayLength() > 0 ? argv[0].GetString() : null;
+                        if (first != $"probe:{probeTag}")
+                        {
+                            continue;
+                        }
+                    }
+                    forNonce++;
+                }
+            }
+        }
+        foreach (var line in EnumerateEntryLines(ledgerPath))
+        {
+            if (!TryDecodeEntryLine(line, out var entry))
+            {
+                malformed++;
+                continue;
+            }
+            if (entry!.Nonce != nonce)
             {
                 foreign++;
                 continue;
             }
-            if (probeTag is not null)
+            if (probeTag is not null && entry.ProbeTag != $"probe:{probeTag}")
             {
-                var argv = entry.GetProperty("argv");
-                var first = argv.GetArrayLength() > 0 ? argv[0].GetString() : null;
-                if (first != $"probe:{probeTag}")
-                {
-                    continue;
-                }
+                continue;
             }
             forNonce++;
         }
-        return (nonce, forNonce, foreign);
+        return (nonce, forNonce, foreign, malformed);
+    }
+
+    private static IEnumerable<string> EnumerateEntryLines(string ledgerPath)
+    {
+        var entriesDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ledgerPath))!, "entries");
+        if (!Directory.Exists(entriesDir))
+        {
+            yield break;
+        }
+        foreach (var file in Directory.EnumerateFiles(entriesDir, "entry-*").OrderBy(f => f, StringComparer.Ordinal))
+        {
+            string text;
+            try
+            {
+                text = File.ReadAllText(file);
+            }
+            catch (IOException)
+            {
+                text = "";
+            }
+            catch (UnauthorizedAccessException)
+            {
+                text = "";
+            }
+            yield return text.TrimEnd('\n');
+        }
+    }
+
+    private static bool TryDecodeEntryLine(string line, out SentinelLedgerEntry? entry)
+    {
+        entry = null;
+        if (line.Length == 0)
+        {
+            return false; // truncated/unreadable write — malformed by contract
+        }
+        var fields = line.Split(' ');
+        if (fields.Length < 2)
+        {
+            return false;
+        }
+        try
+        {
+            string Decode(string b64) => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+            var nonce = Decode(fields[0]);
+            var tag = Decode(fields[1]);
+            var argv = fields.Skip(2).Select(Decode).ToList();
+            entry = new SentinelLedgerEntry(nonce, tag, argv);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     // -------------------------------------------------------------- evidence
@@ -1471,9 +1749,32 @@ public static class HarnessCore
         }
     }
 
+    /// <summary>
+    /// MA-ED-2: path-bearing generated files (the harness's own .deps.json)
+    /// contribute a NORMALIZED semantic digest to class 2 (CRLF→LF, run-root
+    /// absolute path → &lt;run-root&gt; token) with the raw digest in the
+    /// binding class (codex R3-6 field pair, previously declared but never
+    /// produced).
+    /// </summary>
+    private static void RecordDepsJsonDigests(RunState state)
+    {
+        var entry = Assembly.GetEntryAssembly()?.Location;
+        var depsPath = entry is null ? null : Path.ChangeExtension(entry, ".deps.json");
+        if (depsPath is null || !File.Exists(depsPath) || state.RunRoot.Length == 0)
+        {
+            return;
+        }
+        var name = Path.GetFileName(depsPath);
+        state.RawGeneratedFileDigests[name] = Sha256File(depsPath);
+        var text = File.ReadAllText(depsPath).Replace("\r\n", "\n", StringComparison.Ordinal);
+        text = text.Replace(Path.GetFullPath(state.RunRoot), SolverLayout.RunRootToken, StringComparison.Ordinal);
+        state.NormalizedDepsJsonDigests[name] = Sha256Text(text);
+    }
+
     private static void EmitReport(RunState state, string schemaPath)
     {
         RefreshExecutedSolverIdentity(state);
+        RecordDepsJsonDigests(state);
         var spikeRelativeRunDir = Path.GetRelativePath(state.SpikeRoot, state.RunRoot).Replace('\\', '/');
         var (gitCommit, gitDirty) = ReadGitState(state);
 
@@ -1557,6 +1858,39 @@ public static class HarnessCore
             ["solver_path_concrete"] = state.SolverConcreteRel ?? Path.GetRelativePath(state.RunRoot,
                 state.SolverOverride ?? Path.Combine(state.RunRoot, SolverLayout.SolverRelativePath.Replace('/', Path.DirectorySeparatorChar))).Replace('\\', '/'),
         };
+        // MA-ED-2: previously schema-declared but producer-less binding fields.
+        var runProducts = new List<string> { Path.GetFullPath(state.ReportPath) };
+        if (state.SentinelLedgerPath is not null)
+        {
+            runProducts.Add(Path.GetFullPath(state.SentinelLedgerPath));
+        }
+        var decoyLogConcrete = Path.Combine(state.RunRoot, "sentinel", "decoy-invocations.log");
+        if (File.Exists(decoyLogConcrete))
+        {
+            runProducts.Add(Path.GetFullPath(decoyLogConcrete));
+        }
+        binding["run_product_paths_concrete"] = runProducts;
+        if (state.RawGeneratedFileDigests.Count > 0)
+        {
+            binding["raw_digests_of_path_bearing_generated_files"] =
+                state.RawGeneratedFileDigests.ToDictionary(kv => kv.Key, kv => (object?)kv.Value);
+        }
+        if (state.HostfxrIdentity is { } hostfxrIdentity)
+        {
+            binding["hostfxr_identity_concrete"] = new Dictionary<string, object?>
+            {
+                ["path"] = hostfxrIdentity.Path,
+                ["sha256"] = hostfxrIdentity.Sha,
+            };
+        }
+        if (state.CorelibIdentity is { } corelibIdentity)
+        {
+            binding["corelib_identity_concrete"] = new Dictionary<string, object?>
+            {
+                ["path"] = corelibIdentity.Path,
+                ["sha256"] = corelibIdentity.Sha,
+            };
+        }
         if (state.LoadedAssemblies.Count > 0)
         {
             binding["loaded_assembly_file_paths"] = state.LoadedAssemblies
@@ -1593,6 +1927,11 @@ public static class HarnessCore
                 ["probe_manifest"] = Sha256File(Path.Combine(state.SpikeRoot, "manifest", "probe-manifest.json")),
             },
             ["nuget_config_digest"] = Sha256File(Path.Combine(state.SpikeRoot, "NuGet.Config")),
+            // MA-ED-2: normalized semantic digests of path-bearing generated
+            // files (class 2; raw digests sit in binding identity).
+            ["deps_json_digests_normalized"] = state.NormalizedDepsJsonDigests.Count == 0
+                ? null
+                : state.NormalizedDepsJsonDigests.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
             ["executed_solver_sha256"] = state.ExecutedSolverSha,
             ["solver_archive_sha256"] = state.SolverArchiveSha,
             ["closure_sets"] = state.ClosureSets.Count == 0 ? null : state.ClosureSets.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
@@ -1645,37 +1984,14 @@ public static class HarnessCore
         }
         try
         {
-            return (ReadGitHead(state.RepoRoot), false);
+            // Gitfile-aware shared resolver (PR-001/MA-VI-5): a linked
+            // worktree's .git FILE resolves like a .git directory.
+            return (GitResolver.ReadHeadCommit(state.RepoRoot), false);
         }
         catch (Exception)
         {
             return ("unknown", false);
         }
-    }
-
-    private static string ReadGitHead(string repoRoot)
-    {
-        var gitDir = Path.Combine(repoRoot, ".git");
-        var head = File.ReadAllText(Path.Combine(gitDir, "HEAD")).Trim();
-        if (!head.StartsWith("ref: ", StringComparison.Ordinal))
-        {
-            return head;
-        }
-        var refName = head["ref: ".Length..].Trim();
-        var refFile = Path.Combine(gitDir, refName.Replace('/', Path.DirectorySeparatorChar));
-        if (File.Exists(refFile))
-        {
-            return File.ReadAllText(refFile).Trim();
-        }
-        var packed = Path.Combine(gitDir, "packed-refs");
-        foreach (var line in File.ReadAllLines(packed))
-        {
-            if (line.EndsWith(" " + refName, StringComparison.Ordinal))
-            {
-                return line.Split(' ')[0];
-            }
-        }
-        throw new InvalidOperationException($"cannot resolve git ref {refName}");
     }
 
     private static string ReadSdkPin(RunState state)
@@ -1735,6 +2051,11 @@ public static class HarnessCore
                     var forced = Next();
                     state.ForcedExceptionProbe = forced;
                     probes.Add(forced);
+                    break;
+                case "--load-extra-assembly":
+                    // MA-VI-3 induced-failure hook: load a family-named assembly
+                    // from OUTSIDE the deps.json universe before P03 capture.
+                    state.LoadExtraAssembly = Next();
                     break;
                 case "--run-id":
                     // The bootstrap controller mints the run_id and binds every
@@ -1831,20 +2152,6 @@ public static class HarnessCore
             dir = dir.Parent;
         }
         throw new InvalidOperationException("cannot locate the spike root (DafnyCompatSpike.sln)");
-    }
-
-    private static string FindRepoRoot(string spikeRoot)
-    {
-        var dir = new DirectoryInfo(spikeRoot);
-        while (dir is not null)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
-            {
-                return dir.FullName;
-            }
-            dir = dir.Parent;
-        }
-        return spikeRoot;
     }
 
     private static string FixtureKey(RunState state, string fixture)
