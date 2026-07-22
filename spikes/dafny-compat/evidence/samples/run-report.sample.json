@@ -2,11 +2,11 @@
   "evidence_schema_version": 2,
   "evidence_schema_sha256": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
   "probe_manifest_sha256": "4956816b40f2cf4316ab2ba3ad9cbb810bb89e0339187c8add7a7d3c2178b0eb",
-  "run_id": "runid-7ffd93d27215b8ea",
+  "run_id": "runid-8cdd8a57ac9d768c",
   "kind": "run-report",
   "binding_identity": {
-    "run_directory": "out/regen-variance-6d4571bf",
-    "git_commit_id": "0bb0966be11ad647a8e25c046f90c1bdc5bdb545",
+    "run_directory": "out/regen-variance-62a381c2",
+    "git_commit_id": "d28ed5d363bfc338e6ead15ca2dd265b6829d9e8",
     "git_dirty_flag": false,
     "host_rid": "linux-x64",
     "sdk_version": "10.0.302",
@@ -18,7 +18,7 @@
       "--configfile",
       "NuGet.Config",
       "-noAutoResponse",
-      "-p:SpikeRunRootRel=out/regen-variance-6d4571bf"
+      "-p:SpikeRunRootRel=out/regen-variance-62a381c2"
     ],
     "solver_path_concrete": "solver/z3-4.12.1/bin/z3"
   },
@@ -232,7 +232,7 @@
   },
   "volatile": {
     "timestamps": {
-      "aggregated_utc": "2026-07-22T04:15:44.2731896Z"
+      "aggregated_utc": "2026-07-22T04:23:21.7230325Z"
     }
   }
 }

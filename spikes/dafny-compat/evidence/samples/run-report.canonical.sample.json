@@ -2,11 +2,11 @@
   "evidence_schema_version": 2,
   "evidence_schema_sha256": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
   "probe_manifest_sha256": "4956816b40f2cf4316ab2ba3ad9cbb810bb89e0339187c8add7a7d3c2178b0eb",
-  "run_id": "runid-451163332fcaf57d",
+  "run_id": "runid-2478510f8049f355",
   "kind": "run-report",
   "binding_identity": {
-    "run_directory": "out/runid-451163332fcaf57d",
-    "git_commit_id": "0bb0966be11ad647a8e25c046f90c1bdc5bdb545",
+    "run_directory": "out/runid-2478510f8049f355",
+    "git_commit_id": "d28ed5d363bfc338e6ead15ca2dd265b6829d9e8",
     "git_dirty_flag": false,
     "host_rid": "linux-x64",
     "sdk_version": "10.0.302",
@@ -18,7 +18,7 @@
       "--configfile",
       "NuGet.Config",
       "-noAutoResponse",
-      "-p:SpikeRunRootRel=out/runid-451163332fcaf57d"
+      "-p:SpikeRunRootRel=out/runid-2478510f8049f355"
     ],
     "solver_path_concrete": "solver/z3-4.12.1/bin/z3"
   },
@@ -26,33 +26,16 @@
     "route_verdicts": [
       {
         "route": "A",
-        "state": "INCOMPLETE",
-        "verdict_reason": {
-          "variant": "suite-failure",
-          "detail": "final test-suite exit was failure \u2014 an all-pass probe report accompanied by a failing dotnet test is not citable as COMPATIBLE (codex R3-5)"
-        }
+        "state": "COMPATIBLE",
+        "verdict_reason": null
       },
       {
         "route": "B",
-        "state": "INCOMPLETE",
-        "verdict_reason": {
-          "variant": "suite-failure",
-          "detail": "final test-suite exit was failure \u2014 an all-pass probe report accompanied by a failing dotnet test is not citable as COMPATIBLE (codex R3-5)"
-        }
+        "state": "COMPATIBLE",
+        "verdict_reason": null
       }
     ],
-    "verdict_reasons": [
-      {
-        "variant": "suite-failure",
-        "detail": "final test-suite exit was failure \u2014 an all-pass probe report accompanied by a failing dotnet test is not citable as COMPATIBLE (codex R3-5)",
-        "route": "A"
-      },
-      {
-        "variant": "suite-failure",
-        "detail": "final test-suite exit was failure \u2014 an all-pass probe report accompanied by a failing dotnet test is not citable as COMPATIBLE (codex R3-5)",
-        "route": "B"
-      }
-    ],
+    "verdict_reasons": null,
     "per_probe_results": [
       {
         "probe": "P01",
@@ -187,7 +170,7 @@
         "detail": null
       }
     ],
-    "final_suite_status": "failure",
+    "final_suite_status": "success",
     "exit_report_matrix_outcome": "consistent",
     "fixture_digests": {
       "fixtures/bad.dfy": "d8afe927ca07086d2ad38ebbb94adef41c47622313f3c895c771bcd0e260f973",
@@ -232,7 +215,7 @@
   },
   "volatile": {
     "timestamps": {
-      "aggregated_utc": "2026-07-22T04:19:01.0477649Z"
+      "aggregated_utc": "2026-07-22T04:27:04.7451778Z"
     }
   }
 }
