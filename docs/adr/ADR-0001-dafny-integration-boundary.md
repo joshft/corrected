@@ -6,9 +6,14 @@
   v1.13 (bullet numbering is not stable across design revisions). Deferred
   Phase 0.0 gates: bullets 4–12.
 - **Spec**: `.correctless/specs/dafny-compat-spike.md`
-- **Evidence**: `spikes/dafny-compat/evidence/samples/run-report.sample.json`
-  (committed sample, regenerated only via `spikes/dafny-compat/scripts/regen-sample.sh`
-  per DD-008; the fresh-run-equality test binds it to reality on every suite run).
+- **Evidence**: committed sample PAIR (QA-006 amendment) —
+  `spikes/dafny-compat/evidence/samples/run-report.sample.json` (variance-mode,
+  full class-2 equality anchor) and
+  `run-report.canonical.sample.json` (canonical run including the suite phase;
+  equality masks only the schema-declared suite-status subtree). This ADR's
+  verdict citations use the **canonical** sample. Both are regenerated only via
+  `spikes/dafny-compat/scripts/regen-sample.sh` (which refuses a dirty tree,
+  QA-001) per DD-008; the fresh-run-equality test binds them to reality.
 
 ## Machine-readable decision block (INV-013 ADR linter input)
 
@@ -90,10 +95,14 @@ deterministic projection a fresh run must reproduce:
 - EA-003 offline-verification expectation is unverified (dotnet
   telemetry/first-run behavior untested; EA-008 opts out).
 - Unproven RIDs: osx-arm64, win-x64 (fail closed at provisioning).
-- The BND-002 pin is the SHA-256 of the release *archive*; the digest of the
-  extracted `bin/z3` binary actually executed is recorded per run
-  (`executed_solver_sha256`) rather than pinned in config — the archive pin
-  plus provisioning's extraction is the chain of custody.
+- Solver identity (QA-002): `executed_solver_sha256` is the recomputed digest
+  of the `bin/z3` binary at the option-manifest solver path — the file
+  actually executed — and `solver_archive_sha256` separately records the
+  BND-002 release-asset pin. P04 re-verifies the installed binary against the
+  digest provisioning records (`<run-root>/solver/z3-4.12.1/binary.sha256`), so
+  a post-provisioning binary substitution fails P04. The archive pin plus
+  provisioning's digest-verified extraction is the chain of custody from pin to
+  executed binary.
 - `DafnyDriver.dll` and `DafnyPipeline.dll` ship without
   `AssemblyInformationalVersion` attributes; their identity is carried by file
   digest alone (RS-008 note in the expected-loaded sets).

@@ -98,7 +98,7 @@ public static class ControlCore
 
         var report = new Dictionary<string, object?>
         {
-            ["evidence_schema_version"] = 1,
+            ["evidence_schema_version"] = 2,
             ["evidence_schema_sha256"] = Sha256File(Path.Combine(FindSpikeRoot(), "schema", "evidence-schema.json")),
             ["probe_manifest_sha256"] = Sha256File(Path.Combine(FindSpikeRoot(), "manifest", "probe-manifest.json")),
             ["run_id"] = "control-" + Guid.NewGuid().ToString("N")[..16],

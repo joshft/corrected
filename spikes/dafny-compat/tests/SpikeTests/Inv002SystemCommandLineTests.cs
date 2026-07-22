@@ -59,6 +59,12 @@ public class Inv002SystemCommandLineTests
         Assert.Contains(anchor1, anchors);
         Assert.Contains(anchor2, anchors);
 
+        // QA-004 class fix: the trust-relevant universe is declared
+        // machine-readably in the oracle (consumed by BOTH harness and test);
+        // narrowing it becomes a reviewable oracle diff, not a silent code edit.
+        Assert.Equal("deps-json-package-runtime-assets",
+            doc.RootElement.GetProperty("universe_predicate").GetProperty("id").GetString());
+
         var assemblies = doc.RootElement.GetProperty("assemblies").EnumerateArray().ToList();
         Assert.NotEmpty(assemblies);
         foreach (var asm in assemblies)
@@ -154,13 +160,22 @@ public class Inv002SystemCommandLineTests
             .OrderBy(t => t.Name, StringComparer.Ordinal).ToList();
         Assert.All(expectedSet, t => Assert.False(string.IsNullOrEmpty(t.Sha), $"expected-loaded {expectedFile}: {t.Name} has no captured digest"));
 
-        var universePrefixes = new[] { "Dafny", "Boogie", "System.CommandLine" };
+        // QA-004: the reported set is the FULL codex-F8 universe (every
+        // non-framework .deps.json package runtime asset) — no prefix filter.
+        // Set equality against the committed oracle catches substitution of ANY
+        // package assembly (System.Reactive, LanguageServer deps, etc.), not
+        // just the Dafny/Boogie/System.CommandLine subset.
         var reportedSet = doc.RootElement.GetProperty("deterministic").GetProperty("loaded_assembly_identities").EnumerateArray()
             .Select(a => (Name: a.GetProperty("simple_name").GetString()!, Sha: (string?)a.GetProperty("file_sha256").GetString()))
-            .Where(t => universePrefixes.Any(p => t.Name.StartsWith(p, StringComparison.Ordinal)))
             .OrderBy(t => t.Name, StringComparer.Ordinal).ToList();
 
         Assert.Equal(expectedSet, reportedSet); // set EQUALITY, not subset (RS-008)
+        // The universe is genuinely widened: more than the old 3-prefix subset.
+        Assert.True(reportedSet.Count > 14,
+            $"P03 universe looks narrowed ({reportedSet.Count} assemblies) — QA-004 requires the full .deps.json package set");
+        Assert.Contains(reportedSet, t => !t.Name.StartsWith("Dafny", StringComparison.Ordinal)
+                                          && !t.Name.StartsWith("Boogie", StringComparison.Ordinal)
+                                          && t.Name != "System.CommandLine");
     }
 
     // Tests INV-002/OQ-004 [integration] (codex R2-11, TA-B4): Route B anchor —

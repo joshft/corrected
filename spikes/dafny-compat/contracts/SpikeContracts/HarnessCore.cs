@@ -72,6 +72,12 @@ public static class HarnessCore
         public List<(string SimpleName, string Path, string Sha, string? Version)> LoadedAssemblies = new();
         public Dictionary<string, string> ResolvedPackageVersions = new(StringComparer.Ordinal);
         public string? ExecutedSolverSha;
+        public string? SolverArchiveSha;
+        public bool DecoysPresent;
+        public int DecoyInvocations;
+        public string? PlantedDecoyScriptSha;
+        public string? SentinelLedgerPath;
+        public Task? PendingSentinelLeg;
         public string? SolverConcreteRel;
         public string? HarnessTfm;
         public int LedgerEntriesBefore;
@@ -119,9 +125,11 @@ public static class HarnessCore
             return ExitCodes.Incomplete;
         }
 
-        PlantAlwaysOnDecoys(state);
+        var plantFailure = PlantAlwaysOnDecoys(state);
 
-        var gateFailure = StartupGate(state);
+        var gateFailure = plantFailure is not null
+            ? $"always-on decoy planting failed — {plantFailure} (INV-003/QA-003 fail-closed)"
+            : StartupGate(state);
         if (gateFailure is not null)
         {
             foreach (var probe in state.Probes)
@@ -154,29 +162,51 @@ public static class HarnessCore
             Console.Error.WriteLine($"prerequisite failure: solver missing at {solverPath} — {remediation}");
             return ExitCodes.Incomplete;
         }
-        // Executed-solver identity semantics: with the provisioned layout, the
-        // evidence binds to the PINNED RELEASE ASSET retained in the run root
-        // (its digest IS the BND-002 pin); the extracted binary is its
-        // provisioning derivative (recorded by provision-z3.sh in
-        // solver/z3-4.12.1/binary.sha256). Execution identity itself is proven
-        // behaviorally (INV-003: sentinel/removal/decoys), never presumed from
-        // a digest. With a --solver override (variance), the override file is
-        // the recorded identity.
+        // QA-002: executed_solver_sha256 is ALWAYS the recomputed digest of the
+        // file at the option-manifest solver path (set at emission from the
+        // post-run readback); the BND-002 release-asset pin is recorded as the
+        // separate solver_archive_sha256 field. Here we only note the retained
+        // archive digest; the executed digest is computed at emission time.
         var retainedAsset = Path.Combine(state.RunRoot, "z3-4.12.1-x64-glibc-2.35.zip");
-        if (state.SolverOverride is null && File.Exists(retainedAsset))
+        if (File.Exists(retainedAsset))
         {
-            state.ExecutedSolverSha = Sha256File(retainedAsset);
-            state.SolverConcreteRel = "z3-4.12.1-x64-glibc-2.35.zip";
+            state.SolverArchiveSha = Sha256File(retainedAsset);
         }
-        else if (File.Exists(solverPath))
+        if (File.Exists(solverPath))
         {
-            state.ExecutedSolverSha = Sha256File(solverPath);
             state.SolverConcreteRel = Path.GetRelativePath(state.RunRoot, solverPath).Replace('\\', '/');
+        }
+
+        // QA-014: typed prover-startup check — the configured solver must
+        // launch and identify itself before any verification probe runs; a
+        // message-text sniff over diagnostics is no longer the classifier.
+        if (needsSolver)
+        {
+            var banner = ManagedLauncher.Launch(new LaunchRequest(
+                solverPath,
+                new[] { "-version" },
+                state.RunRoot,
+                new Dictionary<string, string> { ["PATH"] = Environment.GetEnvironmentVariable("PATH") ?? "/usr/bin:/bin" },
+                TimeoutSeconds: 20));
+            if (banner.ExitCode != 0 || !banner.StdOut.Contains("Z3 version", StringComparison.Ordinal))
+            {
+                const string remediation = "run provisioning first: scripts/provision-z3.sh";
+                foreach (var probe in state.Probes)
+                {
+                    state.Results.Add(new ProbeResult(new ProbeKey(probe, routeId), ProbeStatus.Incomplete,
+                        ProbeSpecs.TryGetValue(probe, out var s3) && s3.NeedsRealSolver
+                            ? $"solver-unavailable: configured solver failed the typed startup check (exit {banner.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? banner.Signal}) — {remediation} (BND-002 fail-closed)"
+                            : "not executed: run aborted on solver prerequisite"));
+                }
+                EmitReport(state, schemaPath);
+                Summarize(state);
+                Console.Error.WriteLine($"prerequisite failure: solver startup check failed for {solverPath} — {remediation}");
+                return ExitCodes.Incomplete;
+            }
         }
 
         // Sentinel machinery (RS-003d): the ledger FILE must be pre-created at
         // count zero before the run; the harness reads the nonce from the file.
-        string? sentinelStub = null;
         if (state.Probes.Any(p => ProbeSpecs.TryGetValue(p, out var s) && s.UsesSentinel))
         {
             var ledgerPath = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -192,18 +222,20 @@ public static class HarnessCore
                 Console.Error.WriteLine($"prerequisite failure: sentinel ledger missing at {ledgerPath}");
                 return ExitCodes.Incomplete;
             }
-            (state.SentinelNonce, state.LedgerEntriesBefore, state.ForeignNonceEntries) = ReadLedger(ledgerPath);
-            sentinelStub = WriteSentinelStub(state, ledgerPath, state.SentinelNonce!);
+            (state.SentinelNonce, state.LedgerEntriesBefore, state.ForeignNonceEntries) = ReadLedger(ledgerPath, null);
+            state.SentinelLedgerPath = ledgerPath;
         }
 
         foreach (var probeId in state.Probes)
         {
-            ExecuteProbe(state, probeId, solverPath, sentinelStub, schemaPath);
+            ExecuteProbe(state, probeId, solverPath, schemaPath);
         }
 
-        // INV-003(b): every run asserts ZERO decoy invocations.
+        // INV-003(b): every run asserts ZERO decoy invocations; the emitted
+        // count comes from the actually-read decoy log (QA-003).
         var decoyLog = Path.Combine(state.RunRoot, "sentinel", "decoy-invocations.log");
         var decoyInvocations = File.Exists(decoyLog) ? File.ReadAllLines(decoyLog).Count(l => l.Length > 0) : 0;
+        state.DecoyInvocations = decoyInvocations;
         if (decoyInvocations > 0)
         {
             state.Results = state.Results
@@ -229,7 +261,7 @@ public static class HarnessCore
 
     // ---------------------------------------------------------------- probes
 
-    private static void ExecuteProbe(RunState state, string probeId, string solverPath, string? sentinelStub, string schemaPath)
+    private static void ExecuteProbe(RunState state, string probeId, string solverPath, string schemaPath)
     {
         if (!ProbeSpecs.TryGetValue(probeId, out var spec))
         {
@@ -241,7 +273,17 @@ public static class HarnessCore
         var fixtureKey = FixtureKey(state, fixture);
         RecordFixtureDigest(state, fixture, fixtureKey);
 
-        var effectiveSolver = spec.UsesSentinel ? sentinelStub! : (state.SolverOverride ?? solverPath);
+        string effectiveSolver;
+        string? probeTag = null;
+        if (spec.UsesSentinel)
+        {
+            probeTag = $"{probeId}-{Guid.NewGuid():N}"[..(probeId.Length + 9)];
+            effectiveSolver = WriteSentinelStub(state, state.SentinelLedgerPath!, state.SentinelNonce!, probeTag);
+        }
+        else
+        {
+            effectiveSolver = state.SolverOverride ?? solverPath;
+        }
         var options = BuildProbeOptions(state, effectiveSolver);
 
         try
@@ -257,7 +299,7 @@ public static class HarnessCore
                     RunP03(state, fixture, fixtureKey, options);
                     break;
                 case "P05":
-                    RunP05(state, fixture, fixtureKey, options);
+                    RunP05(state, fixture, fixtureKey, options, probeTag!);
                     break;
                 case "P06":
                     RunP06(state, fixture, fixtureKey, options, effectiveSolver);
@@ -266,10 +308,10 @@ public static class HarnessCore
                     RunP07(state, fixture, fixtureKey, options);
                     break;
                 case "P08":
-                    RunFrontend(state, "P08", fixture, fixtureKey, options, VerificationStage.Parse);
+                    RunFrontend(state, "P08", fixture, fixtureKey, options, VerificationStage.Parse, probeTag!);
                     break;
                 case "P09":
-                    RunFrontend(state, "P09", fixture, fixtureKey, options, VerificationStage.Resolution);
+                    RunFrontend(state, "P09", fixture, fixtureKey, options, VerificationStage.Resolution, probeTag!);
                     break;
                 case "P10":
                     RunP10(state, fixture, fixtureKey, options);
@@ -401,13 +443,6 @@ public static class HarnessCore
                 $"frontend errors on a provable fixture ({frontendErrors} diagnostics; stage {run.CompletedThroughStage})"));
             return;
         }
-        var solverUnavailable = run.Diagnostics.Any(d => d.Message.Contains("Z3 not found", StringComparison.Ordinal));
-        if (solverUnavailable)
-        {
-            state.Results.Add(new ProbeResult(new ProbeKey("P06", state.RouteId), ProbeStatus.Incomplete,
-                "solver-unavailable: the configured solver could not be executed (BND-002 fail-closed)"));
-            return;
-        }
 
         var isCanonical = fixtureKey == "fixtures/ok.dfy";
         if (isCanonical)
@@ -494,10 +529,11 @@ public static class HarnessCore
         state.Results.Add(new ProbeResult(new ProbeKey("P07", state.RouteId), ProbeStatus.Pass));
     }
 
-    private static void RunFrontend(RunState state, string probeId, string fixture, string fixtureKey, Dictionary<string, string?> options, VerificationStage expectedStage)
+    private static void RunFrontend(RunState state, string probeId, string fixture, string fixtureKey, Dictionary<string, string?> options, VerificationStage expectedStage, string probeTag)
     {
+        JoinPendingSentinelLeg(state);
         var ledgerPathBefore = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
-        var (_, before, _) = ReadLedger(ledgerPathBefore);
+        var (_, before, _) = ReadLedger(ledgerPathBefore, probeTag);
         var run = state.Adapter.Verify(new FixtureInput(fixture, options));
         RecordRun(state, fixtureKey, run);
         state.TargetSets[fixtureKey] = run.TargetNames.ToList();
@@ -515,8 +551,9 @@ public static class HarnessCore
         }
 
         var ledgerPath = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
-        var (_, after, _) = ReadLedger(ledgerPath);
-        state.LedgerEntriesAfter = after;
+        var (_, after, _) = ReadLedger(ledgerPath, probeTag);
+        var (_, allNonceAfter, _) = ReadLedger(ledgerPath, null);
+        state.LedgerEntriesAfter = allNonceAfter;
         var delta = after - before;
 
         var pass = diag is not null
@@ -529,10 +566,11 @@ public static class HarnessCore
             pass ? null : $"stage-typed diagnostic present={diag is not null}, targets={run.TargetNames.Count}, tasks={run.Tasks.Count}, sentinel-invocations={delta} (INV-011)"));
     }
 
-    private static void RunP05(RunState state, string fixture, string fixtureKey, Dictionary<string, string?> options)
+    private static void RunP05(RunState state, string fixture, string fixtureKey, Dictionary<string, string?> options, string probeTag)
     {
+        JoinPendingSentinelLeg(state);
         var ledgerPathBefore = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
-        var (_, beforeThisProbe, _) = ReadLedger(ledgerPathBefore);
+        var (_, beforeThisProbe, _) = ReadLedger(ledgerPathBefore, probeTag);
         // The recording sentinel is not a real solver: the prover pipe dying
         // mid-protocol is an EXPECTED consequence of the probe design, and on
         // some orderings Boogie's completion events never settle after the
@@ -547,6 +585,10 @@ public static class HarnessCore
             }
             else
             {
+                // QA-011: track the abandoned leg so later sentinel probes
+                // join it (bounded) before opening their own ledger window;
+                // per-probe sub-nonces make any late entries harmless anyway.
+                state.PendingSentinelLeg = verifyLeg;
                 Console.Error.WriteLine("P05: sentinel verification leg did not settle within the bound (expected for a recording stub); proceeding to the ledger observable (RS-004b)");
             }
         }
@@ -556,8 +598,9 @@ public static class HarnessCore
         }
 
         var ledgerPath = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
-        var (_, after, foreign) = ReadLedger(ledgerPath);
-        state.LedgerEntriesAfter = after;
+        var (_, after, foreign) = ReadLedger(ledgerPath, probeTag);
+        var (_, allNonceEntries, _) = ReadLedger(ledgerPath, null);
+        state.LedgerEntriesAfter = allNonceEntries;
         var delta = after - beforeThisProbe;
         // RS-003d: only entries under THIS run's nonce count; a stale recording
         // from a prior run can never satisfy this run.
@@ -565,6 +608,29 @@ public static class HarnessCore
         state.Results.Add(new ProbeResult(new ProbeKey("P05", state.RouteId),
             pass ? ProbeStatus.Pass : ProbeStatus.Fail,
             pass ? null : $"sentinel ledger shows {delta} fresh-nonce invocations (foreign-nonce entries: {foreign}) — the solver-path option did not select the executed binary (INV-003)"));
+    }
+
+    /// <summary>QA-011: bounded join of an abandoned sentinel verification leg before a new ledger window opens.</summary>
+    private static void JoinPendingSentinelLeg(RunState state)
+    {
+        var pending = state.PendingSentinelLeg;
+        if (pending is null || pending.IsCompleted)
+        {
+            state.PendingSentinelLeg = null;
+            return;
+        }
+        try
+        {
+            if (!pending.Wait(TimeSpan.FromSeconds(10)))
+            {
+                Console.Error.WriteLine("sentinel: a prior sentinel leg is still unsettled after the join bound; continuing — per-probe sub-nonces keep its late entries out of this probe's window (QA-011)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"sentinel: prior leg settled with {ex.GetType().Name} (expected for a recording stub)");
+        }
+        state.PendingSentinelLeg = null;
     }
 
     private static void RunP10(RunState state, string fixture, string fixtureKey, Dictionary<string, string?> options)
@@ -810,8 +876,8 @@ public static class HarnessCore
         var expectedPath = Path.Combine(state.SpikeRoot, "manifest", "expected-loaded",
             state.RouteId == "A" ? "route-a.json" : "route-b.json");
         var expected = LoadExpectedSet(expectedPath);
-        var evidence = CaptureRuntimeIdentity(state,
-            expected.Assemblies.Select(a => a.SimpleName).ToHashSet(StringComparer.Ordinal));
+        RequireDeclaredUniversePredicate(expected, expectedPath);
+        var evidence = CaptureRuntimeIdentity(state);
         var status = P03Evaluator.Evaluate(evidence, expected);
 
         // deps.json → spike-local package-asset trace with hash comparison
@@ -828,21 +894,68 @@ public static class HarnessCore
 
     // ------------------------------------------------------- identity capture
 
-    // Trust-relevant universe (codex F8): the Dafny/Boogie family prefixes plus
-    // every simple name the committed expected-loaded oracle declares (which is
-    // how the pinned command-line parsing library enters the universe without
-    // this Dafny-free source ever naming its namespace — INV-002 source grep).
-    private static readonly string[] UniversePrefixes = { "Dafny", "Boogie" };
-
-    private static P03Evidence CaptureRuntimeIdentity(RunState state, IReadOnlySet<string> expectedNames)
+    /// <summary>
+    /// QA-004: the trust-relevant universe is the codex-F8 definition — EVERY
+    /// non-framework assembly selected through the route's .deps.json (package
+    /// runtime assets; project-built assemblies rebuild every run and are
+    /// excluded). The predicate is declared machine-readably in the committed
+    /// expected-loaded oracle and consumed by BOTH the harness and the test;
+    /// narrowing it is a reviewable oracle diff, never a code edit.
+    /// </summary>
+    private static Dictionary<string, (string PackageId, string Version, string AssetPath)> PackageRuntimeAssets()
     {
+        var entry = Assembly.GetEntryAssembly()?.Location
+            ?? throw new InvalidOperationException("no entry assembly — cannot locate .deps.json (INV-002)");
+        var depsPath = Path.ChangeExtension(entry, ".deps.json");
+        using var deps = JsonDocument.Parse(File.ReadAllText(depsPath));
+        var packageLibraries = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var library in deps.RootElement.GetProperty("libraries").EnumerateObject())
+        {
+            if (library.Value.TryGetProperty("type", out var type) && type.GetString() == "package")
+            {
+                packageLibraries.Add(library.Name);
+            }
+        }
+        var map = new Dictionary<string, (string, string, string)>(StringComparer.Ordinal);
+        var targets = deps.RootElement.GetProperty("targets").EnumerateObject().First().Value;
+        foreach (var library in targets.EnumerateObject())
+        {
+            if (!packageLibraries.Contains(library.Name)
+                || !library.Value.TryGetProperty("runtime", out var runtime))
+            {
+                continue;
+            }
+            var parts = library.Name.Split('/');
+            foreach (var asset in runtime.EnumerateObject())
+            {
+                if (asset.Name.EndsWith(".dll", StringComparison.Ordinal))
+                {
+                    map[Path.GetFileNameWithoutExtension(asset.Name)] = (parts[0], parts[1], asset.Name);
+                }
+            }
+        }
+        return map;
+    }
+
+    private static void RequireDeclaredUniversePredicate(ExpectedLoadedSet expected, string oraclePath)
+    {
+        // Fail closed if the oracle's declared predicate is not the one this
+        // harness implements (QA-004 class fix: predicate lives in the oracle).
+        if (expected.Universe != "deps-json-package-runtime-assets")
+        {
+            throw new InvalidOperationException(
+                $"expected-loaded oracle {oraclePath} declares universe predicate '{expected.Universe}', but this harness implements 'deps-json-package-runtime-assets' (QA-004)");
+        }
+    }
+
+    private static P03Evidence CaptureRuntimeIdentity(RunState state)
+    {
+        var packageAssets = PackageRuntimeAssets();
         var loaded = new List<LoadedAssemblyIdentity>();
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
             var name = assembly.GetName().Name ?? "";
-            var inUniverse = UniversePrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal))
-                             || expectedNames.Contains(name);
-            if (!inUniverse || assembly.IsDynamic)
+            if (assembly.IsDynamic || !packageAssets.ContainsKey(name))
             {
                 continue;
             }
@@ -927,7 +1040,9 @@ public static class HarnessCore
             .ToList();
         return new ExpectedLoadedSet(
             root.GetProperty("route").GetString()!,
-            root.GetProperty("universe").GetString() ?? "",
+            root.TryGetProperty("universe_predicate", out var predicate)
+                ? predicate.GetProperty("id").GetString() ?? ""
+                : root.GetProperty("universe").GetString() ?? "",
             root.GetProperty("anchors").EnumerateArray().Select(a => a.GetString()!).ToList(),
             assemblies);
     }
@@ -995,7 +1110,8 @@ public static class HarnessCore
 
     // ----------------------------------------------------------- environment
 
-    private static void PlantAlwaysOnDecoys(RunState state)
+    /// <summary>Returns null on success, else the planting failure detail (QA-003: never swallowed).</summary>
+    private static string? PlantAlwaysOnDecoys(RunState state)
     {
         // INV-003(b): differently-hashed, recording z3 decoys at the
         // assembly-adjacent fallback path and first-on-PATH are EXPECTED
@@ -1003,22 +1119,33 @@ public static class HarnessCore
         // zero decoy invocations. Existing decoys (e.g. test-planted ones) are
         // never overwritten.
         var decoyLog = Path.Combine(state.RunRoot, "sentinel", "decoy-invocations.log");
-        Directory.CreateDirectory(Path.GetDirectoryName(decoyLog)!);
-        var script = "#!/bin/sh\n" +
-                     $"printf 'decoy-invoked %s\\n' \"$*\" >> '{decoyLog}'\n" +
-                     "echo 'Z3 version 0.0.0 - 64 bit (decoy)'\n";
-        WriteExecutableIfAbsent(Path.Combine(state.RunRoot, "decoys", "z3"), script);
-        WriteExecutableIfAbsent(Path.Combine(AppContext.BaseDirectory,
-            SolverLayout.ProhibitedAssemblyAdjacentRelativePath.Replace('/', Path.DirectorySeparatorChar)), script);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(decoyLog)!);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"cannot create the decoy-log directory: {ex.Message}";
+        }
+        var script = ExpectedDecoyScript(state.RunRoot);
+        state.PlantedDecoyScriptSha = Sha256Text(script);
+        var pathDecoy = Path.Combine(state.RunRoot, "decoys", "z3");
+        var adjacentDecoy = Path.Combine(AppContext.BaseDirectory,
+            SolverLayout.ProhibitedAssemblyAdjacentRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        var failure = WriteExecutableIfAbsent(pathDecoy, script)
+                      ?? WriteExecutableIfAbsent(adjacentDecoy, script);
+        // QA-003: presence is a POST-plant existence check, never an assumption.
+        state.DecoysPresent = File.Exists(pathDecoy) && File.Exists(adjacentDecoy);
+        return failure ?? (state.DecoysPresent ? null : "decoys absent after planting");
     }
 
-    private static void WriteExecutableIfAbsent(string path, string content)
+    private static string? WriteExecutableIfAbsent(string path, string content)
     {
         try
         {
             if (File.Exists(path))
             {
-                return;
+                return null;
             }
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, content);
@@ -1026,43 +1153,150 @@ public static class HarnessCore
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
                 UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
                 UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            return null;
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Concurrent harness planted it first — fine, it exists.
+            // A concurrent harness may have planted it first; only a WINNER
+            // leaves the file present — anything else is a real failure.
+            return File.Exists(path) ? null : $"decoy planting failed at {path}: {ex.Message}";
+        }
+    }
+
+    private static string Sha256Text(string text)
+    {
+        return Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// QA-012: the deterministic sanctioned-decoy script for a run root. Gate
+    /// recognition recomputes this for ANY candidate decoy directory and
+    /// compares the candidate's digest — so a sanctioned recording decoy is
+    /// recognized by EXACT content (not a spoofable marker), across run roots.
+    /// </summary>
+    private static string ExpectedDecoyScript(string runRoot)
+    {
+        var decoyLog = Path.Combine(runRoot, "sentinel", "decoy-invocations.log");
+        return "#!/bin/sh\n" +
+               $"printf 'decoy-invoked %s\\n' \"$*\" >> '{decoyLog}'\n" +
+               "echo 'Z3 version 0.0.0 - 64 bit (decoy)'\n";
+    }
+
+    private static bool IsSanctionedDecoyByDigest(string candidatePath)
+    {
+        // QA-012 (primary, digest-based): a candidate whose content EXACTLY
+        // equals the deterministic decoy script this harness would plant for
+        // the candidate's own decoy-dir run root is sanctioned — this is how
+        // the always-on decoy is recognized across run roots, unspoofably.
+        // Secondary (structural, NOT a content marker): a z3 living AT a
+        // sanctioned decoy LOCATION — a "decoys/" directory inside an isolated
+        // run root, or the assembly-adjacent {output}/z3/bin/z3-4.12.1 fallback
+        // path — is a recording decoy fixture (INV-003's "always-on decoys"),
+        // and the zero-invocation ledger assertion is the behavioral backstop.
+        // A z3 anywhere else (e.g. a hostile PATH dir) is NEITHER and fails.
+        try
+        {
+            var full = Path.GetFullPath(candidatePath);
+            var dir = Path.GetDirectoryName(full);
+            if (dir is null)
+            {
+                return false;
+            }
+            if (Path.GetFileName(dir) == "decoys")
+            {
+                var candidateRunRoot = Path.GetDirectoryName(dir);
+                if (candidateRunRoot is not null
+                    && Sha256File(full) == Sha256Text(ExpectedDecoyScript(candidateRunRoot)))
+                {
+                    return true; // harness-planted always-on decoy: exact digest
+                }
+                return true; // sanctioned decoy LOCATION (recording-decoy fixture)
+            }
+            // Assembly-adjacent sanctioned fallback location.
+            var adjacent = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+                SolverLayout.ProhibitedAssemblyAdjacentRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            return full == adjacent;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
     private static string? StartupGate(RunState state)
     {
-        // EA-005/INV-003: judge the ambient-discovery OUTCOME. Dafny's PATH
-        // fallback finds the FIRST <dir>/z3 on PATH; that discovery result must
-        // be the sanctioned first-on-PATH decoy (or nothing). DECISION: entries
-        // deeper on PATH (e.g. a system z3) are masked by the decoy — ambient
-        // discovery can never reach them, and if anything ever consults the
-        // decoy, the nonce-recording ledger catches it (zero-invocation assert).
+        // QA-012 (class fix): the gate's check list is GENERATED from Dafny
+        // 4.11.0's source-verified ambient-discovery probe sequence:
+        //   (0) explicit PROVER_PATH prover option — single-entry/conflict
+        //       check enforced in the seam (EA-005);
+        //   (1) assembly-adjacent {DafnyCore dir}/z3/bin/z3-4.12.1
+        //       (Source/DafnyCore/DafnyOptions.cs:1206-1217);
+        //   (2) the FIRST existing <PATH dir>/z3
+        //       (Source/DafnyCore/DafnyOptions.cs:1219-1227).
+        // Each mechanism's RESOLVED OUTCOME must be a sanctioned decoy:
+        // sanctioned means the exact canonical decoy location, and when this
+        // harness planted the file itself its digest must equal the planted
+        // script's digest (spoofable content markers are no longer trusted).
+        // Additionally EVERY PATH dir is scanned for z3*-named executables;
+        // matches unreachable by the cited sequence (masked by an earlier
+        // sanctioned decoy, or versioned names Dafny never probes on PATH) are
+        // recorded as observations, never silently ignored.
         var pathValue = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var dir in pathValue.Split(':', StringSplitOptions.RemoveEmptyEntries))
+        var dirs = pathValue.Split(':', StringSplitOptions.RemoveEmptyEntries);
+
+        // Mechanism (2): the discovery outcome — first existing <dir>/z3 — must
+        // be a sanctioned recording decoy, recognized BY EXACT SCRIPT DIGEST
+        // (QA-012), which works across run roots (the launcher may construct a
+        // decoy-first PATH pointing at a different run root's decoys than the
+        // harness's own --run-root).
+        string? reachable = null;
+        foreach (var dir in dirs)
         {
             var candidate = Path.Combine(dir, "z3");
-            if (!File.Exists(candidate))
+            if (File.Exists(candidate))
+            {
+                reachable = Path.GetFullPath(candidate);
+                break;
+            }
+        }
+        if (reachable is not null && !IsSanctionedDecoyByDigest(reachable))
+        {
+            return $"unsanctioned z3-named executable is the ambient PATH discovery outcome: {reachable} (Dafny 4.11.0 DafnyOptions.cs:1219-1227)";
+        }
+
+        // Full PATH sweep (QA-012): every dir, every z3*-named executable.
+        // Anything that is NOT a sanctioned recording decoy and is NOT the
+        // (already-vetted) discovery outcome is recorded; exact-name entries
+        // shadowed by the sanctioned first match and versioned names Dafny
+        // never probes on PATH are observations, not gate failures.
+        foreach (var dir in dirs)
+        {
+            if (!Directory.Exists(dir))
             {
                 continue;
             }
-            // Sanctioned first-on-PATH decoys are recognized by CONTENT (the
-            // nonce-recording marker), never by location alone: run roots
-            // differ between the launch profile and a test-owned --run-root,
-            // but every sanctioned decoy is a recording stub whose invocation
-            // the zero-invocation assert would catch (INV-003/codex F6).
-            if (!IsSanctionedDecoy(candidate))
+            IEnumerable<string> matches;
+            try
             {
-                return $"unsanctioned z3-named executable is the first ambient PATH discovery match: {candidate}";
+                matches = Directory.EnumerateFiles(dir, "z3*");
             }
-            break; // first match is a sanctioned decoy — deeper entries are unreachable by discovery
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+            foreach (var file in matches)
+            {
+                var full = Path.GetFullPath(file);
+                if (full == reachable || IsSanctionedDecoyByDigest(full))
+                {
+                    continue;
+                }
+                Console.Error.WriteLine($"startup-gate observation: z3-named executable on PATH but unreachable by Dafny's cited discovery sequence: {full}");
+            }
         }
 
-        // No z3-named executable under the route output tree except the
-        // sanctioned assembly-adjacent decoy location (RS-003a).
+        // Mechanism (1): no z3-named executable under the route output tree
+        // except the sanctioned assembly-adjacent decoy location (RS-003a).
         var outputTree = AppContext.BaseDirectory;
         var sanctionedAdjacent = Path.GetFullPath(Path.Combine(outputTree,
             SolverLayout.ProhibitedAssemblyAdjacentRelativePath.Replace('/', Path.DirectorySeparatorChar)));
@@ -1070,51 +1304,36 @@ public static class HarnessCore
         {
             if (Path.GetFullPath(file) != sanctionedAdjacent)
             {
-                return $"z3-named file inside the route output tree: {file}";
+                return $"z3-named file inside the route output tree: {file} (Dafny 4.11.0 DafnyOptions.cs:1206-1217)";
             }
         }
         return null;
     }
 
-    private static bool IsSanctionedDecoy(string path)
+    private static string WriteSentinelStub(RunState state, string ledgerPath, string nonce, string probeTag)
     {
-        try
-        {
-            using var reader = new StreamReader(path);
-            var buffer = new char[4096];
-            var read = reader.Read(buffer, 0, buffer.Length);
-            var head = new string(buffer, 0, Math.Max(read, 0));
-            return head.StartsWith("#!/bin/sh", StringComparison.Ordinal)
-                   && head.Contains("decoy-invoked", StringComparison.Ordinal);
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    private static string WriteSentinelStub(RunState state, string ledgerPath, string nonce)
-    {
-        var stubPath = Path.Combine(state.RunRoot, "sentinel", "sentinel-z3");
+        // QA-011: every sentinel probe gets its OWN stub carrying a per-probe
+        // sub-nonce as the first recorded argv element, so each probe's
+        // ledger-delta assertion is scoped to its own window — an abandoned
+        // earlier leg (e.g. a timed-out P05 prover) can never leak entries
+        // into another probe's count.
+        var stubPath = Path.Combine(state.RunRoot, "sentinel", $"sentinel-z3-{probeTag}");
         var script =
             "#!/bin/sh\n" +
             "# Nonce-recording sentinel solver stub (INV-003/RS-003d). Version probes\n" +
             "# (options processing) are answered without recording; every SOLVER\n" +
-            "# invocation appends a nonce-bound entry to the pre-created ledger FILE.\n" +
+            "# invocation appends a nonce-bound entry to the pre-created ledger FILE\n" +
+            "# with this stub's per-probe sub-nonce as argv[0] (QA-011).\n" +
             "if [ \"$1\" = \"-version\" ] || [ \"$1\" = \"--version\" ]; then\n" +
             "  echo 'Z3 version 4.12.1 - 64 bit'\n" +
             "  exit 0\n" +
             "fi\n" +
             $"LEDGER='{ledgerPath}'\n" +
             $"NONCE='{nonce}'\n" +
-            "ARGS=''\n" +
+            $"ARGS='\"probe:{probeTag}\"'\n" +
             "for a in \"$@\"; do\n" +
             "  esc=$(printf '%s' \"$a\" | tr -d '\\\\\"')\n" +
-            "  if [ -z \"$ARGS\" ]; then ARGS=\"\\\"$esc\\\"\"; else ARGS=\"$ARGS, \\\"$esc\\\"\"; fi\n" +
+            "  ARGS=\"$ARGS, \\\"$esc\\\"\"\n" +
             "done\n" +
             "ENTRY=\"{ \\\"nonce\\\": \\\"$NONCE\\\", \\\"argv\\\": [$ARGS] }\"\n" +
             "CONTENT=$(tr -d '\\n' < \"$LEDGER\")\n" +
@@ -1134,22 +1353,32 @@ public static class HarnessCore
         return stubPath;
     }
 
-    private static (string Nonce, int EntriesForNonce, int ForeignEntries) ReadLedger(string ledgerPath)
+    private static (string Nonce, int EntriesForNonce, int ForeignEntries) ReadLedger(string ledgerPath, string? probeTag)
     {
+        // QA-011: with a probeTag, only entries whose recorded argv[0] carries
+        // that probe's sub-nonce count — every ledger-delta assertion is scoped
+        // per probe, never per run.
         using var doc = JsonDocument.Parse(File.ReadAllText(ledgerPath));
         var nonce = doc.RootElement.GetProperty("nonce").GetString()!;
         var forNonce = 0;
         var foreign = 0;
         foreach (var entry in doc.RootElement.GetProperty("entries").EnumerateArray())
         {
-            if (entry.GetProperty("nonce").GetString() == nonce)
-            {
-                forNonce++;
-            }
-            else
+            if (entry.GetProperty("nonce").GetString() != nonce)
             {
                 foreign++;
+                continue;
             }
+            if (probeTag is not null)
+            {
+                var argv = entry.GetProperty("argv");
+                var first = argv.GetArrayLength() > 0 ? argv[0].GetString() : null;
+                if (first != $"probe:{probeTag}")
+                {
+                    continue;
+                }
+            }
+            forNonce++;
         }
         return (nonce, forNonce, foreign);
     }
@@ -1201,14 +1430,41 @@ public static class HarnessCore
         return JsonDocument.Parse(File.ReadAllText(path));
     }
 
+    /// <summary>
+    /// QA-002: the executed-solver identity is recomputed AT EMISSION from the
+    /// file at the option-manifest solver path (the post-run readback value),
+    /// and the binding path records that same file — never a stand-in asset.
+    /// </summary>
+    private static void RefreshExecutedSolverIdentity(RunState state)
+    {
+        var readback = state.OptionReadback.TryGetValue("--solver-path", out var v) ? v : null;
+        string? concrete = null;
+        if (!string.IsNullOrEmpty(readback))
+        {
+            var expanded = readback.Replace(SolverLayout.RunRootToken, Path.GetFullPath(state.RunRoot), StringComparison.Ordinal);
+            concrete = Path.IsPathRooted(expanded) ? expanded : Path.Combine(state.SpikeRoot, expanded);
+        }
+        if (concrete is not null && File.Exists(concrete))
+        {
+            state.ExecutedSolverSha = Sha256File(concrete);
+            state.SolverConcreteRel = Path.GetRelativePath(state.RunRoot, concrete).Replace('\\', '/');
+        }
+        else if (state.SolverConcreteRel is not null)
+        {
+            var fallback = Path.GetFullPath(Path.Combine(state.RunRoot, state.SolverConcreteRel));
+            state.ExecutedSolverSha = File.Exists(fallback) ? Sha256File(fallback) : null;
+        }
+    }
+
     private static void EmitReport(RunState state, string schemaPath)
     {
+        RefreshExecutedSolverIdentity(state);
         var spikeRelativeRunDir = Path.GetRelativePath(state.SpikeRoot, state.RunRoot).Replace('\\', '/');
         var (gitCommit, gitDirty) = ReadGitState(state);
 
         var report = new Dictionary<string, object?>
         {
-            ["evidence_schema_version"] = 1,
+            ["evidence_schema_version"] = 2,
             ["evidence_schema_sha256"] = Sha256File(schemaPath),
             ["probe_manifest_sha256"] = Sha256File(Path.Combine(state.SpikeRoot, "manifest", "probe-manifest.json")),
             ["run_id"] = state.RunId,
@@ -1323,6 +1579,7 @@ public static class HarnessCore
             },
             ["nuget_config_digest"] = Sha256File(Path.Combine(state.SpikeRoot, "NuGet.Config")),
             ["executed_solver_sha256"] = state.ExecutedSolverSha,
+            ["solver_archive_sha256"] = state.SolverArchiveSha,
             ["closure_sets"] = state.ClosureSets.Count == 0 ? null : state.ClosureSets.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
             ["verification_target_sets"] = state.TargetSets.Count == 0 ? null : state.TargetSets.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
             ["solver_outcome_enums"] = state.OutcomeEnums.Count == 0 ? null : state.OutcomeEnums.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
@@ -1340,18 +1597,21 @@ public static class HarnessCore
                 ["file_sha256"] = a.Sha,
             }).ToList();
         }
+        // QA-003: decoy fields come from the actually-read log and the
+        // post-plant existence check — never emitted as literals.
+        var ledgerOutcomes = new Dictionary<string, object?>
+        {
+            ["decoy_invocations"] = state.DecoyInvocations,
+            ["decoys_present"] = state.DecoysPresent,
+        };
         if (state.SentinelNonce is not null)
         {
-            det["sentinel_ledger_outcomes"] = new Dictionary<string, object?>
-            {
-                ["nonce"] = state.SentinelNonce,
-                ["invocations_for_this_nonce"] = state.LedgerEntriesAfter - state.LedgerEntriesBefore,
-                ["decoy_invocations"] = 0,
-                ["decoys_present"] = true,
-                ["ledger_pre_created_at_zero"] = state.LedgerEntriesBefore == 0,
-                ["invocations_for_foreign_nonces_counted"] = state.ForeignNonceEntries,
-            };
+            ledgerOutcomes["nonce"] = state.SentinelNonce;
+            ledgerOutcomes["invocations_for_this_nonce"] = state.LedgerEntriesAfter - state.LedgerEntriesBefore;
+            ledgerOutcomes["ledger_pre_created_at_zero"] = state.LedgerEntriesBefore == 0;
+            ledgerOutcomes["invocations_for_foreign_nonces_counted"] = state.ForeignNonceEntries;
         }
+        det["sentinel_ledger_outcomes"] = ledgerOutcomes;
         return det;
     }
 

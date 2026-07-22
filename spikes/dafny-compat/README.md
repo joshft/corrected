@@ -62,6 +62,16 @@ Route harness children (`Corrected.Spike.Contracts.ExitCodes`):
 | 20 | INCOMPLETE (typed cause in the report) |
 | unknown code / signal death | crash variant — never pass, never refutation |
 
+Controller (`scripts/run-spike.sh`) run-level exit (QA-008 — fail-closed for CI
+wiring, matching the report/summary):
+
+| exit | meaning |
+|------|---------|
+| 0 | all route children passed and (canonical runs) the suite passed |
+| 1 | a route child failed, the aggregator failed, or the suite failed |
+| 20 | INCOMPLETE — a prerequisite/wall-clock fault (synthetic report emitted) |
+| 30 | refused: unhardened invocation (use `env -i HOME=… bash -p`) |
+
 The full exit/report consistency matrix (including "failure exit + all-pass
 report ⇒ never COMPATIBLE") is committed in
 `schema/evidence-schema.json → route_outcome_algebra.exit_report_matrix`.
@@ -128,14 +138,22 @@ empty launch environments the tests construct.
 variance-mode runs — the form every in-suite nested launch uses, which also
 prevents unbounded recursion — record `unknown`, so their route verdicts are
 INCOMPLETE by construction and never citable as COMPATIBLE. The committed
-evidence sample is regenerated in variance mode so the fresh-run-equality
-comparison is like-for-like.
+evidence sample is a PAIR (QA-006 amendment): a **variance-mode** sample
+(`evidence/samples/run-report.sample.json`, full class-2 equality) and a
+**canonical-run** sample (`run-report.canonical.sample.json`, whose equality
+masks only the schema-declared suite-status subtree —
+`schema/evidence-schema.json → suite_status_mask`). ADR-0001's verdict
+citations use the canonical sample. `scripts/regen-sample.sh` regenerates both
+and refuses a dirty tree (QA-001).
 
-**Solver identity digests:** `config/z3-pin.json` pins the SHA-256 of the
-official release *archive* (BND-002 intake check); the digest of the extracted
-`bin/z3` binary actually executed is recorded per run as
-`executed_solver_sha256` and written by provisioning to
-`<run-root>/solver/z3-4.12.1/binary.sha256`.
+**Solver identity digests (QA-002):** `config/z3-pin.json` pins the SHA-256 of
+the official release *archive* (BND-002 intake check), recorded per run as the
+`solver_archive_sha256` field. The separate `executed_solver_sha256` field is
+the recomputed digest of the `bin/z3` binary at the option-manifest solver path
+— the file actually executed — recomputed at emission and re-verified by P04
+against the digest provisioning records in
+`<run-root>/solver/z3-4.12.1/binary.sha256` (so a post-provisioning binary
+substitution fails P04, not just P05–P07).
 
 ## Layout
 

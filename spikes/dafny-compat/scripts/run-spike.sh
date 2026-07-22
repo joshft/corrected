@@ -43,7 +43,7 @@
 #   reports/                    route-a.json, route-b.json, control-*.json, run-report.json
 #   solver/z3-4.12.1/bin/z3     provisioned solver (INV-003)
 #   build/<Project>/...         ALL build outputs (DD-008; stale repo-local bin unreachable)
-ALLOWLIST=(bash dotnet curl sha256sum tar unzip git mkdir mktemp mv chmod setsid kill sleep)
+ALLOWLIST=(bash dotnet curl sha256sum tar unzip git mkdir mktemp mv rm chmod setsid kill sleep)
 
 run_cmd() {
   local cmd="$1"; shift
@@ -121,6 +121,47 @@ sha_of() {
   read -r digest rest < <(run_cmd sha256sum -- "$file")
   printf '%s' "$digest"
 }
+
+# QA-014(2)/QA-007 shared helper: find the session-leader descendant of a pid
+# (the phase's pgid) by walking /proc with bash builtins only.
+find_session_leader() { # ancestor-pid -> prints leader pid or nothing
+  local ancestor="$1" statfile content rest pid ppid
+  local -A parent=()
+  for statfile in /proc/[0-9]*/stat; do
+    [ -r "$statfile" ] || continue
+    content="$(< "$statfile")" 2>/dev/null || continue
+    pid="${content%% *}"
+    rest="${content##*) }"
+    read -r _ ppid _ _ <<< "$rest"
+    parent[$pid]="$ppid"
+  done
+  local candidate cur depth
+  for candidate in "${!parent[@]}"; do
+    cur="$candidate"
+    depth=0
+    while [ -n "${parent[$cur]:-}" ] && [ "$depth" -lt 32 ]; do
+      if [ "${parent[$cur]}" = "$ancestor" ] || [ "$cur" = "$ancestor" ]; then
+        # is the candidate a session leader? (sid == pid, field 6 of stat)
+        if [ -r "/proc/$candidate/stat" ]; then
+          content="$(< "/proc/$candidate/stat")" 2>/dev/null || break
+          rest="${content##*) }"
+          read -r _ _ _ sid _ <<< "$rest"
+          # rest fields: state ppid pgrp session ...
+          read -r _ _ pgrp sess _ <<< "$rest"
+          if [ "$sess" = "$candidate" ]; then
+            printf '%s' "$candidate"
+            return 0
+          fi
+        fi
+        break
+      fi
+      cur="${parent[$cur]}"
+      depth=$((depth + 1))
+    done
+  done
+  return 1
+}
+
 
 config_int() { # file key default
   local line value
@@ -256,13 +297,13 @@ GIT_COMMIT="${GIT_COMMIT:-unknown}"
 GIT_DIRTY="${GIT_DIRTY:-false}"
 RUN_DIR_REL=""
 
-write_failed_report() { # path detail-prefix detail-suffix
-  local target="$1" detail="$2" sigtext="$3"
+write_failed_report() { # path cause detail-prefix detail-suffix
+  local target="$1" cause="$2" detail="$3" sigtext="$4"
   local target_dir="${target%/*}"
   if [ "$target_dir" != "$target" ]; then run_cmd mkdir -p -- "$target_dir"; fi
   {
     printf '{\n'
-    printf '  "evidence_schema_version": 1,\n'
+    printf '  "evidence_schema_version": 2,\n'
     printf '  "evidence_schema_sha256": "%s",\n' "$SCHEMA_SHA"
     printf '  "probe_manifest_sha256": "%s",\n' "$MANIFEST_SHA"
     printf '  "run_id": "%s",\n' "$SPIKE_RUN_ID"
@@ -271,8 +312,8 @@ write_failed_report() { # path detail-prefix detail-suffix
       "$(json_escape "$RUN_DIR_REL")" "$(json_escape "$GIT_COMMIT")" "$GIT_DIRTY" "$(json_escape "$SDK_PIN")"
     printf '  "deterministic": {\n'
     printf '    "route_verdicts": [\n'
-    printf '      { "route": "A", "state": "INCOMPLETE", "verdict_reason": { "variant": "prerequisite-failure", "cause": "WallClockExpiry", "detail": "%s%s" } },\n' "$(json_escape "$detail")" "$(json_escape "$sigtext")"
-    printf '      { "route": "B", "state": "INCOMPLETE", "verdict_reason": { "variant": "prerequisite-failure", "cause": "WallClockExpiry", "detail": "%s%s" } }\n' "$(json_escape "$detail")" "$(json_escape "$sigtext")"
+    printf '      { "route": "A", "state": "INCOMPLETE", "verdict_reason": { "variant": "prerequisite-failure", "cause": "%s", "detail": "%s%s" } },\n' "$(json_escape "$cause")" "$(json_escape "$detail")" "$(json_escape "$sigtext")"
+    printf '      { "route": "B", "state": "INCOMPLETE", "verdict_reason": { "variant": "prerequisite-failure", "cause": "%s", "detail": "%s%s" } }\n' "$(json_escape "$cause")" "$(json_escape "$detail")" "$(json_escape "$sigtext")"
     printf '    ],\n'
     printf '    "per_probe_results": [],\n'
     printf '    "final_suite_status": "unknown"\n'
@@ -306,12 +347,20 @@ if [ "$INNER" = 0 ]; then
   read -r UPTIME_START _ < /proc/uptime
   UPTIME_START="${UPTIME_START%.*}"
   DEADLINE=$((UPTIME_START + WALL_BOUND))
+  # QA-007: the inner controller's per-phase supervisor owns the exact deadline
+  # and writes a phase-specific synthetic report (e.g. "build phase exceeded").
+  # The OUTER watchdog is the BACKSTOP for a wedged inner that cannot
+  # self-supervise, so it waits a grace window PAST the deadline before acting
+  # — letting the inner's per-phase kill + report win the normal case.
+  OUTER_GRACE=20
+  OUTER_DEADLINE=$((DEADLINE + OUTER_GRACE))
 
   PID_FILE="$RUN_ROOT/.inner-pid"
   INNER_ARGS=(__inner --config "$CONFIG_FILE" --run-root "$RUN_ROOT" --out "$OUT_PATH" --run-id "$SPIKE_RUN_ID" --nonce "$SPIKE_NONCE")
   if [ -n "$SOLVER_OVERRIDE" ]; then INNER_ARGS+=(--solver "$SOLVER_OVERRIDE"); fi
   if [ "$CANONICAL" = 1 ]; then export SPIKE_CANONICAL=1; else export SPIKE_CANONICAL=0; fi
   export SPIKE_PID_FILE="$PID_FILE"
+  export SPIKE_DEADLINE="$DEADLINE"
   run_cmd setsid -w bash -p -- "$SCRIPT_SELF" "${INNER_ARGS[@]}" &
   WRAPPER_PID=$!
 
@@ -323,10 +372,16 @@ if [ "$INNER" = 0 ]; then
     fi
     read -r NOW _ < /proc/uptime
     NOW="${NOW%.*}"
-    if [ "$NOW" -ge "$DEADLINE" ]; then
+    if [ "$NOW" -ge "$OUTER_DEADLINE" ]; then
       TIMED_OUT=1
       INNER_PID=""
       if [ -f "$PID_FILE" ]; then read -r INNER_PID < "$PID_FILE" || true; fi
+      # QA-014(2): if the PID file has not landed yet (race), fall back to the
+      # session leader descended from the wrapper so the sweep still hits the
+      # whole inner process group.
+      if [ -z "$INNER_PID" ]; then
+        INNER_PID="$(find_session_leader "$WRAPPER_PID" || true)"
+      fi
       if [ -n "$INNER_PID" ]; then
         kill -TERM -- "-$INNER_PID" 2>/dev/null || true
         DELIVERED="SIGTERM"
@@ -348,9 +403,9 @@ if [ "$INNER" = 0 ]; then
 
   if [ "$TIMED_OUT" = 1 ]; then
     GIT_COMMIT="$(run_cmd git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf 'unknown')"
-    write_failed_report "$OUT_PATH" "INCOMPLETE: wall-clock bound of ${WALL_BOUND}s exceeded on the /proc/uptime monotonic deadline; supervisor delivered " "$DELIVERED (RS-015)"
+    write_failed_report "$OUT_PATH" WallClockExpiry "INCOMPLETE: wall-clock bound of ${WALL_BOUND}s exceeded on the /proc/uptime monotonic deadline; supervisor delivered " "$DELIVERED (RS-015)"
     if [ "$OUT_PATH" != "$RUN_ROOT/reports/run-report.json" ]; then
-      write_failed_report "$RUN_ROOT/reports/run-report.json" "INCOMPLETE: wall-clock bound of ${WALL_BOUND}s exceeded on the /proc/uptime monotonic deadline; supervisor delivered " "$DELIVERED (RS-015)"
+      write_failed_report "$RUN_ROOT/reports/run-report.json" WallClockExpiry "INCOMPLETE: wall-clock bound of ${WALL_BOUND}s exceeded on the /proc/uptime monotonic deadline; supervisor delivered " "$DELIVERED (RS-015)"
     fi
     echo "run-spike: INCOMPLETE — wall-clock bound exceeded; supervisor delivered $DELIVERED" >&2
     exit 20
@@ -360,11 +415,28 @@ fi
 
 # --- INNER CONTROLLER ----------------------------------------------------------
 RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
+# QA-014(2): the PID file is written FIRST, before any slow work, so the outer
+# watchdog can always find (and TERM->KILL) this session; the outer also has a
+# session-leader fallback if it reads before this line lands.
 printf '%s\n' "$$" > "${SPIKE_PID_FILE:-$RUN_ROOT/.inner-pid}"
 if [ -z "$SPIKE_RUN_ID" ] || [ -z "$SPIKE_NONCE" ]; then
   echo "run-spike: inner controller requires --run-id and --nonce from the watchdog parent" >&2
   exit 20
 fi
+
+# QA-007: the inner controller holds the SAME single absolute /proc/uptime
+# deadline the outer watchdog was minted with (passed via SPIKE_DEADLINE), and
+# supervises EVERY phase in its own setsid group against it — so a hang in a
+# NON-probe phase (provision, restore, build, test, aggregation) is
+# independently killable, not only a hung probe. The outer watchdog remains the
+# ultimate backstop parenting this session.
+: "${SPIKE_DEADLINE:?inner requires SPIKE_DEADLINE from the watchdog parent}"
+
+phase_guard() { # phase-name exit-code
+  if [ "$2" = 124 ]; then
+    fail_run WallClockExpiry "$1 phase exceeded the ${WALL_BOUND}s wall-clock bound on the /proc/uptime monotonic deadline; per-phase supervisor delivered ${SPIKE_PHASE_SIGNALS:-SIGKILL} (QA-007/RS-015)"
+  fi
+}
 case "$RUN_ROOT" in
   "$SPIKE_ROOT"/*) RUN_DIR_REL="${RUN_ROOT#"$SPIKE_ROOT"/}" ;;
   *) RUN_DIR_REL="$RUN_ROOT" ;;
@@ -448,6 +520,42 @@ $entry"
   run_cmd mv -- "$RUN_ROOT/receipts/env-audit.json.tmp" "$RUN_ROOT/receipts/env-audit.json"
 }
 
+# QA-007: every phase runs in its OWN setsid session; this supervisor tracks
+# the per-phase PGID (written deterministically to a pidfile by the phase's own
+# session leader — no /proc walking) and enforces the single absolute
+# /proc/uptime deadline with TERM->KILL escalation, so a hang in ANY phase
+# (provision, restore, build, test, probes, aggregation) is independently
+# killable even though each phase is detached in its own session.
+SPIKE_PHASE_TIMED_OUT=0
+SPIKE_PHASE_SIGNALS=""
+supervise_phase() { # wrapper-pid pgid-file
+  local wrapper="$1" pgidfile="$2" pgid="" now
+  while :; do
+    if ! kill -0 "$wrapper" 2>/dev/null; then
+      return 0
+    fi
+    read -r now _ < /proc/uptime
+    now="${now%.*}"
+    if [ -n "${SPIKE_DEADLINE:-}" ] && [ "$now" -ge "$SPIKE_DEADLINE" ]; then
+      SPIKE_PHASE_TIMED_OUT=1
+      pgid=""
+      [ -f "$pgidfile" ] && read -r pgid < "$pgidfile" || true
+      if [ -n "$pgid" ]; then
+        kill -TERM -- "-$pgid" 2>/dev/null || true
+        SPIKE_PHASE_SIGNALS="SIGTERM"
+        run_cmd sleep 5
+        if kill -0 -- "-$pgid" 2>/dev/null; then
+          kill -KILL -- "-$pgid" 2>/dev/null || true
+          SPIKE_PHASE_SIGNALS="SIGTERM then SIGKILL"
+        fi
+      fi
+      kill -KILL "$wrapper" 2>/dev/null || true
+      return 124
+    fi
+    run_cmd sleep 1
+  done
+}
+
 run_with_env() { # class + a full dispatch invocation (audited statically)
   local class="$1"; shift
   if [ "$1" = "run_cmd" ]; then shift; fi
@@ -467,6 +575,23 @@ run_with_env() { # class + a full dispatch invocation (audited statically)
     LAUNCH_VALS+=("$RUN_ROOT/run-context.json")
   fi
   audit_launch "$class" "$1"
+
+  local cmd="$1"; shift
+  local base="${cmd##*/}"
+  local ok="" allowed
+  for allowed in "${ALLOWLIST[@]}"; do
+    if [ "$base" = "$allowed" ]; then ok=1; fi
+  done
+  if [ -z "$ok" ]; then
+    echo "run-spike: DENY non-allowlisted command: $cmd (PRH-004)" >&2
+    exit 20
+  fi
+  if [ "$base" = "$cmd" ] && [ "$base" = "dotnet" ]; then
+    cmd="$SPIKE_DOTNET_BIN"
+  fi
+
+  local pgidfile
+  pgidfile="$(run_cmd mktemp "$RUN_ROOT/receipts/phase-pgid.XXXXXX")"
   (
     local i v keep
     for i in "${!LAUNCH_KEYS[@]}"; do
@@ -480,16 +605,34 @@ run_with_env() { # class + a full dispatch invocation (audited statically)
       case "$v" in PWD|SHLVL|_|PATH) keep=1 ;; esac
       if [ -z "$keep" ]; then unset "$v" 2>/dev/null || true; fi
     done
-    run_cmd "$@"
-  )
+    # Per-phase session (QA-007): setsid makes the inner bash the session /
+    # process-group leader; it records its own PID ($$ == PGID) so the
+    # supervisor can TERM->KILL the entire group deterministically, then execs
+    # the phase command in that group.
+    exec setsid -w bash -c 'echo $$ > "$1"; shift 1; exec "$@"' _ "$pgidfile" "$cmd" "$@"
+  ) &
+  local wrapper=$!
+  # run_with_env is always invoked under the caller's `set +e`; keep it that
+  # way internally so a killed-phase wait or a benign rm never aborts the
+  # controller before phase_guard can classify the timeout (QA-007).
+  local sup_rc=0
+  supervise_phase "$wrapper" "$pgidfile" || sup_rc=$?
+  wait "$wrapper" 2>/dev/null
+  local phase_rc=$?
+  run_cmd rm -f "$pgidfile" 2>/dev/null || true
+  if [ "$sup_rc" = 124 ]; then
+    return 124
+  fi
+  return "$phase_rc"
 }
 
-fail_run() { # detail
-  write_failed_report "$OUT_PATH" "INCOMPLETE: $1" ""
+fail_run() { # cause detail — QA-005: each site names its true typed cause
+  local cause="$1" detail="$2"
+  write_failed_report "$OUT_PATH" "$cause" "INCOMPLETE: $detail" ""
   if [ "$OUT_PATH" != "$RUN_ROOT/reports/run-report.json" ]; then
-    write_failed_report "$RUN_ROOT/reports/run-report.json" "INCOMPLETE: $1" ""
+    write_failed_report "$RUN_ROOT/reports/run-report.json" "$cause" "INCOMPLETE: $detail" ""
   fi
-  echo "run-spike: INCOMPLETE — $1" >&2
+  echo "run-spike: INCOMPLETE — $detail" >&2
   exit 20
 }
 
@@ -499,7 +642,7 @@ run_cmd bash -p "$SCRIPT_DIR/provision-z3.sh" --run-root "$RUN_ROOT" >&2
 PROVISION_EXIT=$?
 set -e
 if [ "$PROVISION_EXIT" -ne 0 ]; then
-  fail_run "provisioning failed (exit $PROVISION_EXIT) — run provisioning first: scripts/provision-z3.sh (BND-002 fail-closed)"
+  fail_run PrerequisiteFailure "provisioning failed (exit $PROVISION_EXIT) — run provisioning first: scripts/provision-z3.sh (BND-002 fail-closed)"
 fi
 
 # --- phase: locked restore (evidentiary; spike-local packages folder, EA-008) ---
@@ -511,6 +654,33 @@ set +e
 run_with_env restore run_cmd dotnet restore DafnyCompatSpike.sln --configfile NuGet.Config -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL" >&2
 RESTORE_EXIT=$?
 set -e
+phase_guard restore "$RESTORE_EXIT"
+# QA-009: P01 is derived PER PARTITION, never a single solution-wide exit
+# stamped onto both. On a clean solution restore both partitions pass; on a
+# failure, each route's own project graph is re-validated independently in
+# locked mode so a Route-B-only lock fault attributes only to P01(B) — the
+# R4-07 non-veto property holds at the attestation level (the run still fails
+# closed overall, but the receipt records which partition actually broke).
+RESTORE_FAILED=""
+p01_route_restore() { # csproj-list... -> 0 all ok, 1 any failed
+  local proj rc=0
+  for proj in "$@"; do
+    set +e
+    run_with_env restore run_cmd dotnet restore "$SPIKE_ROOT/$proj" --configfile NuGet.Config -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL" >/dev/null 2>&1
+    [ $? -ne 0 ] && rc=1
+    set -e
+  done
+  printf '%s' "$rc"
+}
+if [ "$RESTORE_EXIT" -eq 0 ]; then
+  P01_A_EXIT=0
+  P01_B_EXIT=0
+else
+  P01_A_EXIT="$(p01_route_restore adapters/SpikeDafnyAdapter.RouteA/SpikeDafnyAdapter.RouteA.csproj harness/RouteAHarness/RouteAHarness.csproj control/RouteAControl/RouteAControl.csproj)"
+  P01_B_EXIT="$(p01_route_restore adapters/SpikeDafnyAdapter.RouteB/SpikeDafnyAdapter.RouteB.csproj harness/RouteBHarness/RouteBHarness.csproj control/RouteBControl/RouteBControl.csproj)"
+  [ "$P01_A_EXIT" != 0 ] && RESTORE_FAILED="${RESTORE_FAILED}A "
+  [ "$P01_B_EXIT" != 0 ] && RESTORE_FAILED="${RESTORE_FAILED}B "
+fi
 if [ ! -d "$CACHE_DIR/packages" ] && [ "$RESTORE_EXIT" -eq 0 ]; then
   run_cmd mkdir -p -- "$CACHE_DIR/packages"
   run_cmd tar -C "$RUN_ROOT/packages" -cf - . | run_cmd tar -C "$CACHE_DIR/packages" -xf -
@@ -533,23 +703,28 @@ done
   printf '  "run_id": "%s",\n  "nonce": "%s",\n  "exit": %s,\n' "$SPIKE_RUN_ID" "$SPIKE_NONCE" "$RESTORE_EXIT"
   printf '  "argv": [ %s ],\n' "$RESTORE_ARGV_JSON"
   printf '  "p01_partitions": {\n'
-  printf '    "A": ["SpikeDafnyAdapter.RouteA", "RouteAHarness", "RouteAControl", "SpikeContracts", "SpikeAggregator", "SpikeTests"],\n'
-  printf '    "B": ["SpikeDafnyAdapter.RouteB", "RouteBHarness", "RouteBControl", "SpikeContracts", "SpikeAggregator", "SpikeTests"]\n'
+  printf '    "A": { "projects": ["SpikeDafnyAdapter.RouteA", "RouteAHarness", "RouteAControl", "SpikeContracts", "SpikeAggregator", "SpikeTests"], "exit": %s },\n' "$P01_A_EXIT"
+  printf '    "B": { "projects": ["SpikeDafnyAdapter.RouteB", "RouteBHarness", "RouteBControl", "SpikeContracts", "SpikeAggregator", "SpikeTests"], "exit": %s }\n' "$P01_B_EXIT"
   printf '  },\n'
   printf '  "lock_sha256": { %s }\n' "$LOCK_DIGESTS"
   printf '}\n'
 } > "$RUN_ROOT/receipts/restore-receipt.json.tmp"
 run_cmd mv -- "$RUN_ROOT/receipts/restore-receipt.json.tmp" "$RUN_ROOT/receipts/restore-receipt.json"
 if [ "$RESTORE_EXIT" -ne 0 ]; then
-  fail_run "locked restore failed (exit $RESTORE_EXIT; NU1004-class mismatches are fail-closed, INV-001)"
+  fail_run PrerequisiteFailure "locked restore failed (failing projects: $RESTORE_FAILED; NU1004/NU1102-class locked-mode mismatches are fail-closed, INV-001)"
 fi
 
 # --- phase: build (everything beneath the run root — DD-008) --------------------
+set +e
 SDK_ACTUAL="$(run_with_env build run_cmd dotnet --version)"
+SDK_VER_RC=$?
+set -e
+phase_guard build "$SDK_VER_RC"   # a deadline already passed here is a build-phase timeout
 set +e
 run_with_env build run_cmd dotnet build DafnyCompatSpike.sln --no-restore -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL" >&2
 BUILD_EXIT=$?
 set -e
+phase_guard build "$BUILD_EXIT"
 
 ART_ROUTE_A="build/RouteAHarness/bin/Debug/net10.0/RouteAHarness.dll"
 ART_ROUTE_B="build/RouteBHarness/bin/Debug/net10.0/RouteBHarness.dll"
@@ -561,7 +736,7 @@ ARTIFACT_ENTRIES=""
 artifact_entry() { # rel
   local rel="$1"
   if [ ! -f "$RUN_ROOT/$rel" ]; then
-    fail_run "built artifact missing beneath the run root: $rel (DD-008)"
+    fail_run PrerequisiteFailure "built artifact missing beneath the run root: $rel (DD-008)"
   fi
   if [ -n "$ARTIFACT_ENTRIES" ]; then
     ARTIFACT_ENTRIES="$ARTIFACT_ENTRIES,
@@ -584,7 +759,7 @@ fi
 } > "$RUN_ROOT/receipts/build-receipt.json.tmp"
 run_cmd mv -- "$RUN_ROOT/receipts/build-receipt.json.tmp" "$RUN_ROOT/receipts/build-receipt.json"
 if [ "$BUILD_EXIT" -ne 0 ]; then
-  fail_run "build failed (exit $BUILD_EXIT)"
+  fail_run PrerequisiteFailure "build failed (exit $BUILD_EXIT)"
 fi
 
 # --- BND-004: net8 control runtime (digest-verified, installed in the run root) --
@@ -596,7 +771,7 @@ if [ ! -f "$NET8_ARCHIVE" ] || [ "$(sha_of "$NET8_ARCHIVE")" != "$NET8_SHA" ]; t
   run_cmd mkdir -p -- "$CACHE_DIR"
   run_cmd curl --disable -fsSL -o "$NET8_ARCHIVE.download" "$NET8_URL"
   if [ "$(sha_of "$NET8_ARCHIVE.download")" != "$NET8_SHA" ]; then
-    fail_run "net8 control-runtime archive does not match the pinned SHA-256 (BND-004 fail-closed; host/TFM adjudication blocked)"
+    fail_run PrerequisiteFailure "net8 control-runtime archive does not match the pinned SHA-256 (BND-004 fail-closed; host/TFM adjudication blocked)"
   fi
   run_cmd mv -- "$NET8_ARCHIVE.download" "$NET8_ARCHIVE"
 fi
@@ -604,11 +779,26 @@ CONTROL_ROOT="$RUN_ROOT/control-runtime"
 run_cmd mkdir -p -- "$CONTROL_ROOT"
 run_cmd tar -xzf "$NET8_ARCHIVE" -C "$CONTROL_ROOT"
 
+# --- QA-013: source-set content digest — a canonical run stamps the digest of
+# --- the exact source tree it built so a direct `dotnet test` consumer can
+# --- detect stale binaries (uncommitted edits leave HEAD unchanged). Cheap:
+# --- hash the sorted manifest of tracked source-file digests (git ls-files).
+SRC_MANIFEST="$RUN_ROOT/.source-manifest"
+: > "$SRC_MANIFEST"
+# git ls-files emits paths in deterministic (sorted) order, so no external
+# sort is needed — the manifest is stable across runs on the same tree.
+while IFS= read -r f; do
+  [ -f "$SPIKE_ROOT/$f" ] && printf '%s  %s\n' "$(sha_of "$SPIKE_ROOT/$f")" "$f" >> "$SRC_MANIFEST"
+done < <(run_cmd git -C "$SPIKE_ROOT" ls-files -- '*.cs' '*.csproj' '*.dfy' 'schema' 'manifest' 'config' 'scripts' 'Directory.Build.props' 'Directory.Build.targets' 'Directory.Packages.props' 'global.json' 'NuGet.Config' 2>/dev/null)
+SRC_DIGEST="$(sha_of "$SRC_MANIFEST")"
+[ -z "$SRC_DIGEST" ] && SRC_DIGEST="unknown"
+
 # --- run-context receipt (DD-008/TA-B13) + atomically published runsettings -----
 {
   printf '{\n'
   printf '  "run_id": "%s",\n' "$SPIKE_RUN_ID"
   printf '  "run_root": "%s",\n' "$(json_escape "$RUN_ROOT")"
+  printf '  "source_set_sha256": "%s",\n' "$SRC_DIGEST"
   printf '  "artifacts": {\n'
   printf '    "RouteAHarness": { "path": "%s", "sha256": "%s" },\n' "$ART_ROUTE_A" "$(sha_of "$RUN_ROOT/$ART_ROUTE_A")"
   printf '    "RouteBHarness": { "path": "%s", "sha256": "%s" },\n' "$ART_ROUTE_B" "$(sha_of "$RUN_ROOT/$ART_ROUTE_B")"
@@ -653,11 +843,13 @@ echo "run-spike: control identity cells exited A=$CTL_EXIT_A B=$CTL_EXIT_B (BND-
 
 # --- phase: suite (canonical operator runs only; variance runs record unknown) ---
 SUITE_STATUS="unknown"
+SUITE_EXIT=0
 if [ "${SPIKE_CANONICAL:-0}" = 1 ]; then
   set +e
   run_with_env test run_cmd dotnet test DafnyCompatSpike.sln --no-build -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL"
   SUITE_EXIT=$?
   set -e
+  phase_guard test "$SUITE_EXIT"
   if [ "$SUITE_EXIT" -eq 0 ]; then SUITE_STATUS="success"; else SUITE_STATUS="failure"; fi
 fi
 
@@ -668,9 +860,27 @@ set +e
 run_with_env harness run_cmd dotnet exec "$RUN_ROOT/$ART_AGG" --manifest "$SPIKE_ROOT/manifest/probe-manifest.json" --schema "$SPIKE_ROOT/schema/evidence-schema.json" --registry "$SPIKE_ROOT/schema/schema-version-registry.json" --run-id "$SPIKE_RUN_ID" --nonce "$SPIKE_NONCE" --run-root "$RUN_ROOT" --restore-receipt "$RUN_ROOT/receipts/restore-receipt.json" --build-receipt "$RUN_ROOT/receipts/build-receipt.json" --suite-status "$SUITE_STATUS" --solver "$SOLVER_FOR_AGG" --report "A=$RUN_ROOT/reports/route-a.json:$EXIT_A" --report "B=$RUN_ROOT/reports/route-b.json:$EXIT_B" --out "$RUN_ROOT/reports/run-report.json" --out-copy "$OUT_PATH" --aggregation-receipt "$RUN_ROOT/receipts/aggregation.json"
 AGG_EXIT=$?
 set -e
+phase_guard aggregation "$AGG_EXIT"
 if [ ! -f "$OUT_PATH" ]; then
-  fail_run "aggregation produced no run-level report (exit $AGG_EXIT) — a missing report is its own state, never pass (AP-009)"
+  fail_run MissingReport "aggregation produced no run-level report (exit $AGG_EXIT) — a missing report is its own state, never pass (AP-009)"
 fi
 
-echo "run-spike: run $SPIKE_RUN_ID complete; report: $OUT_PATH (suite: $SUITE_STATUS; route children A=$EXIT_A B=$EXIT_B; aggregator exit $AGG_EXIT)" >&2
-exit 0
+# QA-014(1): housekeeping — drop provisioning scratch (extract dirs, .corrupt,
+# .download stragglers) now that everything under the run root is captured.
+for junk in "$RUN_ROOT"/z3-extract.* "$RUN_ROOT"/*.corrupt "$RUN_ROOT"/*.download; do
+  [ -e "$junk" ] && run_cmd chmod -R u+rwx "$junk" 2>/dev/null
+  [ -e "$junk" ] && run_cmd rm -rf "$junk"
+done
+
+# QA-008: the CONTROLLER owns the run-level exit contract for CI wiring — the
+# exit channel is fail-closed to match the report/summary. Nonzero on: suite
+# failure (canonical runs), any route child probe-failure/INCOMPLETE, or an
+# aggregator nonzero. A clean canonical run (or a variance run whose children
+# all passed) exits 0.
+CONTROLLER_EXIT=0
+if [ "$SUITE_STATUS" = "failure" ]; then CONTROLLER_EXIT=1; fi
+if [ "$AGG_EXIT" -ne 0 ]; then CONTROLLER_EXIT=1; fi
+if [ "$EXIT_A" -ne 0 ] || [ "$EXIT_B" -ne 0 ]; then CONTROLLER_EXIT=1; fi
+
+echo "run-spike: run $SPIKE_RUN_ID complete; report: $OUT_PATH (suite: $SUITE_STATUS; route children A=$EXIT_A B=$EXIT_B; aggregator exit $AGG_EXIT; controller exit $CONTROLLER_EXIT)" >&2
+exit "$CONTROLLER_EXIT"

@@ -1,5 +1,5 @@
 {
-  "evidence_schema_version": 1,
+  "evidence_schema_version": 2,
   "note": "Committed, immutable, versioned evidence schema (INV-009/RS-011e). Its SHA-256 appears in every report, is anchored beside the probe-manifest digest in the test-suite constant set, and is compiled into the aggregator as a trust anchor. A schema version may NEVER be reused with a different digest (append-only registry: schema/schema-version-registry.json). Reclassifying any field is a spec change (RS-005).",
   "canonical_serialization_rule": {
     "encoding": "UTF-8, culture-invariant formatting, LF line endings",
@@ -51,6 +51,7 @@
       "resolved_package_versions",
       "loaded_assembly_identities",
       "executed_solver_sha256",
+      "solver_archive_sha256",
       "sentinel_ledger_outcomes",
       "closure_sets",
       "verification_target_sets",
@@ -65,6 +66,14 @@
       "timestamps",
       "durations",
       "raw_solver_resource_counts"
+    ]
+  },
+  "suite_status_mask": {
+    "note": "QA-006 amendment (spec disposition 2026-07-21): committed samples come as a PAIR. The variance-mode sample compares with FULL class-2 equality; the canonical-run sample's equality check masks ONLY this schema-declared suite-status subtree. The mask is declared HERE (additive-only, digest-anchored like the rest of this file), never in test or projection code.",
+    "masked_class_2_fields": [
+      "final_suite_status",
+      "route_verdicts",
+      "verdict_reasons"
     ]
   },
   "route_outcome_algebra": {
@@ -123,7 +132,7 @@
   },
   "report_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "dafny-compat spike evidence report v1",
+    "title": "dafny-compat spike evidence report v2",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -137,7 +146,7 @@
       "volatile"
     ],
     "properties": {
-      "evidence_schema_version": { "type": "integer", "const": 1 },
+      "evidence_schema_version": { "type": "integer", "const": 2 },
       "evidence_schema_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
       "probe_manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
       "run_id": { "type": "string", "minLength": 16 },
@@ -256,6 +265,7 @@
             "items": { "$ref": "#/report_schema/$defs/loaded_assembly" }
           },
           "executed_solver_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+          "solver_archive_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
           "sentinel_ledger_outcomes": {
             "type": ["object", "null"],
             "additionalProperties": false,

@@ -1,0 +1,160 @@
+{
+  "task": "dafny-compat-spike",
+  "round": 1,
+  "findings": [
+    {
+      "id": "QA-001",
+      "severity": "BLOCKING",
+      "rule_ref": "INV-009",
+      "description": "Committed evidence sample generated from dirty tree at RED commit (git_dirty_flag:true, commit=c94640c); no check enforces clean/HEAD-equal at generation time; binding-class exclusion lets it pass all tests. Repudiation failure per STRIDE/TB-004.",
+      "instance_fix": "Regenerate sample from clean GREEN checkout; regen-sample.sh refuses dirty tree.",
+      "class_fix": "Unit test asserts committed sample's git_dirty_flag==false and commit is ancestor of HEAD.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: regen-sample.sh refuses a dirty tree (exit 40, ignoring only untracked out/ run products) and QA001_CommittedSamples_CleanTreeAncestorCommit asserts git_dirty_flag==false + 40-hex commit + ancestor-of-HEAD. Sample regeneration itself is the orchestrator step (clean tree)."
+    },
+    {
+      "id": "QA-002",
+      "severity": "BLOCKING",
+      "rule_ref": "INV-003",
+      "description": "executed_solver_sha256/solver_path_concrete record the retained release ARCHIVE, not the passed solver path + its digest; README/ADR claim otherwise (docs lie); P04 never re-verifies installed binary against provisioning's binary.sha256 — post-provisioning substitution passes P04/P05/P06/P07.",
+      "instance_fix": "Record passed path + Sha256File(path) as executed_solver_sha256; separate solver_archive_sha256 field; P04 compares installed binary digest vs provisioning record; correct README+ADR.",
+      "class_fix": "RS-016 anti-hardcode test asserts executed_solver_sha256 equals recomputed digest of file at the option-manifest solver path.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: executed_solver_sha256 recomputed at emission from the file at the option-manifest solver path (binary); solver_archive_sha256 separate field carrying the BND-002 archive pin; P04 compares the installed binary digest against provisioning binary.sha256; README+ADR corrected; Inv004/Inv009 anti-hardcode assert executed==digest-of-binary-path and executed!=archive."
+    },
+    {
+      "id": "QA-003",
+      "severity": "BLOCKING",
+      "rule_ref": "INV-003/INV-009",
+      "description": "Hardcoded class-2 evidence: decoy_invocations=0 and decoys_present=true emitted as literals in BuildDeterministic; failed decoy plant (IOException swallowed) still reports decoys present.",
+      "instance_fix": "Populate from actual decoy log count and post-plant existence check; INCOMPLETE if planting failed.",
+      "class_fix": "Induced-failure test plants pre-invoked decoy log and asserts emitted decoy_invocations nonzero.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: decoy_invocations from the actually-read decoy log; decoys_present from a post-plant existence check; planting failure returns startup INCOMPLETE (no swallowed IOException); QA003 induced test plants a pre-invoked log and asserts nonzero."
+    },
+    {
+      "id": "QA-004",
+      "severity": "BLOCKING",
+      "rule_ref": "INV-002",
+      "description": "P03 universe silently narrowed to Dafny*/Boogie*/System.CommandLine during GREEN via oracle note + matching test filter; other package assemblies loaded via .deps.json (System.Reactive, LanguageServer deps, Newtonsoft.Json) never hash-compared — substitution invisible.",
+      "instance_fix": "Widen capture to all non-framework assemblies selected through the route's .deps.json (codex F8 universe) and re-capture expected sets — or take narrowing through spec change.",
+      "class_fix": "Machine-readable universe predicate in the oracle file consumed by BOTH harness and test; narrowing becomes reviewable oracle diff.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: universe widened to the codex-F8 definition (every non-framework .deps.json package runtime asset) via a machine-readable universe_predicate in the oracle consumed by BOTH harness (PackageRuntimeAssets) and test; expected-loaded sets re-captured (23 route A, 21 route B); Inv002 P03 test set-equality over the full universe with a >14 and non-Dafny/Boogie assertion."
+    },
+    {
+      "id": "QA-005",
+      "severity": "BLOCKING",
+      "rule_ref": "INV-013",
+      "description": "Typed causes lie: write_failed_report hardcodes cause=WallClockExpiry reused for 5 non-timeout failure classes; malformed route report collapses to missing-report variant (spec requires own variant); run-level unadjudicated-failure variant unreachable; aggregator writes adjudication_records:null unconditionally.",
+      "instance_fix": "Parameterize cause per fail_run site; MalformedReport-tagged RouteReport in aggregator catch; propagate route adjudication_records and map to unadjudicated-failure variant.",
+      "class_fix": "One induced-failure test per committed verdict_reason_union variant asserting variant AND cause match the induced fault class.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: write_failed_report/fail_run parameterized per-site cause; aggregator tags malformed route reports with the malformed-report variant; route adjudication_records propagate to the run level and map to the unadjudicated-failure variant; QA005 tests assert prerequisite cause != WallClockExpiry and malformed-report own variant."
+    },
+    {
+      "id": "QA-006",
+      "severity": "BLOCKING",
+      "rule_ref": "INV-009/INV-006",
+      "description": "Spec-composition catch-22: every in-suite fresh run is variance-mode (recursion guard) and final_suite_status/route_verdicts are class-2, so a canonical COMPATIBLE-bearing sample can never be committed without failing fresh-run-equality; ADR-0001 stuck at pending; Phase 0.1 gate unsatisfiable without spec decision.",
+      "instance_fix": "Spec decision required: (a) second canonical-run committed sample with schema-declared suite-status mask, or (b) reclassify final_suite_status comparison via spec change.",
+      "class_fix": "N/A — inherently spec-level conflict.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED (spec-amended): schema v2 declares suite_status_mask (additive-only); committed sample PAIR — variance (full equality) + canonical (masked equality via schema-declared fields); DeterministicProjection(applySuiteStatusMask) drops only the schema-declared subtree; fresh-run-equality checks both; regen-sample.sh regenerates the pair; ADR cites the canonical sample."
+    },
+    {
+      "id": "QA-007",
+      "severity": "BLOCKING",
+      "rule_ref": "INV-006",
+      "description": "Per-phase setsid supervision documented but not implemented: one setsid session for the whole inner controller; config declares per_phase_process_groups:setsid and a test green-checks the string (AP-011 certifying AP-004 dead machinery). Detached children escape TERM->KILL sweep.",
+      "instance_fix": "Per-phase setsid groups with supervisor tracking per-phase pgids + induced hang test for a non-probe phase — or amend spec/config/test to single-session design explicitly.",
+      "class_fix": "Every supervision config key must pair with a behavioral induced-failure test (extend RS-012 subset); ban config-string-only enforcement.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: run_with_env launches every phase in its own setsid -w session; supervise_phase tracks the per-phase session leader and enforces the single /proc/uptime deadline with TERM->KILL; phase_guard maps 124 to WallClockExpiry per phase; QA007 test plants a slow build target (inject.targets imported by Directory.Build.targets in the test run root) and asserts the supervisor kills the NON-probe build phase."
+    },
+    {
+      "id": "QA-008",
+      "severity": "NON-BLOCKING",
+      "rule_ref": "INV-006/INV-014",
+      "description": "Controller exits 0 even on suite failure/probe failure/INCOMPLETE (SUITE_EXIT/AGG_EXIT captured, never propagated); exit channel fail-open for CI wiring while report/summary are fail-closed.",
+      "instance_fix": "Exit nonzero on SUITE_STATUS=failure or aggregator nonzero; document controller exit codes in README.",
+      "class_fix": "Induced-failure tests assert controller exit code nonzero.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: controller computes CONTROLLER_EXIT nonzero on suite failure, aggregator nonzero, or any route child nonzero; README documents controller exit codes; QA008 test asserts nonzero on child failure."
+    },
+    {
+      "id": "QA-009",
+      "severity": "NON-BLOCKING",
+      "rule_ref": "INV-006",
+      "description": "P01 per-route partition cosmetic at restore level: single solution-wide restore exit stamped onto both P01(A) and P01(B); Route B lock failure still vetoes Route A (fail-closed direction, but exactly the R4-07 contradiction). Non-veto test exercises aggregation algebra only.",
+      "instance_fix": "Per-partition restores (or per-project lock validation) deriving P01(A)/P01(B) independently.",
+      "class_fix": "Induced-failure subset must include a route-scoped fault (mutate only Route B's lock in scratch) asserting the other route unaffected end-to-end.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: P01 derived per partition from independent per-project locked restores (restore-receipt p01_partitions.*.exit); aggregator stamps P01(A)/P01(B) from those; QA009 test mutates ONLY Route B lock in scratch and asserts Route A restore unaffected while Route B fails. Run still fails closed overall (documented) but attribution is non-vetoing."
+    },
+    {
+      "id": "QA-010",
+      "severity": "NON-BLOCKING",
+      "rule_ref": null,
+      "description": "GREEN edited committed oracles outside the sanctioned TEST_BUG list: ok.sidecar min_task_count 3->2 (documented AP-014 recapture, plausible but unadjudicated), syntax-error.dfy planted token moved (P08 location oracle redefined), expected-loaded universe note (see QA-004). tdd-test-edits.log absent; audit reconstructed from git.",
+      "instance_fix": "Record the three oracle edits with adjudication rationale in workflow artifacts; independently confirm min_task_count=2 for Dafny 4.11.",
+      "class_fix": "Treat fixtures/, fixtures/expected/, manifest/ as test-owned in the GREEN edit contract; orchestrator diffs those paths RED->GREEN.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: three oracle edits adjudicated here — (1) ok.sidecar min_task_count 3->2: Dafny 4.11 yields 3 verification targets for ok.dfy but only 2 solver tasks; the trivial function Add has NO proof obligation, so 2 (>0) is the correct non-vacuity floor (independently confirmed by QA010_OkFixture test asserting 3 targets / 2 tasks / missing=Add). (2) syntax-error.dfy planted-token line normalization: the parse error is now on the committed expected line 4 (method Broken( { ). (3) expected-loaded universe note reversed by QA-004 (widened to codex-F8). tdd-test-edits.log was absent; this note is the adjudication record. Class fix: fixtures/, fixtures/expected/, manifest/ are test-owned oracle paths — the orchestrator diffs them RED->GREEN."
+    },
+    {
+      "id": "QA-011",
+      "severity": "UNCERTAIN",
+      "rule_ref": "INV-010",
+      "description": "Flake candidate (1-in-10 gate failure): abandoned P05 sentinel leg (Task.Wait(45s) timeout leaves Boogie running) can invoke the sentinel stub during P08/P09's before/after ledger window, spuriously failing them inside nested controller runs used by no-args Facts (RunTwice, CommittedSample equality, ForgedExtraReport) — consistent with observed evidence. Unconfirmed without lost TRX.",
+      "instance_fix": "Refuse to start P08/P09 while a prior sentinel leg is unsettled (join/kill prover children), or per-probe sub-nonce in stub argv so P08/P09 count only their own window.",
+      "class_fix": "Nonce-scope every ledger-delta assertion per probe, not per run; reproduce by forcing P05 timeout branch in a loop.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: per-probe sub-nonce in the sentinel stub argv (probe:<tag>); ReadLedger(probeTag) counts only that probe window; P08/P09/P05 snapshot before/after per their own tag and JoinPendingSentinelLeg bounds an abandoned prior leg; QA011 test plants a foreign-sub-nonce entry under the run nonce and proves P05 counts only its own."
+    },
+    {
+      "id": "QA-012",
+      "severity": "UNCERTAIN",
+      "rule_ref": "INV-003/EA-005",
+      "description": "Startup gate checks only FIRST exact-name z3 on PATH, recognizes decoys by spoofable content marker, never examines deeper PATH entries or versioned names (z3-4.12.1) on PATH; weaker than EA-005 text. Exploitation requires option-wiring breakage P05 would catch — hence UNCERTAIN.",
+      "instance_fix": "Scan every PATH dir for z3*-named executables; recognize sanctioned decoys by exact digest.",
+      "class_fix": "Source-verify and cite Dafny 4.11's ambient-discovery probe sequence; generate the gate's check list from it.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: the gate scans EVERY PATH dir for z3*-named executables; sanctioned recording decoys recognized by exact script digest (harness-planted, cross-root) or by sanctioned decoy LOCATION (decoys/ dir or assembly-adjacent fallback); check list source-cited to Dafny 4.11 DafnyOptions.cs:1206-1227; QA012 test plants an unsanctioned first-on-PATH z3 and asserts the gate fails closed."
+    },
+    {
+      "id": "QA-013",
+      "severity": "NON-BLOCKING",
+      "rule_ref": null,
+      "description": "Dev-loop honesty gap: direct dotnet test consumes last controller run's runsettings; uncommitted source edits leave HEAD unchanged so suite validates stale binaries (canonical controller run immune).",
+      "instance_fix": "Controller records source-set content digest in run-context.json; cheap test compares vs current tree, fails with re-run message.",
+      "class_fix": "Every run-context consumer asserts substrate identity (AP-003 digest-match rule).",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: the controller records source_set_sha256 + a .source-manifest (git ls-files digests) in run-context; QA013 test asserts the manifest per-file digests equal the current tree (AP-003 substrate match) and fails with a re-run message on drift."
+    },
+    {
+      "id": "QA-014",
+      "severity": "NON-BLOCKING",
+      "rule_ref": "INV-014/PRH-004",
+      "description": "Hygiene grab-bag: provision temp dirs/.corrupt files accumulate; watchdog PID-file race leaks inner session; P06 solver-unavailable classified by message-text sniff ('Z3 not found'); 26 antipattern-scan hits adjudicated benign (22 legitimate operator output, 4 error-suppressions safe).",
+      "instance_fix": "rm extract dirs/.corrupt after use; PID file before slow work + pgid fallback; typed prover-startup check instead of message sniff.",
+      "class_fix": "N/A — individually reviewed items; no shared structural cause.",
+      "status": "fixed",
+      "lens": null,
+      "fix_note": "FIXED: provision removes extract dirs and .corrupt/.download stragglers; controller cleans junk post-aggregation; PID file written before slow work with a session-leader fallback in the watchdog (QA-014(2)); P06 solver-unavailable is now a typed prover-startup check (z3 -version), not a message-text sniff."
+    }
+  ]
+}

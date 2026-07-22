@@ -3,10 +3,24 @@
   "slug": "dafny-compat-spike",
   "branch": "feature/dafny-compat-spike",
   "completed_phases": [
-    "red"
+    "red",
+    "test-audit",
+    "green",
+    "simplify",
+    "qa-round-1"
   ],
-  "current_phase": "test-audit",
+  "current_phase": "fix-round-1-in-progress",
   "green_attempts": 0,
   "calm_reset_fired": false,
-  "timestamp": "2026-07-21T21:08:46Z"
+  "timestamp": "2026-07-22T03:51:58Z",
+  "qa_rounds_done": 1,
+  "next_steps": [
+    "1. Fix agent (background) reports treatments of QA-001..014 + expected stale-sample test failures + new v2 schema digest",
+    "2. Hygiene-review + commit fix-round diff (message: fix(dafny-compat-spike): QA round 1 — all 14 findings)",
+    "3. Run spikes/dafny-compat/scripts/regen-sample.sh from the then-clean tree (regenerates BOTH samples of the pair + ADR records)",
+    "4. Verify full suite 188+/188 green via commands.test fresh, then commit samples",
+    "5. workflow-advance.sh qa (gate reruns suite) then spawn QA round 2 agent (independent, diffs the fix round; max 3 rounds at high)",
+    "6. After QA clean: probe round (high: mutation+config-fuzz, 15min default budget), then workflow-advance.sh audit-mini, mini-audit 2 rounds x (6 core + 2 recommended lenses from lens-recommendations-feature-dafny-compat-spike-06dca9.json)",
+    "7. done -> suggest /cverify + /cdocs (never auto-invoke)"
+  ]
 }

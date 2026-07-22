@@ -405,6 +405,6 @@ public static class BootstrapAllowlist
     public static readonly IReadOnlyList<string> Commands = new[]
     {
         "bash", "dotnet", "curl", "sha256sum", "tar", "unzip", "git",
-        "mkdir", "mktemp", "mv", "chmod", "setsid", "kill", "sleep",
+        "mkdir", "mktemp", "mv", "rm", "chmod", "setsid", "kill", "sleep",
     };
 }

@@ -83,7 +83,7 @@ public static class VerdictAggregator
     /// committed schema BEFORE parsing or projecting any report.
     /// </summary>
     public const string EvidenceSchemaSha256TrustAnchor =
-        "a630b1aa10294b688867ee0cd73574f7c12c15050a2724245b43b3e8b4650259"; // = SHA-256 of schema/evidence-schema.json (registry row v1; TA-B15 + TA-B16/TA-A15 in-place RED amendments).
+        "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509"; // = SHA-256 of schema/evidence-schema.json (registry row v2 — QA fix round 1: solver_archive_sha256 field + suite_status_mask block; v1 row a630b1aa… frozen append-only).
 
     public static RouteOutcome ComputeRouteVerdict(
         ProbeManifest manifest,
@@ -423,9 +423,32 @@ public static class EvidenceSchema
     /// in the projection (codex R2-1).
     /// </summary>
     public static string DeterministicProjection(string reportJson, string schemaPath)
+        => DeterministicProjection(reportJson, schemaPath, applySuiteStatusMask: false);
+
+    /// <summary>
+    /// QA-006: the canonical-run committed sample compares under this masked
+    /// projection, dropping ONLY the schema-declared suite-status subtree
+    /// (schema file's suite_status_mask.masked_class_2_fields — never a
+    /// test/projection-code list). The variance-mode sample uses the full
+    /// projection. Every other class-2 field must still be equal.
+    /// </summary>
+    public static string DeterministicProjection(string reportJson, string schemaPath, bool applySuiteStatusMask)
     {
         using var schemaDoc = JsonDocument.Parse(File.ReadAllText(schemaPath));
         var partition = schemaDoc.RootElement.GetProperty("field_partition");
+        var maskedFields = new HashSet<string>(StringComparer.Ordinal);
+        if (applySuiteStatusMask)
+        {
+            if (!schemaDoc.RootElement.TryGetProperty("suite_status_mask", out var mask))
+            {
+                throw new InvalidOperationException(
+                    "canonical-sample masked equality requested but the schema declares no suite_status_mask block (QA-006)");
+            }
+            foreach (var f in mask.GetProperty("masked_class_2_fields").EnumerateArray())
+            {
+                maskedFields.Add(f.GetString()!);
+            }
+        }
         var class1 = partition.GetProperty("class_1_binding_identity").EnumerateArray().Select(f => f.GetString()!).ToHashSet();
         var class2 = partition.GetProperty("class_2_deterministic_projection").EnumerateArray().Select(f => f.GetString()!).ToHashSet();
         var class3 = partition.GetProperty("class_3_volatile").EnumerateArray().Select(f => f.GetString()!).ToHashSet();
@@ -465,11 +488,12 @@ public static class EvidenceSchema
             }
         }
 
-        // Collect class-2 members from the root level and every envelope.
+        // Collect class-2 members from the root level and every envelope,
+        // dropping the schema-declared suite-status subtree when masking (QA-006).
         var projection = new SortedDictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var field in root.EnumerateObject())
         {
-            if (!envelopes.Contains(field.Name) && class2.Contains(field.Name))
+            if (!envelopes.Contains(field.Name) && class2.Contains(field.Name) && !maskedFields.Contains(field.Name))
             {
                 projection[field.Name] = field.Value;
             }
@@ -480,7 +504,7 @@ public static class EvidenceSchema
             {
                 foreach (var field in env.EnumerateObject())
                 {
-                    if (class2.Contains(field.Name))
+                    if (class2.Contains(field.Name) && !maskedFields.Contains(field.Name))
                     {
                         projection[field.Name] = field.Value;
                     }

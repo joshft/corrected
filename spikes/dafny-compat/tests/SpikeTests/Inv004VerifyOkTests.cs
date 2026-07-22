@@ -63,7 +63,11 @@ public class Inv004VerifyOkTests
             Assert.Equal("valid", o.GetProperty("outcome").GetString()!.ToLowerInvariant());
         }
 
-        Assert.Equal(SpecConstants.Z3Sha256, det.GetProperty("executed_solver_sha256").GetString());
+        // QA-002 retarget + strengthen: executed_solver_sha256 is the recomputed
+        // digest of the file at the option-manifest solver path (the executed
+        // binary); the BND-002 release-asset pin lives in its own field.
+        Assert.Equal(SpecConstants.Z3BinarySha256, det.GetProperty("executed_solver_sha256").GetString());
+        Assert.Equal(SpecConstants.Z3Sha256, det.GetProperty("solver_archive_sha256").GetString());
 
         // TA-A11: emitted reports embed the manifest + schema digests (INV-009 wiring).
         Assert.Equal(SpecConstants.ProbeManifestSha256, doc.RootElement.GetProperty("probe_manifest_sha256").GetString());

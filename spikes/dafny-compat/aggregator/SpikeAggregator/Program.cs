@@ -103,11 +103,17 @@ try
     {
         throw new InvalidOperationException($"restore receipt run_id/nonce mismatch (receipt {receiptRunId}) — stale receipts are rejected (codex F1)");
     }
-    var exit = restore.RootElement.GetProperty("exit").GetInt32();
     restoreArgvJson = restore.RootElement.GetProperty("argv").GetRawText();
-    var status = exit == 0 ? ProbeStatus.Pass : ProbeStatus.Fail;
-    probeResults.Add(new ProbeResult(new ProbeKey("P01", "A"), status, exit == 0 ? null : $"locked restore exit {exit}"));
-    probeResults.Add(new ProbeResult(new ProbeKey("P01", "B"), status, exit == 0 ? null : $"locked restore exit {exit}"));
+    // QA-009: P01 status is derived from EACH partition's own recorded exit —
+    // a Route-B-only lock fault attributes only to P01(B) (R4-07 non-veto).
+    var partitions = restore.RootElement.GetProperty("p01_partitions");
+    foreach (var route in new[] { "A", "B" })
+    {
+        var exit = partitions.GetProperty(route).GetProperty("exit").GetInt32();
+        probeResults.Add(new ProbeResult(new ProbeKey("P01", route),
+            exit == 0 ? ProbeStatus.Pass : ProbeStatus.Fail,
+            exit == 0 ? null : $"route {route} locked restore exit {exit}"));
+    }
 }
 catch (Exception ex)
 {
@@ -139,9 +145,12 @@ catch (Exception ex)
 }
 
 // P04 — solver identity (owned here): provisioned z3 exists at the
-// non-discoverable install location, the retained archive digest matches the
-// pin, and the banner reports 4.12.1 (launched via the managed launcher).
+// non-discoverable install location, the INSTALLED BINARY's digest matches the
+// digest provisioning recorded from the pin-verified archive (QA-002), the
+// retained release asset matches the BND-002 pin, and the banner reports
+// 4.12.1 (launched via the managed launcher).
 string? executedSolverSha = null;
+string? solverArchiveSha = null;
 {
     var detail = new List<string>();
     var solver = solverPath.Length > 0 ? solverPath : Path.Combine(runRoot, SolverLayout.SolverRelativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -153,20 +162,38 @@ string? executedSolverSha = null;
     }
     else
     {
-        // Evidence binds to the PINNED RELEASE ASSET retained in the run root
-        // (its digest IS the BND-002 pin); the extracted binary is its
-        // provisioning derivative. Execution identity is proven behaviorally
-        // (INV-003), never presumed from a digest.
+        // QA-002: executed_solver_sha256 is ALWAYS the recomputed digest of
+        // the solver binary at the option-manifest path; the release-asset pin
+        // is a separate field. Post-provisioning substitution is caught by
+        // comparing the installed binary against provisioning's own record.
+        executedSolverSha = Sha256File(solver);
+        var provisioningRecord = Path.Combine(runRoot, "solver", "z3-4.12.1", "binary.sha256");
+        if (solverPath.Length == 0 || solver.EndsWith(SolverLayout.SolverRelativePath.Replace('/', Path.DirectorySeparatorChar), StringComparison.Ordinal))
+        {
+            if (!File.Exists(provisioningRecord))
+            {
+                pass = false;
+                detail.Add("provisioning's binary.sha256 record is missing — the installed binary cannot be tied to the pin-verified archive (QA-002)");
+            }
+            else
+            {
+                var recorded = File.ReadAllText(provisioningRecord).Trim();
+                if (recorded != executedSolverSha)
+                {
+                    pass = false;
+                    detail.Add($"installed binary digest {executedSolverSha} does not match provisioning's record {recorded} — post-provisioning substitution (INV-003 fail-closed)");
+                }
+            }
+        }
         var archive = Path.Combine(runRoot, "z3-4.12.1-x64-glibc-2.35.zip");
-        if (!File.Exists(archive) || Sha256File(archive) != SolverLayout.Z3PinnedSha256)
+        if (File.Exists(archive))
+        {
+            solverArchiveSha = Sha256File(archive);
+        }
+        if (solverArchiveSha != SolverLayout.Z3PinnedSha256)
         {
             pass = false;
             detail.Add("retained release-asset digest does not match the pin (BND-002)");
-            executedSolverSha = Sha256File(solver);
-        }
-        else
-        {
-            executedSolverSha = Sha256File(archive);
         }
         var banner = ManagedLauncher.Launch(new LaunchRequest(
             solver, new[] { "-version" }, runRoot, SolverIdentityEnv(runRoot), 60));
@@ -180,9 +207,15 @@ string? executedSolverSha = null;
         pass ? null : string.Join("; ", detail)));
 }
 
-// Route reports: only from performed launches; run_id bound.
+// Route reports: only from performed launches; run_id bound. Malformed
+// reports carry their OWN variant (QA-005 — they never collapse into
+// missing-report or crash), and route-level adjudication records propagate to
+// the run level with the unadjudicated-failure verdict variant.
 var routeReports = new List<RouteReport>();
 var consumedPaths = new List<string>();
+var malformedRoutes = new Dictionary<string, string>(StringComparer.Ordinal);
+var routeAdjudicationRecords = new List<(string Route, JsonElement Record)>();
+var routeRecordDocuments = new List<JsonDocument>();
 foreach (var (route, path, exit) in reports)
 {
     if (!File.Exists(path))
@@ -194,7 +227,8 @@ foreach (var (route, path, exit) in reports)
     {
         var text = File.ReadAllText(path);
         EvidenceSchema.ValidateReport(text, schemaPath);
-        using var doc = JsonDocument.Parse(text);
+        var doc = JsonDocument.Parse(text);
+        routeRecordDocuments.Add(doc);
         var reportRunId = doc.RootElement.GetProperty("run_id").GetString() ?? "";
         var probes = new List<ProbeResult>();
         foreach (var p in doc.RootElement.GetProperty("deterministic").GetProperty("per_probe_results").EnumerateArray())
@@ -203,6 +237,14 @@ foreach (var (route, path, exit) in reports)
                 new ProbeKey(p.GetProperty("probe").GetString()!, p.GetProperty("route").GetString()!),
                 Enum.Parse<ProbeStatus>(p.GetProperty("status").GetString()!, ignoreCase: true),
                 p.TryGetProperty("detail", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null));
+        }
+        if (doc.RootElement.GetProperty("deterministic").TryGetProperty("adjudication_records", out var records)
+            && records.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var record in records.EnumerateArray())
+            {
+                routeAdjudicationRecords.Add((route, record));
+            }
         }
         // The route child reports only its route probes; the aggregator owns
         // the shared probes and the controller attests P01 (codex F7).
@@ -213,6 +255,7 @@ foreach (var (route, path, exit) in reports)
     catch (Exception ex)
     {
         Console.Error.WriteLine($"SpikeAggregator: malformed route report {path}: {ex.Message}");
+        malformedRoutes[route] = $"route report failed closed-schema validation/parsing: {ex.GetType().Name} (AP-009: malformed is its own state)";
         routeReports.Add(new RouteReport(runId, route, Array.Empty<ProbeResult>(), exit, null, path));
     }
 }
@@ -224,7 +267,42 @@ var suiteStatus = suiteStatusText switch
     _ => SuiteStatus.Unknown,
 };
 
-var result = VerdictAggregator.Aggregate(manifest, runId, routeReports, suiteStatus);
+var aggregateResult = VerdictAggregator.Aggregate(manifest, runId, routeReports, suiteStatus);
+// QA-005: malformed reports override with their own variant; a route whose
+// report carries an UNADJUDICATED in-process failure record surfaces the
+// unadjudicated-failure variant at the run level (INV-013 state machine).
+var finalVerdicts = new Dictionary<string, RouteOutcome>(StringComparer.Ordinal);
+foreach (var kv in aggregateResult.RouteVerdicts)
+{
+    var route = kv.Key;
+    var outcome = kv.Value;
+    if (malformedRoutes.TryGetValue(route, out var malformedDetail))
+    {
+        outcome = new RouteOutcome(RouteState.Incomplete, null,
+            new VerdictReason.MalformedReport(route, malformedDetail));
+    }
+    else if (outcome.State != RouteState.Compatible)
+    {
+        var unadj = routeAdjudicationRecords.FirstOrDefault(r =>
+            r.Route == route
+            && r.Record.TryGetProperty("terminal_state", out var ts)
+            && ts.GetString() == "UnadjudicatedInProcessFailure");
+        if (unadj.Record.ValueKind == JsonValueKind.Object && outcome.Reason is VerdictReason.ProbeFailure)
+        {
+            var payload = new UnadjudicatedInProcessFailure(
+                Enum.TryParse<UnadjudicatedVariant>(unadj.Record.TryGetProperty("variant", out var variant) ? variant.GetString()?.Replace("-", "") : null, ignoreCase: true, out var v) ? v : UnadjudicatedVariant.TypedException,
+                new ProbeKey(unadj.Record.TryGetProperty("probe", out var pr) ? pr.GetString() ?? "?" : "?", route),
+                unadj.Record.TryGetProperty("stage", out var st) ? st.GetString() ?? "in-process" : "in-process",
+                unadj.Record.TryGetProperty("minimal_inputs", out var mi) ? mi.GetString() ?? "" : "",
+                unadj.Record.TryGetProperty("typed_diagnostic", out var td) ? td.GetString() : null,
+                new IdentityEvidence(runId, "see route report", "see route report", "see route report", "see route report"));
+            outcome = new RouteOutcome(RouteState.UnadjudicatedInProcessFailure, null,
+                new VerdictReason.UnadjudicatedFailure(payload));
+        }
+    }
+    finalVerdicts[route] = outcome;
+}
+var result = new RunResult(runId, finalVerdicts, suiteStatus);
 
 // Combined 22-entry per-probe view (manifest order).
 var byKey = new Dictionary<ProbeKey, ProbeResult>();
@@ -321,6 +399,14 @@ foreach (var route in manifest.MandatoryRoutes)
         case VerdictReason.SuiteFailure sf:
             reasonMap["detail"] = sf.Detail;
             break;
+        case VerdictReason.UnadjudicatedFailure uf:
+            reasonMap["variant"] = "unadjudicated-failure";
+            reasonMap["probe"] = uf.Payload.Probe.ToString();
+            reasonMap["stage"] = uf.Payload.Stage;
+            reasonMap["minimal_inputs"] = uf.Payload.MinimalInputs;
+            reasonMap["typed_diagnostic"] = uf.Payload.TypedDiagnostic;
+            reasonMap["identity_evidence_p01_p04"] = "embedded in the route report's adjudication record (propagated below)";
+            break;
     }
     routeVerdicts.Add(new Dictionary<string, object?>
     {
@@ -373,7 +459,7 @@ var (gitCommit, gitDirty) = ReadGitState(runRoot);
 
 var reportObject = new Dictionary<string, object?>
 {
-    ["evidence_schema_version"] = 1,
+    ["evidence_schema_version"] = 2,
     ["evidence_schema_sha256"] = Sha256File(schemaPath),
     ["probe_manifest_sha256"] = ProbeManifest.ComputeSha256(manifestPath),
     ["run_id"] = runId,
@@ -387,7 +473,7 @@ var reportObject = new Dictionary<string, object?>
         ["sdk_version"] = ReadSdkPin(),
         ["actual_runtime_version"] = Environment.Version.ToString(),
         ["restore_argv_concrete"] = restoreArgvJson is null ? new List<string>() : JsonSerializer.Deserialize<List<string>>(restoreArgvJson),
-        ["solver_path_concrete"] = "z3-4.12.1-x64-glibc-2.35.zip",
+        ["solver_path_concrete"] = SolverLayout.SolverRelativePath,
     },
     ["deterministic"] = new Dictionary<string, object?>
     {
@@ -408,7 +494,10 @@ var reportObject = new Dictionary<string, object?>
             ["expected_loaded_route_b"] = Sha256File(Path.Combine(spikeRoot, "manifest", "expected-loaded", "route-b.json")),
         },
         ["executed_solver_sha256"] = executedSolverSha,
-        ["adjudication_records"] = null,
+        ["solver_archive_sha256"] = solverArchiveSha,
+        ["adjudication_records"] = routeAdjudicationRecords.Count == 0
+            ? null
+            : routeAdjudicationRecords.Select(r => (object?)JsonSerializer.Deserialize<Dictionary<string, object?>>(r.Record.GetRawText())).ToList(),
     },
     ["volatile"] = new Dictionary<string, object?>
     {
@@ -444,9 +533,11 @@ foreach (var route in manifest.MandatoryRoutes)
     Console.WriteLine($"route {route} verdict: {StateText(outcome)}; failed probes: {(failing.Count == 0 ? "-" : string.Join(", ", failing))}; report: {outPath}");
 }
 
-return result.RouteVerdicts.Values.All(v => v.State == RouteState.Compatible)
-    ? ExitCodes.RouteProbesPassed
-    : ExitCodes.Incomplete;
+// QA-008: the aggregator's exit reports AGGREGATION success (report emitted,
+// receipts validated structurally); route verdicts live in the report. The
+// CONTROLLER owns the run-level exit contract (nonzero on suite failure,
+// child probe failure, or any phase/aggregation failure) — see README.
+return ExitCodes.RouteProbesPassed;
 
 static string Sha256File(string path)
 {

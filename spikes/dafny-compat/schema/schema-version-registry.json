@@ -6,6 +6,12 @@
       "sha256": "a630b1aa10294b688867ee0cd73574f7c12c15050a2724245b43b3e8b4650259",
       "committed": "2026-07-21",
       "note": "In-place RED amendments to v1 (2026-07-21), each defensible SOLELY because no evidence report has ever been emitted — the suite is still in RED and nothing ever carried any prior digest. Any future change requires a NEW version row. (1) TA-B15 (prior digest 25c20ecb6997f6f6a32d0baa00cb5d7eca4bb05ca4cfa064dd0eda863b8dab05): report_schema extended to declare every INV-009 three-way-partition field (sentinel_nonce, loaded_assembly_file_paths, run_product_paths_concrete, raw_digests_of_path_bearing_generated_files, verdict_reasons, fixture/sidecar/lock/deps/nuget/oracle digests, solver_outcome_enums, solver_resource_usage_observed, reproducer_control_asset_digests, exit_report_matrix_outcome). (2) TA-B16/TA-A15 (prior digest 3f65c50c0c37173ace4332e81d5632b1f6effd9b78f9214b5e37c89d72c57dc7): root envelope fields kind and evidence_schema_version added to class 2; alias partition entries renamed to the exact instance-field names probe_manifest_sha256/evidence_schema_sha256; every union-typed object bag given a closed shape (patternProperties + additionalProperties:false), so the recursive-closure rule has no escape hatch."
+    },
+    {
+      "version": 2,
+      "sha256": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "committed": "2026-07-21",
+      "note": "QA round 1 (fix round 1): the in-place-v1 window closed once reports/samples existed under the v1 digest, so this is a NEW appended row (append-only rule). v2 adds (1) the QA-006 suite_status_mask block declaring the ONLY fields the canonical-run committed sample may mask in its equality check (final_suite_status, route_verdicts, verdict_reasons), and (2) the QA-002 solver_archive_sha256 deterministic field separating the BND-002 release-asset pin from executed_solver_sha256, which now always carries the recomputed digest of the file at the option-manifest solver path. v1 row retained unaltered below/above per the append-only rule."
     }
   ]
 }

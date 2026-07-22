@@ -1,31 +1,137 @@
 {
   "route": "A",
-  "universe": "trust-relevant managed assets selected through the route harness's .deps.json, excluding shared-framework assemblies (codex F8); family prefixes Dafny*/Boogie*/System.CommandLine",
-  "status": "GREEN-CAPTURED 2026-07-21 via the DD-008 procedure: file SHA-256s computed from the runtime-loaded assemblies of a real P03 exercise (verify fixtures/ok.dfy end-to-end), each traced through .deps.json to the spike-local package asset and hash-compared (INV-002)",
-  "anchors": ["DafnyDriver", "DafnyCore"],
+  "universe": "deps-json-package-runtime-assets",
+  "status": "GREEN-RECAPTURED (QA-004 fix round 1) 2026-07-21: widened to the codex-F8 universe — EVERY non-framework assembly selected through the route .deps.json package runtime assets, each file SHA-256 hash-compared. Machine-readable universe_predicate consumed by both harness and test.",
+  "anchors": [
+    "DafnyDriver",
+    "DafnyCore"
+  ],
   "system_commandline_expected_loaded": true,
   "assemblies": [
-    { "simple_name": "Boogie.AbstractInterpretation", "package_version": "3.5.5", "sha256": "e78fe20a8060b7e2112eea1e29e119be4b5b4f0bd77dddbca41030d7f53e75b3" },
-    { "simple_name": "Boogie.BaseTypes", "package_version": "3.5.5", "sha256": "e70be3b6097d638f00b5a5c7d54e0bc385c06eb53bdc43af16d9016bf6d836c7" },
-    { "simple_name": "Boogie.CodeContractsExtender", "package_version": "3.5.5", "sha256": "a87136a0c80c2dbee47e68ef31a51082190a60990dbe8eb6fbc9c8efc0d97d0e" },
-    { "simple_name": "Boogie.Concurrency", "package_version": "3.5.5", "sha256": "b62f7e3b6da673e97cf3b55a910ca075455d9373a00e071f62a4110316800ec0" },
-    { "simple_name": "Boogie.Core", "package_version": "3.5.5", "sha256": "51b260f8f0b8983d258dbb339eadc367b81014b764f4b52e8c910caecec9239b" },
-    { "simple_name": "Boogie.ExecutionEngine", "package_version": "3.5.5", "sha256": "9a9ad82d4e5a7a1052a11e549a6a721d9e9b7cab683c813650e87e04d8f48ab0" },
-    { "simple_name": "Boogie.Graph", "package_version": "3.5.5", "sha256": "bb0c4d78d8024fe22fc02b0755b5fa41a89ad0ec063d7742c2f433edbe272d80" },
-    { "simple_name": "Boogie.Houdini", "package_version": "3.5.5", "sha256": "261788110a32d8b090f16d1904e6317d4d00d1103db90017e1abc70261e1a4a9" },
-    { "simple_name": "Boogie.Model", "package_version": "3.5.5", "sha256": "6d93222f66c6b0112a9a5dcd9302b0e05118c719ef97975edb18dbcbc0b24528" },
-    { "simple_name": "Boogie.Provers.SMTLib", "package_version": "3.5.5", "sha256": "20a832feeee8146afe7379b00c64c9e153bd287c175176059d45ce9a28993877" },
-    { "simple_name": "Boogie.VCExpr", "package_version": "3.5.5", "sha256": "e77c69b688b346630bd7623b5e49a98a5222691f18fa91f0042bd8a1d1c227b0" },
-    { "simple_name": "Boogie.VCGeneration", "package_version": "3.5.5", "sha256": "b57b403519b3305b3208d97ea4e267c2f522ef08443895a4115ab0e142df557a" },
-    { "simple_name": "DafnyCore", "package_version": "4.11.0", "sha256": "10b9534ad2369a18ce2e72144ab7e60eaba6a0f5d7ec1a823b3b358649e18d8d" },
-    { "simple_name": "DafnyDriver", "package_version": "4.11.0", "sha256": "eed067cc7b266fec631f2382e42a014c4b88bad6090fb53084b76554fea7055c" },
-    { "simple_name": "DafnyLanguageServer", "package_version": "4.11.0", "sha256": "5378848095516eef317203c9ec6bc0b38072a8819cab96a9a8d400004858f055" },
-    { "simple_name": "System.CommandLine", "package_version": "2.0.0-beta4.22272.1", "sha256": "2158cfc2c484ebdec95fd9959c7eecaebe44657e1e1dee5abb78fc971276829f" }
+    {
+      "simple_name": "Boogie.AbstractInterpretation",
+      "package_version": "3.5.5",
+      "sha256": "e78fe20a8060b7e2112eea1e29e119be4b5b4f0bd77dddbca41030d7f53e75b3"
+    },
+    {
+      "simple_name": "Boogie.BaseTypes",
+      "package_version": "3.5.5",
+      "sha256": "e70be3b6097d638f00b5a5c7d54e0bc385c06eb53bdc43af16d9016bf6d836c7"
+    },
+    {
+      "simple_name": "Boogie.CodeContractsExtender",
+      "package_version": "3.5.5",
+      "sha256": "a87136a0c80c2dbee47e68ef31a51082190a60990dbe8eb6fbc9c8efc0d97d0e"
+    },
+    {
+      "simple_name": "Boogie.Concurrency",
+      "package_version": "3.5.5",
+      "sha256": "b62f7e3b6da673e97cf3b55a910ca075455d9373a00e071f62a4110316800ec0"
+    },
+    {
+      "simple_name": "Boogie.Core",
+      "package_version": "3.5.5",
+      "sha256": "51b260f8f0b8983d258dbb339eadc367b81014b764f4b52e8c910caecec9239b"
+    },
+    {
+      "simple_name": "Boogie.ExecutionEngine",
+      "package_version": "3.5.5",
+      "sha256": "9a9ad82d4e5a7a1052a11e549a6a721d9e9b7cab683c813650e87e04d8f48ab0"
+    },
+    {
+      "simple_name": "Boogie.Graph",
+      "package_version": "3.5.5",
+      "sha256": "bb0c4d78d8024fe22fc02b0755b5fa41a89ad0ec063d7742c2f433edbe272d80"
+    },
+    {
+      "simple_name": "Boogie.Houdini",
+      "package_version": "3.5.5",
+      "sha256": "261788110a32d8b090f16d1904e6317d4d00d1103db90017e1abc70261e1a4a9"
+    },
+    {
+      "simple_name": "Boogie.Model",
+      "package_version": "3.5.5",
+      "sha256": "6d93222f66c6b0112a9a5dcd9302b0e05118c719ef97975edb18dbcbc0b24528"
+    },
+    {
+      "simple_name": "Boogie.Provers.SMTLib",
+      "package_version": "3.5.5",
+      "sha256": "20a832feeee8146afe7379b00c64c9e153bd287c175176059d45ce9a28993877"
+    },
+    {
+      "simple_name": "Boogie.VCExpr",
+      "package_version": "3.5.5",
+      "sha256": "e77c69b688b346630bd7623b5e49a98a5222691f18fa91f0042bd8a1d1c227b0"
+    },
+    {
+      "simple_name": "Boogie.VCGeneration",
+      "package_version": "3.5.5",
+      "sha256": "b57b403519b3305b3208d97ea4e267c2f522ef08443895a4115ab0e142df557a"
+    },
+    {
+      "simple_name": "DafnyCore",
+      "package_version": "4.11.0",
+      "sha256": "10b9534ad2369a18ce2e72144ab7e60eaba6a0f5d7ec1a823b3b358649e18d8d"
+    },
+    {
+      "simple_name": "DafnyDriver",
+      "package_version": null,
+      "sha256": "eed067cc7b266fec631f2382e42a014c4b88bad6090fb53084b76554fea7055c"
+    },
+    {
+      "simple_name": "DafnyLanguageServer",
+      "package_version": "4.11.0",
+      "sha256": "5378848095516eef317203c9ec6bc0b38072a8819cab96a9a8d400004858f055"
+    },
+    {
+      "simple_name": "IntervalTree",
+      "package_version": "3.0.1",
+      "sha256": "69d2638aac12c65e222fa1043e0379aa07ce386d013d22ce296d4ec64639fa74"
+    },
+    {
+      "simple_name": "Microsoft.Extensions.FileSystemGlobbing",
+      "package_version": "5.0.0",
+      "sha256": "c6ba4c0e8df96e0c33fe6fe4c14bcbf5200ec72120492c0ee7b462ba120b1e02"
+    },
+    {
+      "simple_name": "Microsoft.Extensions.Logging",
+      "package_version": "5.0.0",
+      "sha256": "565b0abf9cd781d2b432b6075ebf57954097c2ec0d23b01423f0b53c4157733e"
+    },
+    {
+      "simple_name": "Microsoft.Extensions.Logging.Abstractions",
+      "package_version": "5.0.0",
+      "sha256": "f5436dc033055bce95b674ed24593dc5c7358429d71465dc705bf74a46e0632d"
+    },
+    {
+      "simple_name": "Microsoft.Extensions.Options",
+      "package_version": "5.0.0",
+      "sha256": "61f2ba665d119a5254a81243eca872eeee07116d834677b45528aa03a62ab345"
+    },
+    {
+      "simple_name": "Serilog",
+      "package_version": "2.12.0-main-9f863012",
+      "sha256": "f9aa9b3499845f132cb67d739ee5eea05372d19b11d98c04aacbf805f5d3e0d4"
+    },
+    {
+      "simple_name": "System.CommandLine",
+      "package_version": "2.0.0-beta4.22272.1",
+      "sha256": "2158cfc2c484ebdec95fd9959c7eecaebe44657e1e1dee5abb78fc971276829f"
+    },
+    {
+      "simple_name": "System.Linq.Async",
+      "package_version": "6.0.1",
+      "sha256": "149757a4113ae6102c425f1469a7cc14deb28635e94cbc9e0404f5e4dc518001"
+    }
   ],
   "notes": [
     "Set equality, not subset (INV-002/RS-008): any loaded Dafny/Boogie-family assembly outside this mapping fails P03; an expected-but-never-loaded assembly is a failure, never a vacuous pass.",
     "Identity discrimination is by file SHA-256 (beta4 and GA System.CommandLine can share assembly version 2.0.0.0).",
     "Route A observation (DD-001/DD-007 doc-propagation input): DafnyLanguageServer.dll IS loaded on the driver route (CliCompilation constructs the LanguageServer parser/resolver/verifier); DafnyPipeline is NOT loaded on Route A.",
     "DafnyDriver.dll ships without an AssemblyInformationalVersion attribute; its identity is carried by the file digest (RS-008)."
-  ]
+  ],
+  "universe_predicate": {
+    "id": "deps-json-package-runtime-assets",
+    "note": "QA-004 (codex F8): every non-framework assembly selected through the route harness .deps.json (library type=package with a runtime dll asset); project-built assemblies are excluded. Consumed by BOTH the harness (CaptureRuntimeIdentity/PackageRuntimeAssets) and the P03 test; narrowing it is a reviewable oracle diff."
+  }
 }

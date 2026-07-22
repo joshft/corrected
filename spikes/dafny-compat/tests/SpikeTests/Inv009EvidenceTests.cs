@@ -29,9 +29,17 @@ public class Inv009EvidenceTests
         Assert.Equal(SpecConstants.EvidenceSchemaSha256, VerdictAggregator.EvidenceSchemaSha256TrustAnchor);
 
         using var registry = SpikePaths.Json(RegistryPath);
+        var currentRow = registry.RootElement.GetProperty("versions").EnumerateArray()
+            .Single(v => v.GetProperty("version").GetInt32() == SpecConstants.EvidenceSchemaVersion);
+        Assert.Equal(SpecConstants.EvidenceSchemaSha256, currentRow.GetProperty("sha256").GetString());
+        // Append-only proof (QA fix round 1): the retired v1 row is preserved
+        // byte-for-byte — a version may never be reused with a different digest.
         var row1 = registry.RootElement.GetProperty("versions").EnumerateArray()
             .Single(v => v.GetProperty("version").GetInt32() == 1);
-        Assert.Equal(SpecConstants.EvidenceSchemaSha256, row1.GetProperty("sha256").GetString());
+        Assert.Equal(SpecConstants.EvidenceSchemaV1Sha256, row1.GetProperty("sha256").GetString());
+        // The on-disk schema declares the version its digest is registered under.
+        using var schemaDoc = SpikePaths.Json(SchemaPath);
+        Assert.Equal(SpecConstants.EvidenceSchemaVersion, schemaDoc.RootElement.GetProperty("evidence_schema_version").GetInt32());
     }
 
     // Tests INV-009 [unit]: the registry is append-only — versions are unique,
@@ -46,7 +54,8 @@ public class Inv009EvidenceTests
         Assert.NotEmpty(rows);
         Assert.Equal(rows.Count, rows.Select(r => r.Version).Distinct().Count());
         Assert.Equal(rows.Count, rows.Select(r => r.Sha).Distinct().Count());
-        Assert.Contains(rows, r => r.Version == 1 && r.Sha == SpecConstants.EvidenceSchemaSha256);
+        Assert.Contains(rows, r => r.Version == 1 && r.Sha == SpecConstants.EvidenceSchemaV1Sha256);
+        Assert.Contains(rows, r => r.Version == SpecConstants.EvidenceSchemaVersion && r.Sha == SpecConstants.EvidenceSchemaSha256);
         foreach (var r in rows) { Assert.Matches("^[0-9a-f]{64}$", r.Sha); }
     }
 
@@ -153,7 +162,9 @@ public class Inv009EvidenceTests
     {
         var scratch = SpikePaths.TestScratch("inv009-schema-sub");
         var tampered = Path.Combine(scratch, "evidence-schema.json");
-        var text = File.ReadAllText(SchemaPath).Replace("\"evidence_schema_version\": 1", "\"evidence_schema_version\": 1,\n  \"tampered\": true");
+        var text = File.ReadAllText(SchemaPath).Replace(
+            $"\"evidence_schema_version\": {SpecConstants.EvidenceSchemaVersion}",
+            $"\"evidence_schema_version\": {SpecConstants.EvidenceSchemaVersion},\n  \"tampered\": true");
         File.WriteAllText(tampered, text);
         var ex = Record.Exception(() => EvidenceSchema.ValidateSchemaFile(tampered, RegistryPath));
         Assert.NotNull(ex);
@@ -288,11 +299,17 @@ public class Inv009EvidenceTests
             Assert.Equal(asm.GetProperty("file_sha256").GetString(), SpikePaths.Sha256File(full));
         }
 
+        // QA-002: executed_solver_sha256 is the recomputed digest of the file
+        // at the OPTION-MANIFEST solver path (the executed binary), never a
+        // stand-in release archive; the archive pin is a separate field.
         var solverConcrete = binding.GetProperty("solver_path_concrete").GetString()!;
+        Assert.EndsWith("solver/z3-4.12.1/bin/z3", solverConcrete.Replace('\\', '/'));
         var solverFull = Path.IsPathRooted(solverConcrete) ? solverConcrete : Path.Combine(runRootFull, solverConcrete);
         Assert.True(File.Exists(solverFull), $"reported executed-solver path does not exist: {solverConcrete}");
-        Assert.Equal(doc.RootElement.GetProperty("deterministic").GetProperty("executed_solver_sha256").GetString(),
-            SpikePaths.Sha256File(solverFull));
+        var det = doc.RootElement.GetProperty("deterministic");
+        Assert.Equal(det.GetProperty("executed_solver_sha256").GetString(), SpikePaths.Sha256File(solverFull));
+        Assert.NotEqual(det.GetProperty("executed_solver_sha256").GetString(),
+            det.GetProperty("solver_archive_sha256").GetString()); // binary != archive
     }
 
     // Tests INV-009/EA-006 [unit] (TA-A7): culture-flip — the deterministic
@@ -448,20 +465,35 @@ public class Inv009EvidenceTests
             return;
         }
 
-        var samples = Directory.EnumerateFiles(SpikePaths.P("evidence", "samples"), "*.json").ToList();
-        Assert.True(samples.Count > 0,
-            "no committed evidence sample exists. If this follows an INTENTIONAL change: regenerate via scripts/regen-sample.sh and review the diff (DD-008). " +
-            "If this divergence is UNEXPLAINED: investigate — do not regenerate (RS-020/AP-005).");
+        // QA-006 PAIR: the variance-mode sample compares under FULL class-2
+        // equality; the canonical-run sample under the schema-declared
+        // suite-status MASK. Both compare against ONE variance fresh run — the
+        // mask drops exactly the subtree by which a canonical and a variance
+        // run differ (final_suite_status/route_verdicts/verdict_reasons), so no
+        // recursive canonical run is needed inside the suite (QA-006 catch-22
+        // resolution).
+        var varianceSample = SpikePaths.P("evidence", "samples", "run-report.sample.json");
+        var canonicalSample = SpikePaths.P("evidence", "samples", "run-report.canonical.sample.json");
+        Assert.True(File.Exists(varianceSample),
+            "no committed VARIANCE evidence sample (evidence/samples/run-report.sample.json). If this follows an INTENTIONAL change: regenerate via scripts/regen-sample.sh and review the diff (DD-008). If UNEXPLAINED: investigate — do not regenerate (RS-020/AP-005).");
+        Assert.True(File.Exists(canonicalSample),
+            "no committed CANONICAL evidence sample (evidence/samples/run-report.canonical.sample.json) — regenerate the PAIR via scripts/regen-sample.sh (DD-008/QA-006).");
 
         var scratch = SpikePaths.TestScratch("inv009-fresh-run");
         var fresh = Path.Combine(scratch, "run-report.json");
         var run = Launch.Script("scripts/run-spike.sh", null, "--out", fresh);
         Assert.Equal(0, run.ExitCode);
+        var freshText = File.ReadAllText(fresh);
 
-        var freshProjection = EvidenceSchema.DeterministicProjection(File.ReadAllText(fresh), SchemaPath);
-        var sampleProjection = EvidenceSchema.DeterministicProjection(File.ReadAllText(samples[0]), SchemaPath);
-        Assert.True(sampleProjection == freshProjection,
-            "committed sample's deterministic projection diverges from a fresh run. If this follows an INTENTIONAL change: regenerate via scripts/regen-sample.sh " +
+        var freshFull = EvidenceSchema.DeterministicProjection(freshText, SchemaPath);
+        var varianceProjection = EvidenceSchema.DeterministicProjection(File.ReadAllText(varianceSample), SchemaPath);
+        Assert.True(varianceProjection == freshFull,
+            "committed VARIANCE sample's full deterministic projection diverges from a fresh run. If this follows an INTENTIONAL change: regenerate via scripts/regen-sample.sh " +
             "and review the diff (DD-008). If UNEXPLAINED: investigate — never regenerate to silence it (AP-005/RS-020).");
+
+        var freshMasked = EvidenceSchema.DeterministicProjection(freshText, SchemaPath, applySuiteStatusMask: true);
+        var canonicalMasked = EvidenceSchema.DeterministicProjection(File.ReadAllText(canonicalSample), SchemaPath, applySuiteStatusMask: true);
+        Assert.True(canonicalMasked == freshMasked,
+            "committed CANONICAL sample's suite-status-masked projection diverges from a fresh run. If INTENTIONAL: regenerate the PAIR via scripts/regen-sample.sh (DD-008/QA-006). If UNEXPLAINED: investigate (AP-005/RS-020).");
     }
 }

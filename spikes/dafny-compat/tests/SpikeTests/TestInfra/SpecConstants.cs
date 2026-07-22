@@ -9,9 +9,16 @@ public static class SpecConstants
     public const string ProbeManifestSha256 =
         "4956816b40f2cf4316ab2ba3ad9cbb810bb89e0339187c8add7a7d3c2178b0eb";
 
-    /// <summary>INV-009: SHA-256 of the committed evidence schema (schema/evidence-schema.json), anchored beside the manifest digest. (v1 amended in place during RED per TA-B15 then TA-B16/TA-A15 — no evidence was ever emitted under any prior digest; see the registry note.)</summary>
+    /// <summary>INV-009: SHA-256 of the committed evidence schema (schema/evidence-schema.json), anchored beside the manifest digest. v2 appended in QA fix round 1 (QA-002 solver_archive_sha256 field + QA-006 suite_status_mask block); the in-place-v1 window closed once evidence existed under the v1 digest, so v2 is a NEW registry row.</summary>
     public const string EvidenceSchemaSha256 =
+        "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509";
+
+    /// <summary>The retired v1 digest — its registry row is append-only-frozen; a test asserts it is never removed or altered (INV-009/codex R3-6).</summary>
+    public const string EvidenceSchemaV1Sha256 =
         "a630b1aa10294b688867ee0cd73574f7c12c15050a2724245b43b3e8b4650259";
+
+    /// <summary>Current schema version emitted by every report (registry row for this version carries EvidenceSchemaSha256).</summary>
+    public const int EvidenceSchemaVersion = 2;
 
     /// <summary>INV-007/RS-018b: SHA-256 of the frozen Option Manifest (manifest/option-manifest.json) — an oracle file, digest-bound. (v2 after TA-A8 per-route canary rows.)</summary>
     public const string OptionManifestSha256 =
@@ -32,6 +39,9 @@ public static class SpecConstants
     public const string SystemCommandLinePin = "2.0.0-beta4.22272.1";
     public const string SdkPin = "10.0.302";
     public const string Z3Sha256 = "c5360fd157b0f861ec8780ba3e51e2197e9486798dc93cd878df69a4b0c2b7c5";
+
+    /// <summary>QA-002: digest of the bin/z3 binary extracted from the pinned release asset (recorded by provisioning in solver/z3-4.12.1/binary.sha256; P04 re-verifies the installed binary against it).</summary>
+    public const string Z3BinarySha256 = "06883e4d3fee816537ae1141ca4fff727f8820d05b0db5587aa540e380a3a8bf";
     public const string Net8ControlRuntimeVersion = "8.0.29";
     public const string Net8ControlArchiveSha256 = "dba346c5c4357e1befebf14de8c8ee7f09313cc12c7c0015a4cdd4dfd0efba81";
 

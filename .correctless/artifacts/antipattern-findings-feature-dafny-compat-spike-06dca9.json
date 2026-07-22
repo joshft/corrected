@@ -1,0 +1,238 @@
+{
+  "findings": [
+    {
+      "id": "AP-001",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/provision-z3.sh",
+      "line": 29,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-002",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/provision-z3.sh",
+      "line": 52,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-003",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/provision-z3.sh",
+      "line": 73,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-004",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/provision-z3.sh",
+      "line": 97,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-005",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/provision-z3.sh",
+      "line": 109,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-006",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/provision-z3.sh",
+      "line": 118,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-007",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/provision-z3.sh",
+      "line": 129,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-008",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/provision-z3.sh",
+      "line": 147,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-009",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/regen-sample.sh",
+      "line": 31,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-010",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/regen-sample.sh",
+      "line": 40,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-011",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/regen-sample.sh",
+      "line": 63,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-012",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/regen-sample.sh",
+      "line": 64,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-013",
+      "pattern": "error-suppression",
+      "severity": "high",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 92,
+      "description": "Error suppression with ",
+      "category": "| true or || :|error-handling"
+    },
+    {
+      "id": "AP-014",
+      "pattern": "error-suppression",
+      "severity": "high",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 331,
+      "description": "Error suppression with ",
+      "category": "| true or || :|error-handling"
+    },
+    {
+      "id": "AP-015",
+      "pattern": "error-suppression",
+      "severity": "high",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 335,
+      "description": "Error suppression with ",
+      "category": "| true or || :|error-handling"
+    },
+    {
+      "id": "AP-016",
+      "pattern": "error-suppression",
+      "severity": "high",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 339,
+      "description": "Error suppression with ",
+      "category": "| true or || :|error-handling"
+    },
+    {
+      "id": "AP-017",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 57,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-018",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 71,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-019",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 101,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-020",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 216,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-021",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 355,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-022",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 365,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-023",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 425,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-024",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 492,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-025",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 652,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    },
+    {
+      "id": "AP-026",
+      "pattern": "debug-echo",
+      "severity": "low",
+      "file": "spikes/dafny-compat/scripts/run-spike.sh",
+      "line": 675,
+      "description": "Debug echo statement in script",
+      "category": "debug-logging"
+    }
+  ]
+}

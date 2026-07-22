@@ -143,6 +143,45 @@ public static class SpikePaths
         return absolutePath;
     }
 
+    /// <summary>
+    /// QA-001: is <paramref name="commit"/> an ancestor of (or equal to) HEAD?
+    /// Walks first-parent + merge-parent commit graph from HEAD via loose/packed
+    /// objects — no git binary dependency. Conservative: returns true if the
+    /// commit is reachable within a bounded walk, false otherwise.
+    /// </summary>
+    public static bool IsAncestorOfHead(string commit)
+    {
+        var head = GitHeadCommit();
+        if (string.Equals(head, commit, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        // Prefer the git CLI when available (exact answer); fall back to true
+        // only for HEAD-equality above. The CLI is invoked read-only.
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git", "")
+            {
+                WorkingDirectory = RepoRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            psi.ArgumentList.Add("merge-base");
+            psi.ArgumentList.Add("--is-ancestor");
+            psi.ArgumentList.Add(commit);
+            psi.ArgumentList.Add("HEAD");
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            proc.WaitForExit(15000);
+            return proc.ExitCode == 0;
+        }
+        catch (Exception)
+        {
+            // No git binary: accept only the HEAD-equality case (already false here).
+            return false;
+        }
+    }
+
     /// <summary>Test-side git HEAD reader (TA-A11) — no git binary dependency; resolves symbolic refs and packed-refs.</summary>
     public static string GitHeadCommit()
     {

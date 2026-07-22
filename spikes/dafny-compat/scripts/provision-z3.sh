@@ -16,7 +16,7 @@ RID_FAIL_MESSAGE="RID not supported by this spike; proven RIDs: linux-x64 (see A
 # every external command goes through run_cmd. The static test audits every
 # scripts/*.sh: allowlist array equality, call-site first arguments, deny-set
 # scan, and option adjacency on the fetch tool.
-ALLOWLIST=(bash dotnet curl sha256sum tar unzip git mkdir mktemp mv chmod setsid kill sleep)
+ALLOWLIST=(bash dotnet curl sha256sum tar unzip git mkdir mktemp mv rm chmod setsid kill sleep)
 
 run_cmd() {
   local cmd="$1"; shift
@@ -138,6 +138,10 @@ run_cmd unzip -q -o "$ARCHIVE" "z3-$Z3_VERSION-x64-glibc-2.35/bin/z3" -d "$EXTRA
 run_cmd mkdir -p -- "$INSTALL_DIR"
 run_cmd mv -f -- "$EXTRACT_DIR/z3-$Z3_VERSION-x64-glibc-2.35/bin/z3" "$INSTALL_PATH"
 run_cmd chmod 0755 "$INSTALL_PATH"
+# QA-014(1): remove the extraction scratch and any stale .corrupt/.download
+# stragglers so run roots do not accumulate provisioning temp files.
+run_cmd rm -rf "$EXTRACT_DIR"
+run_cmd rm -f "$ARCHIVE.corrupt" "$ARCHIVE.download"
 printf '%s\n' "$Z3_SHA256" > "$MARKER.tmp"
 run_cmd mv -- "$MARKER.tmp" "$MARKER"
 BINARY_SHA="$(sha_of "$INSTALL_PATH")"
