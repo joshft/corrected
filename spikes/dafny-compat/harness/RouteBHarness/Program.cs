@@ -1,3 +1,2 @@
-// STUB:TDD — RED-phase harness stub. See RouteAHarness/Program.cs.
-Console.Error.WriteLine("RouteBHarness: STUB:TDD — not implemented (RED phase); exiting INCOMPLETE.");
-return Corrected.Spike.Contracts.ExitCodes.Incomplete;
+// GREEN — Route B harness executable (DD-001/DD-003). See RouteAHarness.
+return Corrected.Spike.Contracts.HarnessCore.Run("B", new Corrected.Spike.RouteB.RouteBAdapter(), args);

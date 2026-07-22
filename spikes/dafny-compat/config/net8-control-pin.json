@@ -7,16 +7,16 @@
   "official_sha512": "2739a48f5ec81738d05376f7bf26b2efc5297639db3f4748b458d54bf795a084c5bd47886449b9996eb1a3371bb8c3900d72049e8f0150d0a5ac8230ef38a65e",
   "provenance": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/8.0/releases.json (runtime 8.0.29, linux-x64 tar.gz); sha256 computed from the downloaded archive whose sha512 matches the official release-metadata hash",
   "net10_control_host": {
-    "note": "codex R4-04: EA-001's floating net10 runtime patch applies to the main run's binding record only, never to control cells. The SDK-bundled host is declared here as an explicit locked prerequisite; digests captured in GREEN via the DD-008 procedure (relative to the pinned SDK install, never absolute host paths).",
+    "note": "codex R4-04: EA-001's floating net10 runtime patch applies to the main run's binding record only, never to control cells. The SDK-bundled host is declared here as an explicit locked prerequisite. GREEN-CAPTURED 2026-07-21 via the DD-008 procedure from the pinned SDK 10.0.302 install (runtime 10.0.10 host/fxr and shared-framework CoreLib; relative paths host/fxr/10.0.10/libhostfxr.so and shared/Microsoft.NETCore.App/10.0.10/System.Private.CoreLib.dll). Changing the SDK pin re-captures these (DD-006).",
     "sdk_version": "10.0.302",
-    "hostfxr_expected_digest": null,
-    "corelib_expected_digest": null
+    "hostfxr_expected_digest": "28e74b76f8aee226dbe267c626f7da944c60c75fb682d4dd75cc572ee916d379",
+    "corelib_expected_digest": "800c14073430aa5fc860b22ccbbc06a043306b21e1fd14d693d891af02013109"
   },
   "net8_expected_identities": {
-    "note": "TA-B12: per-file identities of the pinned 8.0.29 runtime the control cell must prove it ran on. Captured in GREEN from the digest-verified archive via DD-008; null placeholders FAIL the pin test by design.",
-    "hostfxr_expected_digest": null,
+    "note": "TA-B12: per-file identities of the pinned 8.0.29 runtime the control cell must prove it ran on. GREEN-CAPTURED 2026-07-21 from the digest-verified archive (sha256 above) via the DD-008 procedure.",
+    "hostfxr_expected_digest": "e4406c9d95a597820963a2b6dfec70b20a5543a6eb30dcac75f1a35a03db57c8",
     "hostfxr_relative_path": "host/fxr/8.0.29/libhostfxr.so",
-    "corelib_expected_digest": null,
+    "corelib_expected_digest": "4575cbde390a0e312ff9098104344d0ba41000606725fd937e68f06efbd70aa4",
     "corelib_relative_path": "shared/Microsoft.NETCore.App/8.0.29/System.Private.CoreLib.dll"
   },
   "identity_proof": "digest + location identity of the selected hostfxr and System.Private.CoreLib recorded in control evidence — 'ran on some 8.x' is insufficient; the pinned runtime must be proven to have run"

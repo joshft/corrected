@@ -23,4 +23,12 @@
   <ItemGroup>
     <ProjectReference Include="../../contracts/SpikeContracts/SpikeContracts.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Shared seam logic compiled into BOTH route assemblies (single source of
+         truth for option construction/classification) while each route keeps
+         its own isolated package graph (INV-008/DD-001). The file lives in the
+         Route A seam directory because the INV-008 source grep whitelists only
+         the two seam project directories for Microsoft.Dafny references. -->
+    <Compile Include="../SpikeDafnyAdapter.RouteA/SeamCommon.cs" Link="SeamCommon.cs" />
+  </ItemGroup>
 </Project>

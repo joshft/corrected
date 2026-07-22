@@ -205,20 +205,28 @@ public class Inv001ToolchainPinTests
         Assert.True(control.ExitCode == 0,
             $"control restore failed (exit {control.ExitCode}); an already-broken restore cannot prove locked mode. stderr: {control.StdErr}");
 
-        // Phase 2 — the TEST mutates ONLY the lock-consistency field.
+        // Phase 2 — the TEST mutates ONLY the lock-consistency data. TEST_BUG
+        // fix #5 (endorsed): mutate the REQUESTED range for DafnyCore (a
+        // lock-vs-project-declaration inconsistency, the canonical
+        // deterministic offline NU1004 trigger, proving lock VALIDATION was in
+        // effect — RS-014a), bumping resolved alongside so the lock stays
+        // self-consistent while disagreeing with the project's pin.
         const string nightly = "4.11.1-nightly-2026-01-01";
-        var mutated = MutateDafnyCoreResolved(File.ReadAllText(scratchLock), nightly);
+        var mutated = MutateDafnyCoreRequestedRange(File.ReadAllText(scratchLock), nightly);
         File.WriteAllText(scratchLock, mutated);
         Assert.Contains(nightly, File.ReadAllText(scratchLock)); // the fault really landed on disk (TA-B3a)
 
-        // Phase 3 — the IDENTICAL generic phase must now fail with NU1004-class output.
+        // Phase 3 — the IDENTICAL generic phase must now fail with the
+        // locked-mode mismatch diagnostic. NU1004 ONLY: NU1102-class
+        // missing-package failures are the spec-excluded any-failure shape.
         var negative = Launch.Script("scripts/run-spike.sh", null, "--phase", "restore", "--project", scratchProj);
         Assert.NotEqual(0, negative.ExitCode);
         Assert.Contains("NU1004", negative.StdOut + negative.StdErr);
     }
 
-    private static string MutateDafnyCoreResolved(string lockJson, string nightlyVersion)
+    private static string MutateDafnyCoreRequestedRange(string lockJson, string nightlyVersion)
     {
+        var nightlyRange = $"[{nightlyVersion}, {nightlyVersion}]";
         using var doc = System.Text.Json.JsonDocument.Parse(lockJson);
         using var stream = new MemoryStream();
         using (var writer = new System.Text.Json.Utf8JsonWriter(stream, new System.Text.Json.JsonWriterOptions { Indented = true }))
@@ -232,7 +240,11 @@ public class Inv001ToolchainPinTests
                         foreach (var prop in el.EnumerateObject())
                         {
                             writer.WritePropertyName(prop.Name);
-                            if (insideDafnyCore && prop.Name == "resolved")
+                            if (insideDafnyCore && prop.Name == "requested")
+                            {
+                                writer.WriteStringValue(nightlyRange);
+                            }
+                            else if (insideDafnyCore && prop.Name == "resolved")
                             {
                                 writer.WriteStringValue(nightlyVersion);
                             }

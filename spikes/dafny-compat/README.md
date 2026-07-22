@@ -110,6 +110,33 @@ dotnet test spikes/dafny-compat -noAutoResponse
 spike-local `Directory.Build.rsp` seals directory response files, but only
 `-noAutoResponse` disables the SDK-adjacent `MSBuild.rsp` (codex R3-8).
 
+**A completed controller run must exist first.** Integration tests launch only
+controller-built, digest-attested artifacts (DD-008/TA-B13). Each completed
+controller run atomically publishes `out/current/spike.runsettings`, which
+`Directory.Build.props` feeds to VSTest so direct `dotnet test` invocations
+receive `SPIKE_RUN_CONTEXT` pointing at the latest run's `run-context.json`.
+On a fresh clone (no `out/current/`), the variable is unset and every
+integration test fails loudly with the remediation message — run
+`scripts/run-spike.sh` once. The controller also caches the resolved SDK
+location (`out/cache/dotnet-root`) and the digest-verified provisioning
+archives (`out/cache/`) so nested in-suite controller runs work under the
+empty launch environments the tests construct.
+
+**Suite-status semantics (codex R4-02/R3-5):** only a canonical operator run
+(no `--run-root`/`--out`/`--config`/`--solver` overrides) executes the
+`dotnet test` suite phase and records `final_suite_status` success/failure;
+variance-mode runs — the form every in-suite nested launch uses, which also
+prevents unbounded recursion — record `unknown`, so their route verdicts are
+INCOMPLETE by construction and never citable as COMPATIBLE. The committed
+evidence sample is regenerated in variance mode so the fresh-run-equality
+comparison is like-for-like.
+
+**Solver identity digests:** `config/z3-pin.json` pins the SHA-256 of the
+official release *archive* (BND-002 intake check); the digest of the extracted
+`bin/z3` binary actually executed is recorded per run as
+`executed_solver_sha256` and written by provisioning to
+`<run-root>/solver/z3-4.12.1/binary.sha256`.
+
 ## Layout
 
 | path | purpose |

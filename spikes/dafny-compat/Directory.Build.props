@@ -23,4 +23,33 @@
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
+  <!-- DD-008: when the bootstrap controller passes -p:SpikeRunRoot=<abs run
+       root>, EVERY project redirects its outputs, intermediates, and NuGet
+       extension imports beneath the newly-empty run root — structurally, per
+       project name. Only artifacts from those paths are launched; a test
+       pre-seeds stale repo-local bin/obj artifacts and proves they are neither
+       consumed nor launched. -->
+  <!-- The controller passes the run root SPIKE-RELATIVE (-p:SpikeRunRootRel=
+       out/<run_id>) so the recorded restore/build argv stays free of absolute
+       host paths (PRH-005); it anchors here, at the spike root. -->
+  <PropertyGroup Condition="'$(SpikeRunRootRel)' != '' and '$(SpikeRunRoot)' == ''">
+    <SpikeRunRoot>$(MSBuildThisFileDirectory)$(SpikeRunRootRel)</SpikeRunRoot>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(SpikeRunRoot)' != ''">
+    <BaseOutputPath>$(SpikeRunRoot)/build/$(MSBuildProjectName)/bin/</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(SpikeRunRoot)/build/$(MSBuildProjectName)/obj/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(SpikeRunRoot)/build/$(MSBuildProjectName)/obj/</MSBuildProjectExtensionsPath>
+    <!-- Stale repo-local bin/obj must be UNREACHABLE for redirected builds
+         (DD-008): with intermediates moved, the default Compile glob would
+         otherwise pick up generated sources from prior repo-local builds. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- TA-B13/DD-008: direct `dotnet test` invocations (EA-004 workflow command)
+       receive SPIKE_RUN_CONTEXT from the runsettings file the LAST completed
+       controller run published atomically under out/current/. Without a prior
+       controller run the variable stays unset and integration tests fail
+       loudly, by design ("run the suite via scripts/run-spike.sh"). -->
+  <PropertyGroup Condition="'$(RunSettingsFilePath)' == '' and Exists('$(MSBuildThisFileDirectory)out/current/spike.runsettings')">
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)out/current/spike.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
 </Project>

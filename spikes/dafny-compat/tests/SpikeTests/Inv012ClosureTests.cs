@@ -28,7 +28,9 @@ public class Inv012ClosureTests
         var delta = root.GetProperty("expected_target_set_delta").EnumerateArray().Select(t => t.GetString()!).ToHashSet();
 
         Assert.NotEmpty(offTargets);
-        Assert.ProperSubset(offTargets, onTargets);
+        // TEST_BUG fix #4: xUnit semantics are (expectedSuperset, actual) —
+        // this asserts off ⊊ on, the R3-10 intent.
+        Assert.ProperSubset(onTargets, offTargets);
         Assert.Equal(delta, onTargets.Except(offTargets).ToHashSet());
         Assert.NotEmpty(delta);
     }

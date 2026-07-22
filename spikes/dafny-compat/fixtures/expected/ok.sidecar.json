@@ -4,10 +4,11 @@
   "probe": "P06",
   "expected_verification_targets": ["Add", "MaxOfTwo", "SumFirst"],
   "expected_target_count": 3,
-  "min_task_count": 3,
+  "min_task_count": 2,
   "expected_frontend_error_count": 0,
   "notes": [
     "Target names follow Dafny's typed per-member verification-task naming; re-captured via the DD-006/DD-008 procedure on any toolchain bump.",
+    "GREEN capture 2026-07-21 (AP-014 real-producer re-capture): the trivial function Add produces a verification target but zero solver tasks on Dafny 4.11.0; MaxOfTwo and SumFirst produce one completed solver task each, so the committed floor is 2 (> 0).",
     "Every task outcome must be a solver-produced outcome enum value (RS-004a); raw resource counts are a nondeterministic observation outside the equality domain (codex R4-09)."
   ]
 }

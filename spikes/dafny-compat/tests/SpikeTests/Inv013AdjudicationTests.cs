@@ -55,9 +55,13 @@ public class Inv013AdjudicationTests
         Assert.True(algebra.GetProperty("exit_report_matrix").GetArrayLength() >= 9);
         Assert.NotEmpty(algebra.GetProperty("precedence_order_for_multi_match").EnumerateArray().ToList());
         Assert.Contains("non-boundary-rejection", algebra.GetProperty("upstream_defect_semantics").GetString());
-        // OFFICIAL_API_CAPABILITY_GAP reachable ONLY via the source-verified terminal transition (codex R4-01).
+        // OFFICIAL_API_CAPABILITY_GAP reachable ONLY via the source-verified
+        // terminal transition (codex R4-01). TEST_BUG fix #1: not every
+        // transition row carries a "note" — probe with TryGetProperty; the
+        // sole-path note must still EXIST on some row.
         Assert.Contains(algebra.GetProperty("transition_table").EnumerateArray(),
-            row => (row.GetProperty("note").GetString() ?? "").Contains("ONLY path to OFFICIAL_API_CAPABILITY_GAP"));
+            row => row.TryGetProperty("note", out var n)
+                && (n.GetString() ?? "").Contains("ONLY path to OFFICIAL_API_CAPABILITY_GAP"));
     }
 
     // Tests INV-013 [unit]: environment/prerequisite faults yield INCOMPLETE

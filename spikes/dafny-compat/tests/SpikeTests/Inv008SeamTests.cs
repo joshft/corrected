@@ -173,13 +173,22 @@ public class Inv008SeamTests
             Assert.True(File.Exists(dll), $"assembly under scan missing: {dll} (the controller-built artifact set is incomplete — never skip)");
         }
 
+        // TEST_BUG fix #2: de-duplicate resolver paths by ASSEMBLY FILE NAME,
+        // with the three explicit scan targets winning, so PathAssemblyResolver
+        // can never substitute an unattested copy for a directly-scanned assembly.
         var runtimeDir = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
-        var resolverPaths = Directory.GetFiles(runtimeDir, "*.dll")
-            .Concat(scanTargets)
-            .Concat(Directory.GetFiles(routeADir, "*.dll"))
-            .Concat(Directory.GetFiles(routeBDir, "*.dll"))
-            .Distinct().ToArray();
-        var resolver = new PathAssemblyResolver(resolverPaths);
+        var resolverByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dll in scanTargets)
+        {
+            resolverByName[Path.GetFileName(dll)] = dll; // explicit targets win the dedup
+        }
+        foreach (var dll in Directory.GetFiles(runtimeDir, "*.dll")
+                     .Concat(Directory.GetFiles(routeADir, "*.dll"))
+                     .Concat(Directory.GetFiles(routeBDir, "*.dll")))
+        {
+            resolverByName.TryAdd(Path.GetFileName(dll), dll);
+        }
+        var resolver = new PathAssemblyResolver(resolverByName.Values.ToArray());
         using var mlc = new MetadataLoadContext(resolver);
 
         foreach (var dll in scanTargets)
@@ -247,6 +256,11 @@ public class Inv008SeamTests
             Assert.Equal(expectedSha, SpikePaths.Sha256File(path));
         }
 
+        // TEST_BUG fix #3: needles built by concatenation so this scanner never
+        // matches its own source, and the scanner file itself is excluded (its
+        // comments legitimately name the namespaces). Everything else stays scanned.
+        var dafnyNeedle = "Microsoft." + "Dafny";
+        var boogieNeedle = "Microsoft." + "Boogie";
         var seamDirs = new[]
         {
             Path.Combine("adapters", "SpikeDafnyAdapter.RouteA"),
@@ -257,10 +271,14 @@ public class Inv008SeamTests
             var rel = Path.GetRelativePath(SpikePaths.SpikeRoot, file);
             if (seamDirs.Any(d => rel.StartsWith(d, StringComparison.Ordinal)))
             {
-                continue; // seam projects legitimately reference Microsoft.Dafny in GREEN
+                continue; // seam projects legitimately reference the Dafny namespaces in GREEN
+            }
+            if (Path.GetFileName(file) == "Inv008SeamTests.cs")
+            {
+                continue; // the scanning test file itself
             }
             var text = File.ReadAllText(file);
-            Assert.False(text.Contains("Microsoft.Dafny") || text.Contains("Microsoft.Boogie"),
+            Assert.False(text.Contains(dafnyNeedle) || text.Contains(boogieNeedle),
                 $"{rel} references Dafny/Boogie namespaces outside the seam (INV-008; whitelist is only the hash-bound .cs.txt fixtures)");
         }
     }
