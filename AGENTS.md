@@ -23,6 +23,14 @@ before posting, and redact or generalize with placeholders (`<repo-root>`,
 `<user>`) rather than including real values. When in doubt, leave it out — a
 public leak cannot be undone even if later edited or deleted.
 
+## No Claude session links
+
+Never add the Claude Code session link — the `https://claude.ai/code/session_…`
+URL, whether emitted as a `Claude-Session:` commit trailer or appended to a PR
+body — to commits, pull requests, issues, or any other artifact, in this repo or
+anywhere else. Omit it entirely. The `Co-Authored-By:` trailer is fine to keep;
+only the session link is prohibited.
+
 ## Correctless
 
 This project uses Correctless for structured development.
