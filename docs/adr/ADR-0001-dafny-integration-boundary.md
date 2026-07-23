@@ -55,6 +55,26 @@ The **variance-mode** committed sample (`run-report.sample.json`,
 remains the full-equality reproducibility anchor for the fresh-run-equality
 test. No selection claim is made here yet; no rejection claim is made either.
 
+### Maintainer route selection (recorded 2026-07-22)
+
+Recorded for provenance and **deliberately not reflected in the machine-readable
+`adr_lint` block above**, which stays `pending`: the maintainer has selected
+**Route A** (`CliCompilation` via `DafnyDriver`) as the intended in-process
+boundary. Rationale — fidelity to the `dafny` CLI's own verification path, and
+upgrade robustness: Route B's `DafnyPipeline` consumption (the OQ-004
+standard-libraries `.doo` path) is load-bearing and would need re-validation on
+every Dafny bump. Accepted cost: `DafnyLanguageServer` becomes a permanent,
+un-trimmable part of the production closure (the driver's parser/resolver/
+verifier are LanguageServer types), and `DafnyPipeline` is not loaded on Route A.
+
+This records a direction of intent, **not** the formal promotion. Promotion —
+setting the machine-readable block to the in-process-selected / Route A /
+COMPATIBLE state, backed by a schema-valid terminal adjudication record, plus the
+DD-007 component-table propagation into DESIGN.md and ARCHITECTURE.md — remains
+the inherited obligation DF-002 of the final Phase 0.0 feature. Until then the
+ADR Status stays provisional and the machine-readable block stays `pending`, so
+INV-013's linter and the provisional-status check continue to hold.
+
 ### Capability observations (bullets 1–3; each backed by the committed pair)
 
 Verdict-bearing claims cite the **canonical** sample
