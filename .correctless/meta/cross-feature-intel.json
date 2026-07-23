@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-20T22:24:16Z",
+  "scope": [],
+  "truncated_count": 0,
+  "warnings": [],
+  "sections": {
+    "deferred_findings": [],
+    "devadv_themes": [],
+    "override_patterns": [],
+    "lens_recommendations": [],
+    "debug_clusters": [],
+    "phase_effectiveness": []
+  },
+  "_dormant_counts": {}
+}

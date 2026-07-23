@@ -1,0 +1,111 @@
+{
+  "note": "EA-008 (TA-B11): committed per-launch environment profiles — the evidentiary-run environment is CONSTRUCTED from these exact keys and value templates, never sanitized by prohibition. <run-root> expands at launch; committed evidence serializes values as root-kind + relative path. The child's ACTUAL received environment is recorded in receipts/env-audit.json and in report binding identity; tests assert equality with these profiles modulo documented_sdk_injected.",
+  "documented_sdk_injected": ["DOTNET_HOST_PATH", "DOTNET_ROOT"],
+  "path_construction_rule": "PATH is constructed, decoy-first per INV-003: <run-root>/decoys/path-first comes before the tool directories; no ambient PATH entries survive",
+  "launch_classes": {
+    "controller": {
+      "PATH": "<constructed:decoy-first>",
+      "DOTNET_CLI_HOME": "<run-root>/dotnet-cli-home",
+      "NUGET_PACKAGES": "<run-root>/packages",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "SSL_CERT_FILE": "<passthrough>",
+      "SSL_CERT_DIR": "<passthrough>",
+      "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+      "MSBUILDDISABLENODEREUSE": "1",
+      "UseSharedCompilation": "false"
+    },
+    "provision": {
+      "PATH": "<constructed:decoy-first>",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "SSL_CERT_FILE": "<passthrough>",
+      "SSL_CERT_DIR": "<passthrough>"
+    },
+    "fetch": {
+      "PATH": "<constructed:decoy-first>",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "SSL_CERT_FILE": "<passthrough>",
+      "SSL_CERT_DIR": "<passthrough>"
+    },
+    "restore": {
+      "PATH": "<constructed:decoy-first>",
+      "DOTNET_CLI_HOME": "<run-root>/dotnet-cli-home",
+      "NUGET_PACKAGES": "<run-root>/packages",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "SSL_CERT_FILE": "<passthrough>",
+      "SSL_CERT_DIR": "<passthrough>",
+      "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+      "MSBUILDDISABLENODEREUSE": "1",
+      "UseSharedCompilation": "false"
+    },
+    "build": {
+      "PATH": "<constructed:decoy-first>",
+      "DOTNET_CLI_HOME": "<run-root>/dotnet-cli-home",
+      "NUGET_PACKAGES": "<run-root>/packages",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "SSL_CERT_FILE": "<passthrough>",
+      "SSL_CERT_DIR": "<passthrough>",
+      "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+      "MSBUILDDISABLENODEREUSE": "1",
+      "UseSharedCompilation": "false"
+    },
+    "test": {
+      "PATH": "<constructed:decoy-first>",
+      "DOTNET_CLI_HOME": "<run-root>/dotnet-cli-home",
+      "NUGET_PACKAGES": "<run-root>/packages",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "SSL_CERT_FILE": "<passthrough>",
+      "SSL_CERT_DIR": "<passthrough>",
+      "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+      "MSBUILDDISABLENODEREUSE": "1",
+      "UseSharedCompilation": "false",
+      "SPIKE_RUN_CONTEXT": "<run-root>/run-context.json"
+    },
+    "harness": {
+      "PATH": "<constructed:decoy-first>",
+      "DOTNET_CLI_HOME": "<run-root>/dotnet-cli-home",
+      "NUGET_PACKAGES": "<run-root>/packages",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "DOTNET_CLI_TELEMETRY_OPTOUT": "1"
+    },
+    "control": {
+      "PATH": "<constructed:decoy-first>",
+      "DOTNET_CLI_HOME": "<run-root>/dotnet-cli-home",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8",
+      "DOTNET_CLI_TELEMETRY_OPTOUT": "1"
+    },
+    "solver-identity": {
+      "PATH": "<constructed:decoy-first>",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8"
+    },
+    "sentinel": {
+      "PATH": "<constructed:decoy-first>",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8"
+    },
+    "cache": {
+      "PATH": "<constructed:decoy-first>",
+      "TMPDIR": "<run-root>/tmp",
+      "LC_ALL": "C.UTF-8",
+      "LANG": "C.UTF-8"
+    }
+  }
+}

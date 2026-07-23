@@ -1,0 +1,49 @@
+{
+  "option_manifest_version": 1,
+  "note": "INV-007/P11 oracle: THIS FILE, not spec prose, freezes the effective option set (RS-018b). Digest-bound into the evidence deterministic projection (INV-009). Solver path uses the <run-root> token: expanded for execution, canonical in evidence (codex R2-1).",
+  "options": [
+    { "id": "--no-verify", "value": "false", "meaning": "verification enabled" },
+    { "id": "--filter-symbol", "value": null, "meaning": "no symbol filter" },
+    { "id": "--verify-included-files", "value": "false", "p12_differential_values": ["false", "true"] },
+    { "id": "--library", "value": null, "meaning": "no library inputs" },
+    { "id": "--cores", "value": "1" },
+    { "id": "--solver-path", "value": "<run-root>/solver/z3-4.12.1/bin/z3" },
+    { "id": "--verification-time-limit", "value": "0", "meaning": "no solver time limit (DESIGN.md Phase 0.1 doctrine)" },
+    { "id": "--resource-limit", "value": "10000000", "meaning": "explicit resource-limit setting (DESIGN.md Phase 0.1 doctrine)" },
+    { "id": "--function-syntax", "value": "4" },
+    { "id": "--random-seed", "value": "0" },
+    { "id": "--standard-libraries", "value": "false", "route_b_anchor_differential_values": ["true"], "meaning": "OQ-004 anchor variance, explicit in evidence" },
+    { "id": "--boogie", "value": null, "meaning": "no requested Boogie passthrough options; effective Boogie prover options are recorded post-processing (pre-review finding 9)" }
+  ],
+  "normalization_canary": {
+    "option_id": "--solver-path",
+    "requested_value": "<run-root>/solver/z3-4.12.1/bin/z3",
+    "routes": {
+      "A": {
+        "options_construction": "System.CommandLine parse via DafnyDriver (legacy bindings applied)",
+        "prover_path_entry_prefix": "PROVER_PATH=<run-root>/",
+        "solver_identifier": "Z3",
+        "solver_version": "4.12.1",
+        "added_prover_options_include": ["O:auto_config=false", "O:type_check=true", "O:smt.qi.eager_threshold=44"]
+      },
+      "B": {
+        "options_construction": "hand-assembled DafnyOptions for CompilationInput; ProcessSolverOptions still runs in TextDocumentLoader",
+        "prover_path_entry_prefix": "PROVER_PATH=<run-root>/",
+        "solver_identifier": "Z3",
+        "solver_version": "4.12.1",
+        "added_prover_options_include": ["O:auto_config=false", "O:type_check=true", "O:smt.qi.eager_threshold=44"]
+      }
+    },
+    "source_citations": [
+      "dafny v4.11.0 Source/DafnyCore/Pipeline/Compilation.cs:56 (Options => Input.Options: naive readback is input echo, codex F5)",
+      "dafny v4.11.0 Source/DafnyCore/Pipeline/Compilation.cs:78 (ShouldProcessSolverOptions default true)",
+      "dafny v4.11.0 Source/DafnyCore/Pipeline/TextDocumentLoader.cs:58-59 (ProcessSolverOptions invoked on the verification path)",
+      "dafny v4.11.0 Source/DafnyCore/DafnyOptions.cs:941-946 (ProcessSolverOptions)",
+      "dafny v4.11.0 Source/DafnyCore/DafnyOptions.cs:1182-1236 (SetZ3ExecutablePath: PROVER_PATH confirm/discovery)",
+      "dafny v4.11.0 Source/DafnyCore/DafnyOptions.cs:1241-1263 (GetZ3Version: executes '<solver> -version')",
+      "dafny v4.11.0 Source/DafnyCore/DafnyOptions.cs:1266-1305 (SetZ3Option/SetZ3Options: SolverIdentifier/SolverVersion + O: entries)",
+      "dafny v4.11.0 Source/DafnyCore/Options/BoogieOptionBag.cs:121-126 (--solver-path binding rewrites ProverOptions to PROVER_PATH=<FullName>)"
+    ],
+    "behavioral_differential": "the same requested --solver-path value pointed at a stub whose banner reports 'Z3 version 9.9.9' yields SolverVersion 9.9.9 in the post-processing readback; the pinned binary yields 4.12.1 — the effective value provably derives from executing the configured solver, never from echoing input"
+  }
+}

@@ -1,0 +1,14 @@
+// INV-008 negative-compile fixture: DIRECT TYPE NAMING. Identical to
+// PositiveConsumer.cs.txt except for the single planted forbidden line; must
+// fail with the expected compiler diagnostic (CS0246/CS0234) AT the planted
+// token and no unrelated errors (codex R4-10). Hash-bound whitelisted fixture.
+using Corrected.Spike.Contracts;
+
+public static class SeamConsumer
+{
+    public static string Use(Corrected.Spike.RouteA.RouteAAdapter adapter)
+    {
+        Microsoft.Dafny.DafnyOptions forbidden = null!; /*PLANTED:forbidden-type*/
+        return adapter.RouteId;
+    }
+}

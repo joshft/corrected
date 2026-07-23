@@ -1,0 +1,15 @@
+{
+  "note": "BND-002/DD-002: official Z3 release asset pin. CHANGING THIS REQUIRES RE-RUNNING THE SPIKE SUITE AND COMMITTING THE EVIDENCE DIFF — see DD-006 / docs/adr/ADR-0001-dafny-integration-boundary.md.",
+  "version": "4.12.1",
+  "rid": "linux-x64",
+  "url": "https://github.com/Z3Prover/z3/releases/download/z3-4.12.1/z3-4.12.1-x64-glibc-2.35.zip",
+  "sha256": "c5360fd157b0f861ec8780ba3e51e2197e9486798dc93cd878df69a4b0c2b7c5",
+  "glibc_floor": "2.35",
+  "install_relative_to_run_root": "solver/z3-4.12.1/bin/z3",
+  "prohibited_locations": [
+    "any directory on PATH",
+    "any route output tree",
+    "{output}/z3/bin/z3-4.12.1 (Dafny's assembly-adjacent fallback discovery path — RS-003a)"
+  ],
+  "unsupported_rid_message": "RID not supported by this spike; proven RIDs: linux-x64 (see ADR-0001)"
+}

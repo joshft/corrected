@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- BND-004 / INV-013: Route B net8.0 control executable. See RouteAControl. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Disable</RollForward>
+    <RootNamespace>Corrected.Spike.RouteBControl</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../adapters/SpikeDafnyAdapter.RouteB/SpikeDafnyAdapter.RouteB.csproj" />
+  </ItemGroup>
+</Project>

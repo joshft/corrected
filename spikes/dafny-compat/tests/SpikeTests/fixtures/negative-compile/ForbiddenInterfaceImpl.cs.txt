@@ -1,0 +1,11 @@
+// INV-008 negative-compile fixture: INTERFACE IMPLEMENTATION from a Boogie
+// namespace (RS-019b). Hash-bound whitelisted fixture; see PositiveConsumer.cs.txt.
+using Corrected.Spike.Contracts;
+
+public sealed class SeamConsumer : Microsoft.Boogie.Core.IErrorSink /*PLANTED:forbidden-interface*/
+{
+    public static string Use(Corrected.Spike.RouteA.RouteAAdapter adapter)
+    {
+        return adapter.RouteId;
+    }
+}

@@ -1,0 +1,221 @@
+{
+  "evidence_schema_version": 2,
+  "evidence_schema_sha256": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+  "probe_manifest_sha256": "4956816b40f2cf4316ab2ba3ad9cbb810bb89e0339187c8add7a7d3c2178b0eb",
+  "run_id": "runid-2478510f8049f355",
+  "kind": "run-report",
+  "binding_identity": {
+    "run_directory": "out/runid-2478510f8049f355",
+    "git_commit_id": "d28ed5d363bfc338e6ead15ca2dd265b6829d9e8",
+    "git_dirty_flag": false,
+    "host_rid": "linux-x64",
+    "sdk_version": "10.0.302",
+    "actual_runtime_version": "10.0.10",
+    "restore_argv_concrete": [
+      "dotnet",
+      "restore",
+      "DafnyCompatSpike.sln",
+      "--configfile",
+      "NuGet.Config",
+      "-noAutoResponse",
+      "-p:SpikeRunRootRel=out/runid-2478510f8049f355"
+    ],
+    "solver_path_concrete": "solver/z3-4.12.1/bin/z3"
+  },
+  "deterministic": {
+    "route_verdicts": [
+      {
+        "route": "A",
+        "state": "COMPATIBLE",
+        "verdict_reason": null
+      },
+      {
+        "route": "B",
+        "state": "COMPATIBLE",
+        "verdict_reason": null
+      }
+    ],
+    "verdict_reasons": null,
+    "per_probe_results": [
+      {
+        "probe": "P01",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P01",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P02",
+        "route": "shared",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P03",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P03",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P04",
+        "route": "shared",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P05",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P05",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P06",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P06",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P07",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P07",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P08",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P08",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P09",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P09",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P10",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P10",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P11",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P11",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P12",
+        "route": "A",
+        "status": "pass",
+        "detail": null
+      },
+      {
+        "probe": "P12",
+        "route": "B",
+        "status": "pass",
+        "detail": null
+      }
+    ],
+    "final_suite_status": "success",
+    "exit_report_matrix_outcome": "consistent",
+    "fixture_digests": {
+      "fixtures/bad.dfy": "d8afe927ca07086d2ad38ebbb94adef41c47622313f3c895c771bcd0e260f973",
+      "fixtures/classify.dfy": "99e194ead0425d0db70c73e25d8e11b87317ef615cb731296288bbbdbc05cfe5",
+      "fixtures/impure-control.dfy": "16b1ba0fe5ccf904428d23ef470a96cd6d2af0a7cc3741c2acb989b480900544",
+      "fixtures/incl-leaf.dfy": "444f34242efa735f29530addfa77712114f39b7250ec7a9b11b0e5dfab7abdf7",
+      "fixtures/incl-root.dfy": "47d40dac3ae928efe0cc27cf08114d5496956ad9d01561c24895be2d77df43f7",
+      "fixtures/ok.dfy": "66ae1766551913b217ef7df6c7873ae8ca1d47fb3b77411f1fc20f7292d3ee51",
+      "fixtures/resolve-error.dfy": "b003eb54a86b8610158c3470775e618b90b934e5b43c2cb34e40d2f52870d4f6",
+      "fixtures/stdlib-anchor.dfy": "fd291b90cafe26c2887893ee0fa9e3ef5c2a6842377c664118e47ec3841e8a35",
+      "fixtures/syntax-error.dfy": "1fdac7a903ecf7c1e52f8275cef5679ca26c3804487a32791eeea1db5c0c69d9"
+    },
+    "sidecar_digests": {
+      "fixtures/expected/bad.sidecar.json": "3cf49c9d90874e57a7f1a244b3bcf656e2da0590974ad38008fd99c61c7ff5fa",
+      "fixtures/expected/classify.sidecar.json": "c84d9923c6d65eba00cd4f09d5a41cf43da681f6d64dab3c90db5991461ddd8b",
+      "fixtures/expected/frontend.sidecar.json": "2065ab9c18a837d40faf880f5ad4f14dae447f9b6f20c4ff9b45e3649132b87b",
+      "fixtures/expected/incl.sidecar.json": "e46e081b68522dc6572455738cd0c491b17c61b2988899e3ddef18c3aa684406",
+      "fixtures/expected/ok.sidecar.json": "907934e448a4553d8f870c578d6bffcf9bcc2011246938f052b2a790d3fbde2e",
+      "fixtures/expected/stdlib-anchor.sidecar.json": "f5b9a7c1e4fc9da97ce7c9ffacc89c14887e6d619aa1233eccf8510b5bb642cf"
+    },
+    "lock_file_digests": {
+      "RouteAControl": "0322e32c554ff75638d1e2e08b1efa88b79d5bc55ed5ac62a60bdd3660cb70cf",
+      "RouteAHarness": "d4efc8d92e184231e59da706ede5fded659e7d135e888312dd0a75ec98eddf3d",
+      "RouteBControl": "4715dd36639e1a1612b0a2ae937be6c71e6fa93396294807e7831360eae97f6d",
+      "RouteBHarness": "edb9813a7c3f5663c44a940e4c1096427450a60c6b2c1101f9d0b700f7439e4d",
+      "SpikeAggregator": "c38f53d7af92f95f6f38114bc6332985989b0dc9354d39a34bd6dd5e9c95cde2",
+      "SpikeContracts": "b12c264a8fa7d358a2a2716335be7f448852035a678d03c4fb7ce405dea5c285",
+      "SpikeDafnyAdapter.RouteA": "5d0d342d248cd06f2feb059667ef825bf5dc7006a8723dae04cb285bced91246",
+      "SpikeDafnyAdapter.RouteB": "dd260ef1238e67fd20d4dc02daae9c82a85d98c5cc8b201660d16cf535aa0dea",
+      "SpikeTests": "00ce58c62578a4bbcad97aa619944cf59e4ff348cb3e9bc778eeed1c5732dd68"
+    },
+    "nuget_config_digest": "52f4bff39f392c779106fd7fc3203124b5d540ae6514442048dc55a5a90f3161",
+    "oracle_file_digests": {
+      "expected_loaded_route_a": "67ac17b191165907b7aeaf34f4a02f17dfbd5dc10e0f33c5c86bbceeb0574c6f",
+      "expected_loaded_route_b": "fef94216884b971e2596415888e6f7c33e9fc97484eba0295a82992f68d588b3",
+      "option_manifest": "161d820f5c40321b198048200d89ea6d45a40e5817616f930b9677a381a62090",
+      "probe_manifest": "4956816b40f2cf4316ab2ba3ad9cbb810bb89e0339187c8add7a7d3c2178b0eb"
+    },
+    "executed_solver_sha256": "06883e4d3fee816537ae1141ca4fff727f8820d05b0db5587aa540e380a3a8bf",
+    "solver_archive_sha256": "c5360fd157b0f861ec8780ba3e51e2197e9486798dc93cd878df69a4b0c2b7c5",
+    "adjudication_records": null
+  },
+  "volatile": {
+    "timestamps": {
+      "aggregated_utc": "2026-07-22T04:27:04.7451778Z"
+    }
+  }
+}

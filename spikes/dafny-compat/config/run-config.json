@@ -1,0 +1,19 @@
+{
+  "note": "INV-006: committed wall-clock bound for a FULL two-route run including provisioning, restore, build, shared probes, and aggregation (codex F12). One absolute deadline on a true monotonic source, held by the bootstrap controller from run mint through final aggregation.",
+  "wall_clock_bound_seconds": 1800,
+  "monotonic_source": "/proc/uptime",
+  "supervision": {
+    "per_phase_process_groups": "setsid",
+    "escalation": "TERM then KILL",
+    "outer_watchdog": "parent of the controller — not a test executed by it (RS-015)"
+  },
+  "test_runner": {
+    "kind": "VSTest",
+    "pinned_via": "Microsoft.NET.Test.Sdk [17.11.1] + xunit.runner.visualstudio [2.8.2]",
+    "exit_code_contract": {
+      "0": "all tests passed",
+      "1": "at least one test failed",
+      "other": "infrastructure failure — never read as pass or refutation (AP-003/AP-009)"
+    }
+  }
+}

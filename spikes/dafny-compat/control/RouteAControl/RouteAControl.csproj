@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- BND-004 / INV-013: Route A net8.0 control executable. Rebuilds the failing
+       probe from identical normalized source against Route A's seam (which
+       multi-targets net8.0 with its own committed lock), executed on the
+       BND-004-pinned .NET 8 runtime via the explicit private host argv
+       (<control-root>/dotnet exec - -fx-version <exact-patch>). TFM-conditional
+       harness logic is prohibited (codex R2-2); a scan test enforces this. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Disable</RollForward>
+    <RootNamespace>Corrected.Spike.RouteAControl</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../adapters/SpikeDafnyAdapter.RouteA/SpikeDafnyAdapter.RouteA.csproj" />
+  </ItemGroup>
+</Project>

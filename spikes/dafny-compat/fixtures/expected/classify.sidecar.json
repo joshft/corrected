@@ -1,0 +1,35 @@
+{
+  "sidecar_for": "fixtures/classify.dfy",
+  "spike_only": false,
+  "probe": "P10",
+  "declarations": [
+    { "name": "GhostDouble", "kind": "function", "ghost": true, "inferred_ghost": false, "explicit_ghost_keyword": true },
+    { "name": "Inc", "kind": "function", "ghost": false, "inferred_ghost": false, "explicit_ghost_keyword": false },
+    { "name": "GhostSeven", "kind": "const", "ghost": true, "inferred_ghost": false, "explicit_ghost_keyword": true },
+    { "name": "CompiledSeven", "kind": "const", "ghost": false, "inferred_ghost": false, "explicit_ghost_keyword": false },
+    { "name": "Classify", "kind": "method", "ghost": false, "inferred_ghost": false, "explicit_ghost_keyword": false },
+    { "name": "inferredGhost", "kind": "local-variable", "ghost": true, "inferred_ghost": true, "explicit_ghost_keyword": false },
+    { "name": "bound", "kind": "local-variable", "ghost": false, "inferred_ghost": false, "explicit_ghost_keyword": false },
+    { "name": "i", "kind": "local-variable", "ghost": false, "inferred_ghost": false, "explicit_ghost_keyword": false }
+  ],
+  "nodes": [
+    { "form": "assert", "classification": "proof", "count": 2 },
+    { "form": "calc", "classification": "proof", "count": 1 },
+    { "form": "loop-invariant", "classification": "proof", "count": 2 },
+    { "form": "decreases", "classification": "proof", "count": 1 },
+    { "form": "assignment", "classification": "compiled", "count": 6 },
+    { "form": "conditional", "classification": "compiled", "count": 1 },
+    { "form": "loop-body", "classification": "compiled", "count": 1 },
+    { "form": "expect", "classification": "compiled", "count": 1 }
+  ],
+  "mutation_differential": {
+    "target_declaration": "inferredGhost",
+    "mutation": "add-ghost-keyword-to-copy",
+    "expected_after_mutation": { "ghost": true, "inferred_ghost": false }
+  },
+  "notes": [
+    "Classification is read from resolved-AST properties, never surface syntax (INV-007).",
+    "Shape tests (RS-009) run independently of fixture equality: >=1 entry per required proof form, >=1 inferred_ghost=true entry, exactly one expect entry classified compiled.",
+    "The independent AST test obtains explicit-modifier presence from the parser AST and ghostness from the resolved AST WITHOUT consulting this sidecar (codex F10)."
+  ]
+}

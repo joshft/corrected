@@ -1,0 +1,365 @@
+{
+  "evidence_schema_version": 2,
+  "note": "Committed, immutable, versioned evidence schema (INV-009/RS-011e). Its SHA-256 appears in every report, is anchored beside the probe-manifest digest in the test-suite constant set, and is compiled into the aggregator as a trust anchor. A schema version may NEVER be reused with a different digest (append-only registry: schema/schema-version-registry.json). Reclassifying any field is a spec change (RS-005).",
+  "canonical_serialization_rule": {
+    "encoding": "UTF-8, culture-invariant formatting, LF line endings",
+    "key_ordering": "lexicographic (ordinal) at every object level",
+    "path_form": "repo-relative with forward slashes; every run-root-dependent path canonicalized to the token <run-root> before projection",
+    "digest_encoding": "SHA-256, lowercase hex"
+  },
+  "informational_version_mapping_rule": "loaded-assembly informational versions map to package versions by stripping '+<sha>' build metadata before comparison (RS-008)",
+  "stage_typing_derivation_rule": "stage is taken from the typed pipeline phase that produced the diagnostic (parse | resolution | verification); when a surface exposes only the faulting phase, the committed mapping is: parser diagnostics -> parse, resolver/type-checker diagnostics -> resolution, Boogie/solver task results -> verification (INV-011)",
+  "field_partition": {
+    "note": "Every instance field carries exactly one class; projection construction fails if any field lacks exactly one classification (RS-005). Class 2 is the cross-run equality domain (INV-010).",
+    "class_1_binding_identity": [
+      "run_id",
+      "run_directory",
+      "sentinel_nonce",
+      "git_commit_id",
+      "git_dirty_flag",
+      "host_rid",
+      "sdk_version",
+      "actual_runtime_version",
+      "harness_target_framework",
+      "loaded_assembly_file_paths",
+      "restore_argv_concrete",
+      "solver_path_concrete",
+      "run_product_paths_concrete",
+      "hostfxr_identity_concrete",
+      "corelib_identity_concrete",
+      "glibc_floor",
+      "environment_profile_values",
+      "raw_digests_of_path_bearing_generated_files"
+    ],
+    "class_2_deterministic_projection": [
+      "kind",
+      "evidence_schema_version",
+      "route_verdicts",
+      "verdict_reasons",
+      "per_probe_results",
+      "node_table",
+      "option_manifest_readback",
+      "normalization_canary_observations",
+      "fixture_digests",
+      "sidecar_digests",
+      "lock_file_digests",
+      "deps_json_digests_normalized",
+      "nuget_config_digest",
+      "probe_manifest_sha256",
+      "evidence_schema_sha256",
+      "oracle_file_digests",
+      "resolved_package_versions",
+      "loaded_assembly_identities",
+      "executed_solver_sha256",
+      "solver_archive_sha256",
+      "sentinel_ledger_outcomes",
+      "closure_sets",
+      "verification_target_sets",
+      "solver_outcome_enums",
+      "solver_resource_usage_observed",
+      "adjudication_records",
+      "reproducer_control_asset_digests",
+      "final_suite_status",
+      "exit_report_matrix_outcome"
+    ],
+    "class_3_volatile": [
+      "timestamps",
+      "durations",
+      "raw_solver_resource_counts"
+    ]
+  },
+  "suite_status_mask": {
+    "note": "QA-006 amendment (spec disposition 2026-07-21): committed samples come as a PAIR. The variance-mode sample compares with FULL class-2 equality; the canonical-run sample's equality check masks ONLY this schema-declared suite-status subtree. The mask is declared HERE (additive-only, digest-anchored like the rest of this file), never in test or projection code.",
+    "masked_class_2_fields": [
+      "final_suite_status",
+      "route_verdicts",
+      "verdict_reasons"
+    ]
+  },
+  "route_outcome_algebra": {
+    "note": "Committed complete route-outcome algebra (INV-013, codex R3-4/R4-01).",
+    "route_states": [
+      "COMPATIBLE",
+      "INCOMPLETE",
+      "INCOMPATIBLE(HOST_RUNTIME_INCOMPATIBILITY)",
+      "INCOMPATIBLE(TARGET_FRAMEWORK_INCOMPATIBILITY)",
+      "INCOMPATIBLE(OFFICIAL_API_CAPABILITY_GAP)",
+      "UPSTREAM_DEFECT",
+      "UNADJUDICATED_IN_PROCESS_FAILURE"
+    ],
+    "upstream_defect_semantics": "a non-COMPATIBLE, non-boundary-rejection route outcome: reproducible cross-runtime failure of an existing official surface; carries its own reason variant and maps to the probe-failure exit code; never grounds for boundary rejection",
+    "verdict_reason_union": {
+      "probe-failure": { "required_fields": ["first_failing_probe_by_manifest_order"] },
+      "prerequisite-failure": { "required_fields": ["cause", "detail"] },
+      "missing-report": { "required_fields": ["route"], "note": "does not collapse into crash; has no first-failing-probe" },
+      "malformed-report": { "required_fields": ["route", "detail"], "note": "does not collapse into crash; has no first-failing-probe" },
+      "crash": { "required_fields": ["exit_code_or_signal"] },
+      "exit-report-mismatch": { "required_fields": ["exit_code", "report_summary"] },
+      "suite-failure": { "required_fields": ["detail"] },
+      "unadjudicated-failure": { "required_fields": ["variant", "probe", "stage", "minimal_inputs", "typed_diagnostic", "identity_evidence_p01_p04"] },
+      "adjudicated": { "required_fields": ["adjudication_record_id"] }
+    },
+    "transition_table": [
+      { "from": "probe-running", "on": "environment/prerequisite fault (absent z3, restore failure, unsupported RID, wall-clock kill)", "to": "INCOMPLETE", "reason": "prerequisite-failure" },
+      { "from": "probe-running", "on": "in-process failure (typed exception | unexpected typed result | absent required capability)", "to": "UNADJUDICATED_IN_PROCESS_FAILURE", "reason": "unadjudicated-failure" },
+      { "from": "UNADJUDICATED_IN_PROCESS_FAILURE", "on": "adjudication: harness fault (schema-valid record)", "to": "INCOMPLETE", "note": "never any INCOMPATIBLE" },
+      { "from": "UNADJUDICATED_IN_PROCESS_FAILURE", "on": "adjudication: source-verified absence of a required official surface (schema-valid record)", "to": "INCOMPATIBLE(OFFICIAL_API_CAPABILITY_GAP)", "note": "the ONLY path to OFFICIAL_API_CAPABILITY_GAP (codex R4-01)" },
+      { "from": "UNADJUDICATED_IN_PROCESS_FAILURE", "on": "three-cell: net8-pass + same-bits-fail-on-net10-host, both net10-host failure cells share the minimized reproducer and an equivalent typed failure fingerprint (schema-valid record)", "to": "INCOMPATIBLE(HOST_RUNTIME_INCOMPATIBILITY)" },
+      { "from": "UNADJUDICATED_IN_PROCESS_FAILURE", "on": "three-cell: net8-bits-pass-on-net10 but net10-target-fail (schema-valid record)", "to": "INCOMPATIBLE(TARGET_FRAMEWORK_INCOMPATIBILITY)" },
+      { "from": "UNADJUDICATED_IN_PROCESS_FAILURE", "on": "adjudication: reproducible cross-runtime failure of an existing surface (schema-valid record)", "to": "UPSTREAM_DEFECT" },
+      { "from": "UNADJUDICATED_IN_PROCESS_FAILURE", "on": "unrelated failures across net10-host cells", "to": "UNADJUDICATED_IN_PROCESS_FAILURE", "note": "remains unadjudicated (codex R4-04)" }
+    ],
+    "precedence_order_for_multi_match": [
+      "signal death without a report resolves to crash, never ambiguously",
+      "missing-report before malformed-report",
+      "malformed-report before probe-failure",
+      "exit-report-mismatch before suite-failure",
+      "prerequisite-failure before unadjudicated-failure when the fault is external to the probe's in-process path"
+    ],
+    "exit_report_matrix": [
+      { "exit": "0 (route-probes-passed)", "report": "present, all route probes pass", "outcome": "consistent" },
+      { "exit": "0 (route-probes-passed)", "report": "present, any probe failed", "outcome": "INCOMPLETE(EXIT_REPORT_MISMATCH)" },
+      { "exit": "0 (route-probes-passed)", "report": "missing", "outcome": "INCOMPLETE(missing-report)" },
+      { "exit": "0 (route-probes-passed)", "report": "malformed", "outcome": "INCOMPLETE(malformed-report)" },
+      { "exit": "10 (probe-failure)", "report": "present, at least one probe failed", "outcome": "consistent (non-COMPATIBLE with probe-failure reason)" },
+      { "exit": "10 (probe-failure)", "report": "present, all probes pass", "outcome": "INCOMPLETE(EXIT_REPORT_MISMATCH) — a failure exit with an all-pass report is never COMPATIBLE" },
+      { "exit": "10 (probe-failure)", "report": "missing", "outcome": "INCOMPLETE(missing-report)" },
+      { "exit": "20 (INCOMPLETE)", "report": "present with typed cause", "outcome": "consistent (INCOMPLETE)" },
+      { "exit": "20 (INCOMPLETE)", "report": "missing", "outcome": "INCOMPLETE(missing-report)" },
+      { "exit": "unknown code or signal death", "report": "any", "outcome": "crash variant (a crashing process cannot guarantee a prescribed code, codex F7)" }
+    ],
+    "suite_status_rule": "a route verdict of COMPATIBLE additionally requires final_suite_status=success and exit/report consistency (codex R4-02); otherwise INCOMPLETE(SUITE_FAILURE | EXIT_REPORT_MISMATCH)"
+  },
+  "report_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "dafny-compat spike evidence report v2",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "evidence_schema_version",
+      "evidence_schema_sha256",
+      "probe_manifest_sha256",
+      "run_id",
+      "kind",
+      "binding_identity",
+      "deterministic",
+      "volatile"
+    ],
+    "properties": {
+      "evidence_schema_version": { "type": "integer", "const": 2 },
+      "evidence_schema_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+      "probe_manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+      "run_id": { "type": "string", "minLength": 16 },
+      "kind": { "type": "string", "enum": ["route-report", "run-report", "control-report"] },
+      "binding_identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run_directory", "git_commit_id", "git_dirty_flag", "host_rid", "sdk_version", "actual_runtime_version"],
+        "properties": {
+          "run_directory": { "type": "string" },
+          "sentinel_nonce": { "type": ["string", "null"] },
+          "git_commit_id": { "type": "string" },
+          "git_dirty_flag": { "type": "boolean" },
+          "host_rid": { "type": "string" },
+          "sdk_version": { "type": "string" },
+          "actual_runtime_version": { "type": "string" },
+          "harness_target_framework": { "type": "string" },
+          "loaded_assembly_file_paths": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["simple_name", "path"],
+              "properties": {
+                "simple_name": { "type": "string" },
+                "path": { "type": "string" }
+              }
+            }
+          },
+          "restore_argv_concrete": { "type": "array", "items": { "type": "string" } },
+          "solver_path_concrete": { "type": "string" },
+          "run_product_paths_concrete": { "type": ["array", "null"], "items": { "type": "string" } },
+          "raw_digests_of_path_bearing_generated_files": { "$ref": "#/report_schema/$defs/digest_map" },
+          "hostfxr_identity_concrete": { "$ref": "#/report_schema/$defs/file_identity" },
+          "corelib_identity_concrete": { "$ref": "#/report_schema/$defs/file_identity" },
+          "glibc_floor": { "type": "string" },
+          "environment_profile_values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "root", "path"],
+              "properties": {
+                "key": { "type": "string" },
+                "root": { "type": "string", "enum": ["run-root", "home", "system"] },
+                "path": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "deterministic": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["per_probe_results", "final_suite_status"],
+        "properties": {
+          "route_verdicts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["route", "state", "verdict_reason"],
+              "properties": {
+                "route": { "type": "string", "enum": ["A", "B"] },
+                "state": { "type": "string" },
+                "verdict_reason": { "$ref": "#/report_schema/$defs/closed_map_nullable" }
+              }
+            }
+          },
+          "per_probe_results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["probe", "route", "status"],
+              "properties": {
+                "probe": { "type": "string" },
+                "route": { "type": "string", "enum": ["A", "B", "shared"] },
+                "status": { "type": "string", "enum": ["pass", "fail", "incomplete"] },
+                "detail": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "node_table": { "type": ["array", "null"], "items": { "$ref": "#/report_schema/$defs/closed_object_any" } },
+          "verdict_reasons": { "type": ["array", "null"], "items": { "$ref": "#/report_schema/$defs/closed_object_any" } },
+          "option_manifest_readback": {
+            "type": ["object", "null"],
+            "patternProperties": { "^.+$": { "type": ["string", "null"] } },
+            "additionalProperties": false
+          },
+          "normalization_canary_observations": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "option_id": { "type": "string" },
+              "requested_value": { "type": "string" },
+              "effective_prover_path_entry": { "type": ["string", "null"] },
+              "solver_identifier": { "type": ["string", "null"] },
+              "solver_version": { "type": ["string", "null"] },
+              "added_prover_options": { "type": ["array", "null"], "items": { "type": "string" } }
+            }
+          },
+          "fixture_digests": { "$ref": "#/report_schema/$defs/digest_map" },
+          "sidecar_digests": { "$ref": "#/report_schema/$defs/digest_map" },
+          "lock_file_digests": { "$ref": "#/report_schema/$defs/digest_map" },
+          "deps_json_digests_normalized": { "$ref": "#/report_schema/$defs/digest_map" },
+          "nuget_config_digest": { "type": ["string", "null"] },
+          "oracle_file_digests": { "$ref": "#/report_schema/$defs/digest_map" },
+          "resolved_package_versions": {
+            "type": ["object", "null"],
+            "patternProperties": { "^.+$": { "type": "string" } },
+            "additionalProperties": false
+          },
+          "loaded_assembly_identities": {
+            "type": ["array", "null"],
+            "items": { "$ref": "#/report_schema/$defs/loaded_assembly" }
+          },
+          "executed_solver_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+          "solver_archive_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+          "sentinel_ledger_outcomes": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "nonce": { "type": "string" },
+              "invocations_for_this_nonce": { "type": "integer" },
+              "decoy_invocations": { "type": "integer" },
+              "decoys_present": { "type": "boolean" },
+              "ledger_pre_created_at_zero": { "type": "boolean" },
+              "invocations_for_foreign_nonces_counted": { "type": "integer" }
+            }
+          },
+          "closure_sets": { "$ref": "#/report_schema/$defs/string_array_map" },
+          "verification_target_sets": { "$ref": "#/report_schema/$defs/string_array_map" },
+          "solver_outcome_enums": {
+            "type": ["object", "null"],
+            "patternProperties": {
+              "^.+$": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["outcome"],
+                  "properties": {
+                    "target": { "type": ["string", "null"] },
+                    "outcome": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "solver_resource_usage_observed": {
+            "type": ["object", "null"],
+            "patternProperties": { "^.+$": { "type": "boolean" } },
+            "additionalProperties": false
+          },
+          "adjudication_records": { "type": ["array", "null"], "items": { "$ref": "#/report_schema/$defs/closed_object_any" } },
+          "reproducer_control_asset_digests": { "$ref": "#/report_schema/$defs/digest_map" },
+          "exit_report_matrix_outcome": { "type": ["string", "null"] },
+          "final_suite_status": { "type": "string", "enum": ["success", "failure", "unknown"] }
+        }
+      },
+      "volatile": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timestamps": { "$ref": "#/report_schema/$defs/closed_map_nullable" },
+          "durations": { "$ref": "#/report_schema/$defs/closed_map_nullable" },
+          "raw_solver_resource_counts": { "$ref": "#/report_schema/$defs/closed_map_nullable" }
+        }
+      }
+    },
+    "$defs": {
+      "closed_object_any": {
+        "type": "object",
+        "patternProperties": { "^.+$": {} },
+        "additionalProperties": false
+      },
+      "closed_map_nullable": {
+        "type": ["object", "null"],
+        "patternProperties": { "^.+$": {} },
+        "additionalProperties": false
+      },
+      "digest_map": {
+        "type": ["object", "null"],
+        "patternProperties": { "^.+$": { "type": "string", "pattern": "^[0-9a-f]{64}$" } },
+        "additionalProperties": false
+      },
+      "string_array_map": {
+        "type": ["object", "null"],
+        "patternProperties": { "^.+$": { "type": "array", "items": { "type": "string" } } },
+        "additionalProperties": false
+      },
+      "file_identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      },
+      "loaded_assembly": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["simple_name", "file_sha256"],
+        "properties": {
+          "simple_name": { "type": "string" },
+          "mapped_package_version": { "type": ["string", "null"] },
+          "file_path": { "type": "string" },
+          "file_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

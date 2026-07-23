@@ -1,0 +1,14 @@
+<Project>
+  <!-- INV-001 sealing file: its presence terminates MSBuild's upward
+       Directory.Build.targets inheritance at the spike root (an empty
+       Directory.Build.props alone does not block the others - codex F9). -->
+
+  <!-- QA-007 test hook: a controller run redirects outputs beneath the run
+       root via -p:SpikeRunRoot(Rel). When a run root contains inject.targets
+       (only a TEST plants one, in its own scratch run root — DD-008 keeps run
+       roots isolated), it is imported so the induced-hang test can plant a
+       slow build target as an EXTERNAL fault and exercise the REAL per-phase
+       setsid supervisor (QA-007). Normal runs have no such file. -->
+  <Import Project="$(SpikeRunRoot)/inject.targets"
+          Condition="'$(SpikeRunRoot)' != '' and Exists('$(SpikeRunRoot)/inject.targets')" />
+</Project>

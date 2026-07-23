@@ -1,0 +1,17 @@
+{
+  "sidecar_for": "fixtures/stdlib-anchor.dfy",
+  "spike_only": true,
+  "probe": "P03 (Route B DafnyPipeline-consumption anchor, OQ-004)",
+  "options_variance": { "--standard-libraries": true },
+  "expected_verification_targets": ["UsesStdWrappers"],
+  "expected_pipeline_resource": "DafnyStandardLibraries.doo (embedded in DafnyPipeline.dll)",
+  "differential": {
+    "without_standard_libraries_option": "stage=resolution failure (Std.Wrappers unknown)",
+    "with_dafnypipeline_assembly_removed": "typed missing-assembly/missing-resource failure on the standard-libraries load path"
+  },
+  "source_citations": [
+    "dafny v4.11.0 Source/DafnyCore/DafnyMain.cs:21-28",
+    "dafny v4.11.0 Source/DafnyCore/Pipeline/Compilation.cs:181-203",
+    "dafny v4.11.0 Source/DafnyCore/DafnyFile.cs:214-222"
+  ]
+}

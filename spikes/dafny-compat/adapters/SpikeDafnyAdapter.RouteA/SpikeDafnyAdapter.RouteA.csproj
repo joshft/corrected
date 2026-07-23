@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-008 / DD-001: Route A seam project - the SOLE owner of Route A's
+       Dafny/Boogie packages (DafnyDriver graph, CliCompilation). Multi-targets
+       net8.0 for the BND-004 control graph: identical normalized source rebuilt
+       for net8 with no TFM-conditional logic (codex R2-2). One lock file covers
+       both TFMs of this route's isolated graph.
+
+       PrivateAssets="compile" is the documented compile-only privacy pattern
+       (RS-019a): consumers (harness, control) cannot compile against
+       Microsoft.Dafny types, while runtime assets still flow to their outputs.
+       (PrivateAssets="all" would strip runtime assets - certain per NuGet
+       asset-control docs, codex F2.) -->
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <RootNamespace>Corrected.Spike.RouteA</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DafnyDriver" PrivateAssets="compile" />
+    <PackageReference Include="DafnyCore" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../contracts/SpikeContracts/SpikeContracts.csproj" />
+  </ItemGroup>
+</Project>

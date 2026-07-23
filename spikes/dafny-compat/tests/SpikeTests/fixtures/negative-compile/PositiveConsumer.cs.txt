@@ -1,0 +1,15 @@
+// Two-phase negative-compile POSITIVE control (INV-008, codex R4-10): this
+// otherwise-identical consumer must BUILD SUCCESSFULLY against the route seam
+// project before any forbidden variant is attempted — any-failure oracles
+// prove nothing. Hash-bound whitelisted fixture (codex R3-11): excluded from
+// every shipping/build project; compiled only inside a scratch project under
+// out/ by the two-phase test.
+using Corrected.Spike.Contracts;
+
+public static class SeamConsumer
+{
+    public static string Use(Corrected.Spike.RouteA.RouteAAdapter adapter)
+    {
+        return adapter.RouteId;
+    }
+}

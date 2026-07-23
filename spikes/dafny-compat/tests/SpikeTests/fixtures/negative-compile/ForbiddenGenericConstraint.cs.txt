@@ -1,0 +1,15 @@
+// INV-008 negative-compile fixture: GENERIC-CONSTRAINT USAGE of a Dafny type
+// (RS-019b). Hash-bound whitelisted fixture; see PositiveConsumer.cs.txt.
+using Corrected.Spike.Contracts;
+
+public static class SeamConsumer
+{
+    public static void Constrained<T>() where T : Microsoft.Dafny.Type /*PLANTED:forbidden-generic-constraint*/
+    {
+    }
+
+    public static string Use(Corrected.Spike.RouteA.RouteAAdapter adapter)
+    {
+        return adapter.RouteId;
+    }
+}

@@ -1,0 +1,23 @@
+{
+  "sidecar_for": ["fixtures/syntax-error.dfy", "fixtures/resolve-error.dfy"],
+  "spike_only": true,
+  "probes": ["P08", "P09"],
+  "syntax_error": {
+    "file": "fixtures/syntax-error.dfy",
+    "expected_stage": "parse",
+    "expected_location_line": 4,
+    "expected_verification_targets": 0,
+    "expected_sentinel_invocations": 0
+  },
+  "resolve_error": {
+    "file": "fixtures/resolve-error.dfy",
+    "expected_stage": "resolution",
+    "expected_location_line": 5,
+    "expected_verification_targets": 0,
+    "expected_sentinel_invocations": 0
+  },
+  "notes": [
+    "P08/P09 run with the solver-path option pointed at the recording sentinel stub (P05 machinery, per-run nonce); the nonce-bound ledger is pre-created and initialized to count zero before the run (codex F6).",
+    "The evidence for these probes records the stub path as the effective solver path, so the variance from the Option Manifest is explicit (INV-011)."
+  ]
+}

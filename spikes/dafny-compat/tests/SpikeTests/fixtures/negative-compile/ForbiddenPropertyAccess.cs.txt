@@ -1,0 +1,12 @@
+// INV-008 negative-compile fixture: PROPERTY ACCESS on a Dafny type (RS-019b).
+// Hash-bound whitelisted fixture; see PositiveConsumer.cs.txt.
+using Corrected.Spike.Contracts;
+
+public static class SeamConsumer
+{
+    public static string Use(Corrected.Spike.RouteA.RouteAAdapter adapter)
+    {
+        var cores = default(Microsoft.Dafny.DafnyOptions)!.VcsCores; /*PLANTED:forbidden-property*/
+        return adapter.RouteId;
+    }
+}

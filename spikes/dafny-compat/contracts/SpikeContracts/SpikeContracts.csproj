@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-008: Dafny-free contracts assembly. Holds result/evidence types, the
+       route-seam interface, and the named verdict aggregator logic. No Dafny or
+       Boogie PackageReference may ever appear here (project-graph test).
+       Multi-targets net8.0 so the BND-004 net8 control graph consumes identical
+       contract types without TFM-conditional logic. -->
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <RootNamespace>Corrected.Spike.Contracts</RootNamespace>
+  </PropertyGroup>
+</Project>
