@@ -1,9 +1,9 @@
 {
-  "phase": "done",
+  "phase": "documented",
   "task": "dafny-compat-spike",
   "spec_file": ".correctless/specs/dafny-compat-spike.md",
   "started_at": "2026-07-20T22:46:43Z",
-  "phase_entered_at": "2026-07-22T21:51:22Z",
+  "phase_entered_at": "2026-07-23T01:07:24Z",
   "branch": "feature/dafny-compat-spike",
   "qa_rounds": 3,
   "feature_intensity": "high",

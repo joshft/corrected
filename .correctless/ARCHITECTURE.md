@@ -117,6 +117,20 @@ tested, assumed, and still trusted.
   environment variable, or inherited MSBuild props alters resolution; an
   ambient solver answers instead of the pinned one; a verdict or receipt
   cites artifacts that were not the ones loaded.
+- Exercised at (first concrete enforcement — the non-production
+  `spikes/dafny-compat/` harness; the production `DafnyAdapter` lands in
+  Phase 0.1): `spikes/dafny-compat/Directory.Packages.props` + per-project
+  `packages.lock.json` + `NuGet.Config` (exact-pin locked-mode restore);
+  `spikes/dafny-compat/global.json` (exact SDK pin, roll-forward disabled);
+  `spikes/dafny-compat/config/z3-pin.json` + `config/net8-control-pin.json`
+  (SHA-256 asset pins); `spikes/dafny-compat/scripts/provision-z3.sh`
+  (digest-verified solver install outside ambient discovery locations);
+  `spikes/dafny-compat/scripts/run-spike.sh` (`env -i` clean-environment
+  re-exec + locked restore + fail-closed intake).
+- Test: `spikes/dafny-compat/tests/SpikeTests/Inv001ToolchainPinTests.cs`
+  (exact pins, locked-mode negative restore, config/props isolation) and
+  `spikes/dafny-compat/tests/SpikeTests/Inv003SolverIdentityTests.cs`
+  (solver digest, executed-solver identity, per-route removal test).
 - Registered by the dafny-compat-spike feature (BND-001/BND-002 + STRIDE in
   `.correctless/specs/dafny-compat-spike.md`, review finding RS-013); DD-006
   there makes this boundary a standing obligation for every future
@@ -129,6 +143,17 @@ tested, assumed, and still trusted.
 
 ## Known Limitations
 
-- Nothing is implemented; every component above is a design commitment, not
-  shipped behavior. Phase 0.0 must still validate the .NET 10 / Dafny 4.11
-  package-compatibility assumption with a reproduced integration spike.
+- No production code is implemented; every component above is a design
+  commitment, not shipped behavior (`src/` is empty).
+- Phase 0.0's foundational assumption — that Dafny 4.11.0's `net8.0` packages
+  run in-process on a .NET 10 host for parse / resolve / Z3-backed verify /
+  resolved-AST recovery — **has now been validated** by the permanent
+  `spikes/dafny-compat/` conformance harness. Both integration routes are
+  **COMPATIBLE** (suite-attested, 273/273): Route A (`DafnyDriver` /
+  `CliCompilation`, additionally loading `DafnyLanguageServer`) and Route B
+  (hand-assembled `DafnyCore` + `DafnyPipeline` + `Boogie.ExecutionEngine`).
+  Recorded in provisional `docs/adr/ADR-0001-dafny-integration-boundary.md`.
+  Route **A** is the selected boundary; formal ADR promotion
+  (provisional → accepted) and the DD-007 component-table propagation remain
+  pending as the final Phase 0.0 feature's obligation (DF-002). Later Phase 0.0
+  gates (bullets 4–12) are still unstarted.

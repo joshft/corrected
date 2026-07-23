@@ -1,5 +1,7 @@
 // Tests INV-003 / BND-002: the executed solver is the provisioned Z3 4.12.1 —
 // proven, not presumed.
+// Enforces ARCHITECTURE.md TB-004 (inbound toolchain supply chain): this suite
+// is a listed Test for that boundary (solver digest + executed-solver identity).
 //
 // TA-B1/TA-B2 discipline: the TESTS own the run roots, pre-create and read the
 // nonce LEDGER FILE directly, construct decoys/faults themselves (deleting the

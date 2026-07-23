@@ -1,5 +1,8 @@
 // Tests INV-001 (and PRH-002 syntax armor lives in ProhibitionTests.cs):
 // exact-pin, source-controlled restore of the whole toolchain.
+// Enforces ARCHITECTURE.md TB-004 (inbound toolchain supply chain): this suite
+// is a listed Test for that boundary (exact pins, locked-mode negative restore,
+// config/props isolation).
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
