@@ -118,6 +118,13 @@ export PATH
 
 SCRIPT_SELF="${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(cd -- "${SCRIPT_SELF%/*}" && pwd)"
+# Canonicalize SCRIPT_SELF to an ABSOLUTE path. It is re-passed to the inner
+# controller relaunch (`setsid bash -p -- "$SCRIPT_SELF"`, below) AFTER the
+# controller cd's into SPIKE_ROOT; a relative BASH_SOURCE — e.g. the documented
+# root-README invocation `bash -p spikes/dafny-compat/scripts/run-spike.sh` from
+# the repo root — would no longer resolve post-cd, so the inner would fail to
+# launch (exit 127). SCRIPT_DIR is already absolute (cd+pwd), so join the basename.
+SCRIPT_SELF="$SCRIPT_DIR/${SCRIPT_SELF##*/}"
 SPIKE_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd -- "$SPIKE_ROOT/../.." && pwd)"
 CACHE_DIR="$SPIKE_ROOT/out/cache"
