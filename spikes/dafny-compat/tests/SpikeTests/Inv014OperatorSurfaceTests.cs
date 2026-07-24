@@ -128,7 +128,8 @@ public class Inv014OperatorSurfaceTests
     [Fact]
     public void StaleRepoLocalArtifacts_TestPlanted_NeitherConsumedNorLaunched()
     {
-        var runRoot = SpikePaths.TestScratch("inv014-stale-artifacts");
+        using var scope = SpikePaths.TransientScratch("inv014-stale-artifacts");
+        var runRoot = scope.Root;
         var marker = $"STALE-{Guid.NewGuid():N}";
         var planted = new List<string>();
         foreach (var project in new[] { "harness/RouteAHarness", "harness/RouteBHarness" })
@@ -158,6 +159,8 @@ public class Inv014OperatorSurfaceTests
                 Assert.StartsWith(runRootFull, full, StringComparison.Ordinal); // artifacts live beneath the run root ONLY
                 Assert.DoesNotContain(artifact.GetProperty("sha256").GetString(), plantedDigests);
             }
+
+            scope.Commit(); // full run passed — reclaim the ~550MB run root
         }
         finally
         {
@@ -165,22 +168,35 @@ public class Inv014OperatorSurfaceTests
         }
     }
 
-    // Tests DD-005 [unit]: the stub CI workflow file exists under
-    // spikes/dafny-compat/ci/ — the structural handoff artifact the CI feature
-    // must wire (DF-001) — and it encodes the FROM-CLEAN gate (PMB-002/AP-021).
+    // Tests DD-005/DF-001 [unit]: the spike's CI is REALIZED, not stubbed. Two
+    // committed artifacts must exist and encode the FROM-CLEAN gate (PMB-002/
+    // AP-021) — the single net that would have caught BOTH post-merge bugs:
+    //   (1) the co-located REQUIREMENTS CHARTER spikes/dafny-compat/ci/spike-ci.yml
+    //       (the authoritative spec, with the linux-x64 RID pin), and
+    //   (2) the LIVE GitHub Actions workflow .github/workflows/dafny-compat-spike.yml
+    //       (GitHub requires workflows there, so it cannot live under the spike),
+    //       which checks out full history, installs the pinned SDK, runs
+    //       FROM-CLEAN, and invokes the documented root command verbatim.
     [Fact]
-    public void StubCiWorkflow_Committed_AsHandoffArtifact()
+    public void CiWorkflow_Realized_LiveJobAndCharter_EncodeFromCleanGate()
     {
-        var ci = SpikePaths.P("ci", "spike-ci.yml");
-        Assert.True(File.Exists(ci), "missing stub CI workflow (DD-005 structural carrier)");
-        var text = File.ReadAllText(ci);
-        Assert.Contains("DF-001", text);
-        Assert.Contains("linux-x64", text);
-        // DF-001 must encode the FROM-CLEAN gate — the single net that would have
-        // caught BOTH post-merge bugs (PMB-001, PMB-002). A warm out/ lets the
-        // suite pass on leaked prior-run state and masks the AP-021 circular-gate
-        // class, so the stub must carry the clean-checkout requirement and command.
-        Assert.Contains("FROM-CLEAN", text);
-        Assert.Contains("rm -rf", text);
+        // (1) Co-located requirements charter.
+        var charter = SpikePaths.P("ci", "spike-ci.yml");
+        Assert.True(File.Exists(charter), "missing CI requirements charter (DD-005)");
+        var charterText = File.ReadAllText(charter);
+        Assert.Contains("DF-001", charterText);
+        Assert.Contains("linux-x64", charterText);
+        Assert.Contains("FROM-CLEAN", charterText);
+        Assert.Contains("rm -rf", charterText);
+
+        // (2) Live GitHub Actions realization at the repo root (DF-001 discharged).
+        var workflow = SpikePaths.Repo(".github", "workflows", "dafny-compat-spike.yml");
+        Assert.True(File.Exists(workflow),
+            "missing the LIVE CI workflow .github/workflows/dafny-compat-spike.yml (DF-001 realization)");
+        var wf = File.ReadAllText(workflow);
+        Assert.Contains("fetch-depth: 0", wf);                 // QA-023 note 1 (QA001 ancestor check)
+        Assert.Contains("global.json", wf);                    // pinned-SDK install
+        Assert.Contains("rm -rf spikes/dafny-compat/out", wf); // FROM-CLEAN (PMB-002/AP-021)
+        Assert.Contains("env -i HOME=\"$HOME\" bash -p spikes/dafny-compat/scripts/run-spike.sh", wf); // documented root command, verbatim
     }
 }

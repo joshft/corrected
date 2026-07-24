@@ -140,7 +140,8 @@ public class QaFixRound1Tests
     [Fact]
     public void QA008_Controller_ExitsNonzero_OnChildFailure()
     {
-        var runRoot = SpikePaths.TestScratch("qa008-exit");
+        using var scope = SpikePaths.TransientScratch("qa008-exit");
+        var runRoot = scope.Root;
         // Point the run at an empty pre-created run root with NO provisioned
         // solver: the controller provisions z3 (so provision succeeds), but we
         // force child failure by removing the solver right before probes via a
@@ -152,6 +153,8 @@ public class QaFixRound1Tests
         var result = Launch.Script("scripts/run-spike.sh", null,
             "--run-root", runRoot, "--solver", badSolver, "--out", runReport);
         Assert.NotEqual(0, result.ExitCode); // QA-008: exit channel fail-closed
+
+        scope.Commit(); // passed — reclaim the run root (~550MB package copy)
     }
 
     // QA-009 class fix: a route-scoped restore fault (mutate ONLY Route B's
@@ -349,7 +352,8 @@ public class QaFixRound1Tests
     [Fact]
     public void QA007_NonProbePhaseHang_BuildTarget_SupervisorKills()
     {
-        var runRoot = SpikePaths.TestScratch("qa007-build-hang");
+        using var scope = SpikePaths.TransientScratch("qa007-build-hang");
+        var runRoot = scope.Root;
         // TEST-planted slow build target imported by Directory.Build.targets
         // only when this run root carries inject.targets (DD-008 isolation).
         File.WriteAllText(Path.Combine(runRoot, "inject.targets"), """
@@ -378,6 +382,8 @@ public class QaFixRound1Tests
         Assert.Contains("wall-clock", text);
         Assert.Matches("SIG(TERM|KILL)", text);
         Assert.Contains("build", text); // the non-probe phase that hung
+
+        scope.Commit(); // passed — reclaim the run root (~630MB)
     }
 
     // QA-010: independently confirm the min_task_count=2 recapture for Dafny

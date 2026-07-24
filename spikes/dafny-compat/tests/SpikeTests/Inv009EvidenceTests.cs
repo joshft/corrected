@@ -430,6 +430,17 @@ public class Inv009EvidenceTests
         var username = Environment.UserName;
         var hostname = System.Net.Dns.GetHostName();
         var badPatterns = new[] { "/home/", "/Users/", "/tmp/", "C:\\" };
+        // The username/hostname checks catch a DISTINCTIVE developer identifier
+        // leaking into committed evidence. Generic CI/system account names (e.g.
+        // GitHub Actions' "runner", "root", "ubuntu") are common substrings — the
+        // OS user "runner" collides with the legitimate "test_runner" config key —
+        // so they cannot distinguish a leak from coincidence and would false-fail
+        // on any such host. Skip them; human review (AP-004) remains the backstop.
+        var genericAccounts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "runner", "runneradmin", "root", "ubuntu", "user", "admin", "build",
+            "test", "ci", "github", "actions", "vsts", "azureuser", "ec2-user",
+        };
 
         foreach (var file in committedGlobs.Where(File.Exists))
         {
@@ -439,12 +450,12 @@ public class Inv009EvidenceTests
                 Assert.False(text.Contains(pattern, StringComparison.OrdinalIgnoreCase),
                     $"{file} contains banned path pattern '{pattern}' (PRH-005)");
             }
-            if (username.Length >= 3)
+            if (username.Length >= 3 && !genericAccounts.Contains(username))
             {
                 Assert.False(text.Contains(username, StringComparison.Ordinal),
                     $"{file} contains the generating user's name (PRH-005)");
             }
-            if (hostname.Length >= 3)
+            if (hostname.Length >= 3 && !genericAccounts.Contains(hostname))
             {
                 Assert.False(text.Contains(hostname, StringComparison.OrdinalIgnoreCase),
                     $"{file} contains the generating hostname (PRH-005)");
@@ -477,7 +488,8 @@ public class Inv009EvidenceTests
         Assert.True(File.Exists(canonicalSample),
             "no committed CANONICAL evidence sample (evidence/samples/run-report.canonical.sample.json) — regenerate the PAIR via scripts/regen-sample.sh (DD-008/QA-006).");
 
-        var scratch = SpikePaths.TestScratch("inv009-fresh-run");
+        using var scope = SpikePaths.TransientScratch("inv009-fresh-run");
+        var scratch = scope.Root;
         var fresh = Path.Combine(scratch, "run-report.json");
         var run = Launch.Script("scripts/run-spike.sh", null, "--out", fresh);
         Assert.Equal(0, run.ExitCode);
@@ -493,5 +505,7 @@ public class Inv009EvidenceTests
         var canonicalMasked = EvidenceSchema.DeterministicProjection(File.ReadAllText(canonicalSample), SchemaPath, applySuiteStatusMask: true);
         Assert.True(canonicalMasked == freshMasked,
             "committed CANONICAL sample's suite-status-masked projection diverges from a fresh run. If INTENTIONAL: regenerate the PAIR via scripts/regen-sample.sh (DD-008/QA-006). If UNEXPLAINED: investigate (AP-005/RS-020).");
+
+        scope.Commit(); // passed — reclaim the fresh canonical run root (~550 MB)
     }
 }
