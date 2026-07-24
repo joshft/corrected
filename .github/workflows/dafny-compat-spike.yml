@@ -84,6 +84,7 @@ jobs:
       - name: Diagnostics (always)
         if: always()
         run: |
+          echo "== cores (inv010 resource-floor reference) =="; nproc; echo "nproc=$(nproc)"
           echo "== disk =="; df -h .
           echo "== out/current =="; ls -la spikes/dafny-compat/out/current 2>/dev/null || echo "(no out/current)"
           echo "== suite receipts (suite_exit — what the controller captured) =="
