@@ -149,22 +149,27 @@ public class QaFixRound2Tests
     // ------------------------------------------------------------------ QA-017
 
     // QA-017: the PROVISION phase runs under the real per-phase setsid
-    // supervisor. The TEST constructs the hang externally: a huge sparse file
-    // planted at the run root's staged-archive path makes provisioning's
-    // digest check (sha256sum) run far past the shrunken wall-clock bound —
-    // the supervisor must kill the detached provision session at the deadline
-    // and the synthetic INCOMPLETE must carry PROVISION-phase attribution.
+    // supervisor. The TEST constructs the hang externally with ZERO disk use:
+    // an empty FIFO planted at a well-known run-root path makes provisioning
+    // block on it forever (sha256sum on a writer-less pipe sleeps in open() —
+    // no bytes, no CPU) far past the shrunken wall-clock bound; the supervisor
+    // must kill the detached provision session at the deadline and the synthetic
+    // INCOMPLETE must carry PROVISION-phase attribution. (This replaces an
+    // earlier 400GB sparse-archive trigger, which tripped apparent-size /
+    // quota-backed filesystems — du --apparent-size counted it even at ~0 real
+    // blocks — and broke portable CI/contributor runs.)
     // QA-018 class fix: after the kill, no process of the killed phase's
-    // session may survive (swept via /proc cmdlines referencing the fault).
+    // session may survive (swept via /proc cmdlines referencing the run root).
     [Fact]
     public void QA017_ProvisionPhaseHang_SupervisorKills_WithPhaseAttribution_NoSurvivors()
     {
         var runRoot = SpikePaths.TestScratch("qa017-provision-hang");
-        var sparseArchive = Path.Combine(runRoot, "z3-4.12.1-x64-glibc-2.35.zip");
-        using (var fs = new FileStream(sparseArchive, FileMode.Create, FileAccess.Write))
-        {
-            fs.SetLength(400L * 1024 * 1024 * 1024); // sparse: ~0 bytes on disk, minutes to hash
-        }
+        // Zero-disk hang trigger: an empty FIFO. provision-z3.sh blocks on it
+        // (sha256sum on a writer-less pipe hangs in open() forever) — no sparse
+        // file, so no apparent-size/quota fallout. Disk-triggered so it survives
+        // the controller's env -i re-exec.
+        var hangPipe = Path.Combine(runRoot, ".provision-hang.pipe");
+        MakeFifo(hangPipe);
 
         const int boundSeconds = 30;
         var configCopy = Path.Combine(runRoot, "run-config.json");
@@ -187,8 +192,9 @@ public class QaFixRound2Tests
         Assert.Contains("provision", text); // typed PER-PHASE attribution, not the generic outer backstop
 
         // QA-018 class fix: sweep — no process of the killed provision session
-        // survives (nothing still references the planted fault file).
-        AssertNoSurvivingProcessReferencing(sparseArchive);
+        // survives (nothing still references this run's root, incl. the blocked
+        // sha256sum on the hang FIFO).
+        AssertNoSurvivingProcessReferencing(runRoot);
     }
 
     // ------------------------------------------------------------------ QA-018
@@ -202,7 +208,8 @@ public class QaFixRound2Tests
     [Fact]
     public void QA018_NestedRun_InheritsParentDeadlineCap()
     {
-        var runRoot = SpikePaths.TestScratch("qa018-parent-cap");
+        using var scope = SpikePaths.TransientScratch("qa018-parent-cap");
+        var runRoot = scope.Root;
         var uptime = (long)double.Parse(File.ReadAllText("/proc/uptime").Split(' ')[0],
             System.Globalization.CultureInfo.InvariantCulture);
         var env = new Dictionary<string, string>
@@ -223,6 +230,8 @@ public class QaFixRound2Tests
         var text = doc.RootElement.GetRawText();
         Assert.Contains("INCOMPLETE", text);
         Assert.Contains("wall-clock", text);
+
+        scope.Commit(); // passed — reclaim the nested-run root (capped run)
     }
 
     // ------------------------------------------------------------------ QA-019
@@ -622,6 +631,27 @@ public class QaFixRound2Tests
             }
         }
         return decisionPending && verdicts.Count > 0 && verdicts.All(v => v == "pending");
+    }
+
+    // Create an empty FIFO (named pipe) — zero disk. The QA-017 provision-hang
+    // trigger: sha256sum blocking on a writer-less pipe hangs in open() forever.
+    private static void MakeFifo(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "mkfifo",
+            UseShellExecute = false,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("--");
+        psi.ArgumentList.Add(path);
+        using var proc = System.Diagnostics.Process.Start(psi)
+            ?? throw new InvalidOperationException("could not start mkfifo");
+        var stderr = proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
+        Assert.True(proc.ExitCode == 0, $"mkfifo failed for {path}: {stderr}");
+        Assert.True(Path.Exists(path), $"FIFO not created at {path}");
     }
 
     private static void AssertNoSurvivingProcessReferencing(string pathFragment)

@@ -300,7 +300,8 @@ public class Inv006VerdictTests
     [Fact]
     public void InducedTimeout_TestConstructedHang_SupervisorSignalRecorded()
     {
-        var runRoot = SpikePaths.TestScratch("inv006-timeout");
+        using var scope = SpikePaths.TransientScratch("inv006-timeout");
+        var runRoot = scope.Root;
         var hangSolver = SpikePaths.WriteExecutable(Path.Combine(runRoot, "hang-solver"),
             "echo 'Z3 version 4.12.1 - 64 bit'; sleep 100000");
         const int boundSeconds = 5;
@@ -326,6 +327,8 @@ public class Inv006VerdictTests
         Assert.Contains("INCOMPLETE", text);
         Assert.Contains("wall-clock", text);
         Assert.Matches("SIG(TERM|KILL)", text); // the recorded delivered signal (RS-015)
+
+        scope.Commit(); // passed — reclaim the run root (~600MB package copy)
     }
 
     // Tests INV-006/BND-003 [integration] (RS-012, TA-A9): unreadable fixture —
@@ -377,7 +380,8 @@ public class Inv006VerdictTests
     [Fact]
     public void ForgedExtraReportOnDisk_IsNeverAggregated()
     {
-        var runRoot = SpikePaths.TestScratch("inv006-forged-report");
+        using var scope = SpikePaths.TransientScratch("inv006-forged-report");
+        var runRoot = scope.Root;
         var reportsDir = Path.Combine(runRoot, RunLayout.ReportsDirRelativePath);
         Directory.CreateDirectory(reportsDir);
         var forged = Path.Combine(reportsDir, "route-b-forged.json");
@@ -392,5 +396,7 @@ public class Inv006VerdictTests
             .EnumerateArray().Select(p => Path.GetFileName(p.GetString()!)).ToList();
         Assert.NotEmpty(consumed);
         Assert.DoesNotContain("route-b-forged.json", consumed);
+
+        scope.Commit(); // passed — reclaim the run root (~550MB package copy)
     }
 }

@@ -1,0 +1,67 @@
+# DF-001 (was DD-005): the LIVE GitHub Actions realization of the dafny-compat
+# spike's permanent conformance job. GitHub requires workflows under
+# .github/workflows/, so the job cannot live inside the spike dir — the
+# co-located REQUIREMENTS CHARTER (the authoritative spec for this job, with the
+# 5 hard requirements) is spikes/dafny-compat/ci/spike-ci.yml. Keep the two in
+# sync (asserted by Inv014OperatorSurfaceTests).
+#
+# Gate signal: the CONTROLLER EXIT of a single FROM-CLEAN run of the documented
+# root command (fail-closed per QA-008/QA-016). There is no separate assertion
+# step — a nonzero controller exit fails the job.
+#
+# Wall-clock: the controller's committed 1800s bound (config/run-config.json)
+# covers provision + cold restore + build + the full suite (incl. its nested
+# controller runs). A cold ubuntu-latest runner is slower than the dev host and
+# may approach that bound; the FIRST live run is the measurement. If it
+# synthesizes a WallClockExpiry INCOMPLETE, take any bound change through the
+# DD-006 evidence procedure (never a silent config edit) or move to a larger
+# runner — do not paper over it here.
+#
+# Caching is deliberately omitted: a strictly FROM-CLEAN job (PMB-002/AP-021).
+# Only out/cache (Z3 / net8 runtime / NuGet — never run roots or receipts) may
+# ever be cached, and only when restored into an otherwise-empty out/.
+name: dafny-compat-spike
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  spike:
+    name: conformance (linux-x64, from clean)
+    runs-on: ubuntu-latest # MUST resolve to linux-x64 (EA-002): a different RID needs new pinned digests + a re-captured committed sample
+    timeout-minutes: 60 # job backstop only; the controller's 1800s wall-clock bound is the real gate
+    steps:
+      - name: Checkout (full history — QA-023 note 1; QA001 shells `git merge-base --is-ancestor <sample-commit> HEAD`)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned .NET SDK to $HOME/.dotnet (spikes/dafny-compat/global.json)
+        run: |
+          # The controller runs under `env -i HOME="$HOME"` and resolves the SDK
+          # from $HOME/.dotnet/dotnet — system-wide installs (/usr/share/dotnet,
+          # PATH) are NOT auto-discovered (MA-HI-1/MA-UX-3). dotnet-install.sh's
+          # default install dir IS $HOME/.dotnet, so the documented BARE root
+          # command below needs no --dotnet-root.
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --jsonfile spikes/dafny-compat/global.json --install-dir "$HOME/.dotnet"
+          "$HOME/.dotnet/dotnet" --version
+
+      - name: FROM-CLEAN conformance run (PMB-002/AP-021 — controller exit is the gate)
+        run: |
+          # No cached run roots / out/current may persist between runs — a warm
+          # out/ lets the suite pass on leaked prior-run state and masks the
+          # AP-021 circular-gate class. A fresh checkout has no out/; rm -rf is
+          # the explicit belt-and-suspenders.
+          rm -rf spikes/dafny-compat/out
+          env -i HOME="$HOME" bash -p spikes/dafny-compat/scripts/run-spike.sh
+
+      - name: Diagnostics (always)
+        if: always()
+        run: |
+          echo "== disk =="; df -h .
+          echo "== out/current =="; ls -la spikes/dafny-compat/out/current 2>/dev/null || echo "(no out/current)"
+          echo "== run report (tail) =="; tail -c 4000 spikes/dafny-compat/out/current/run-report.json 2>/dev/null || true

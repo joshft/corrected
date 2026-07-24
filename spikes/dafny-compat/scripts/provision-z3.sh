@@ -89,6 +89,22 @@ sha_of() {
   printf '%s' "$digest"
 }
 
+# QA-017 test-only hook (ZERO disk). Exercising the per-phase wall-clock
+# supervisor's kill + PROVISION attribution must NOT require a huge sparse
+# archive: a 400GB sparse file trips apparent-size / quota-backed filesystems
+# (du --apparent-size counts it even at ~0 real blocks), breaking portable
+# CI/contributor runs. If the QA-017 test planted an EMPTY FIFO here, block the
+# provision phase on it — sha256sum on a writer-less pipe hangs forever in
+# open() with zero bytes and zero CPU — so the supervisor can kill + attribute
+# this phase. Disk-triggered (survives the controller's env -i re-exec); the
+# sha256sum process's /proc cmdline carries the run-root path for the
+# no-survivors sweep. [ -p ] is never true in a real provisioning run.
+PROVISION_HANG_PIPE="$RUN_ROOT/.provision-hang.pipe"
+if [ -p "$PROVISION_HANG_PIPE" ]; then
+  echo "provision-z3: QA-017 hang-pipe present — blocking on it (test-only, zero disk)" >&2
+  run_cmd sha256sum -- "$PROVISION_HANG_PIPE"
+fi
+
 # FULL state: a prior successful install is left untouched (AP-016 double-run
 # identical state). The marker records the archive digest the install came
 # from; anything inconsistent is treated as partial state and rebuilt.

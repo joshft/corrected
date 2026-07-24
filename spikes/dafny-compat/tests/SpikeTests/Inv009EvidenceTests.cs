@@ -477,7 +477,8 @@ public class Inv009EvidenceTests
         Assert.True(File.Exists(canonicalSample),
             "no committed CANONICAL evidence sample (evidence/samples/run-report.canonical.sample.json) — regenerate the PAIR via scripts/regen-sample.sh (DD-008/QA-006).");
 
-        var scratch = SpikePaths.TestScratch("inv009-fresh-run");
+        using var scope = SpikePaths.TransientScratch("inv009-fresh-run");
+        var scratch = scope.Root;
         var fresh = Path.Combine(scratch, "run-report.json");
         var run = Launch.Script("scripts/run-spike.sh", null, "--out", fresh);
         Assert.Equal(0, run.ExitCode);
@@ -493,5 +494,7 @@ public class Inv009EvidenceTests
         var canonicalMasked = EvidenceSchema.DeterministicProjection(File.ReadAllText(canonicalSample), SchemaPath, applySuiteStatusMask: true);
         Assert.True(canonicalMasked == freshMasked,
             "committed CANONICAL sample's suite-status-masked projection diverges from a fresh run. If INTENTIONAL: regenerate the PAIR via scripts/regen-sample.sh (DD-008/QA-006). If UNEXPLAINED: investigate (AP-005/RS-020).");
+
+        scope.Commit(); // passed — reclaim the fresh canonical run root (~550 MB)
     }
 }

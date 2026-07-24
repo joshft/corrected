@@ -32,7 +32,8 @@ public class Inv010DeterminismTests
     [Fact]
     public void RunTwice_DeterministicProjectionsIdentical()
     {
-        var scratch = SpikePaths.TestScratch("inv010-run-twice");
+        using var scope = SpikePaths.TransientScratch("inv010-run-twice");
+        var scratch = scope.Root;
         var root1 = Path.Combine(scratch, "r1");
         var root2 = Path.Combine(scratch, "r2");
         var first = Path.Combine(scratch, "run1.json");
@@ -67,6 +68,8 @@ public class Inv010DeterminismTests
             Assert.True(q1 == q2,
                 $"{rel}: deterministic projections differ between consecutive runs — a route/control-level flap is a BLOCKING finding (INV-010/RS-005/MA-ED-1)");
         }
+
+        scope.Commit(); // both runs passed — reclaim ~1.2GB of run roots
     }
 
     // Tests INV-010/MA-ED-1 [unit] (class fix): EVERY report kind the schema
