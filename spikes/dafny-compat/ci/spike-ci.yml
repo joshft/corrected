@@ -1,13 +1,16 @@
-# DD-005: STUB CI workflow — the structural handoff artifact for the future CI
-# feature (deferred finding DF-001 in .correctless/meta/deferred-findings.json).
-# This file is NOT wired into any CI system yet; the CI feature must move/wire
-# it (assumed runner RID: linux-x64 — a different RID requires new pinned
-# digests and a re-captured committed sample, EA-002/RS-005).
+# DD-005 / DF-001 (DISCHARGED): CI REQUIREMENTS CHARTER for the dafny-compat
+# spike's permanent conformance job, co-located with the spike. The LIVE
+# GitHub Actions realization is .github/workflows/dafny-compat-spike.yml —
+# GitHub requires workflows under .github/workflows/, so the job itself cannot
+# live under the spike dir. This charter is the AUTHORITATIVE spec for that job
+# (the 5 hard requirements below); keep the two in sync (asserted by
+# Inv014OperatorSurfaceTests). Runner RID: linux-x64 — a different RID requires
+# new pinned digests and a re-captured committed sample (EA-002/RS-005).
 #
-# Until CI lands, enforcement is local `dotnet test` (EA-004): the Correctless
-# workflow test command runs this suite.
+# Local enforcement remains `dotnet test` on a warm tree (EA-004: the
+# Correctless workflow test command); the live job adds the FROM-CLEAN net.
 #
-# HARD REQUIREMENTS the CI feature inherits with DF-001 (QA-023):
+# HARD REQUIREMENTS the live job realizes (QA-023):
 #
 # 1. FULL-HISTORY CHECKOUT — `fetch-depth: 0` is mandatory. The committed test
 #    QA001_CommittedSamples_CleanTreeAncestorCommit shells out to
@@ -42,6 +45,10 @@
 #    Z3 / net8 runtime / NuGet — no run roots or receipts) MAY be cached, and
 #    only when restored into an otherwise-empty `out/`. The gate signal is the
 #    CONTROLLER_EXIT of a single from-clean run.
+# NOTE: this charter is documentation, not an executed workflow (GitHub only
+# runs files under .github/workflows/). The run: lines below mirror the live
+# steps in .github/workflows/dafny-compat-spike.yml; that file is the one that
+# actually runs.
 name: dafny-compat-spike (permanent conformance job — DD-005/DD-006)
 on:
   workflow_call: {}
@@ -50,8 +57,8 @@ jobs:
     runs-on: ubuntu-latest # must be linux-x64 (EA-002)
     steps:
       - name: checkout (REQUIRED fetch-depth 0 — see QA-023 note 1)
-        run: 'echo "STUB: the CI feature wires actions/checkout with fetch-depth: 0 here (DF-001/QA-023)"'
+        run: 'echo "live: actions/checkout@v4 with fetch-depth: 0 (DF-001/QA-023)"'
       - name: pinned SDK 10.0.302 per spikes/dafny-compat/global.json
-        run: 'echo "STUB: install exact pinned SDK"'
+        run: 'echo "live: dotnet-install.sh --jsonfile spikes/dafny-compat/global.json --install-dir $HOME/.dotnet"'
       - name: FROM-CLEAN provision -> restore -> build -> test (controller exit is the gate — QA-023 notes 3 + 5)
-        run: 'echo "STUB: rm -rf spikes/dafny-compat/out && env -i HOME=$HOME bash -p spikes/dafny-compat/scripts/run-spike.sh"'
+        run: 'echo "live: rm -rf spikes/dafny-compat/out && env -i HOME=$HOME bash -p spikes/dafny-compat/scripts/run-spike.sh"'

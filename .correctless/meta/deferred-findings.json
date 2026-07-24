@@ -3,12 +3,14 @@
   "findings": [
     {
       "id": "DF-001",
-      "status": "open",
+      "status": "resolved",
       "severity": "MEDIUM",
       "deferred_at": "2026-07-21T02:49:44Z",
+      "resolved_at": "2026-07-23",
       "source_file": ".correctless/specs/dafny-compat-spike.md",
       "finding_id": "DD-005",
-      "summary": "Deferred obligation: wire the committed stub workflow under spikes/dafny-compat/ci/ as a permanent CI job when the CI feature lands (spike suite becomes CI-enforced). The wired job MUST run FROM-CLEAN (rm -rf out / fresh checkout, no cached out/runid-* run roots — a warm out/ masks the AP-021 circular-gate class; this net's absence let both PMB-001 and PMB-002 escape). The stub encodes this (QA-023 note 5), test-asserted. Dischargeable only by the CI feature's spec."
+      "summary": "Deferred obligation: wire the committed stub workflow under spikes/dafny-compat/ci/ as a permanent CI job when the CI feature lands (spike suite becomes CI-enforced). The wired job MUST run FROM-CLEAN (rm -rf out / fresh checkout, no cached out/runid-* run roots — a warm out/ masks the AP-021 circular-gate class; this net's absence let both PMB-001 and PMB-002 escape). The stub encodes this (QA-023 note 5), test-asserted. Dischargeable only by the CI feature's spec.",
+      "resolution": "Realized as a LIVE GitHub Actions job at .github/workflows/dafny-compat-spike.yml (checkout fetch-depth:0 per QA-023 note 1; pinned SDK 10.0.302 installed to $HOME/.dotnet so the documented bare root command resolves it under env -i; `rm -rf spikes/dafny-compat/out` FROM-CLEAN; controller exit is the gate). The former stub spikes/dafny-compat/ci/spike-ci.yml is retained as the co-located requirements charter (test: Inv014OperatorSurfaceTests.CiWorkflow_Realized_LiveJobAndCharter_EncodeFromCleanGate). PENDING: the committed 1800s wall-clock bound must be confirmed sufficient on the ubuntu-latest runner class by the first live run — any bound change goes through DD-006, never a silent edit. Caching (out/cache only) deliberately omitted for a strictly from-clean first wiring."
     },
     {
       "id": "DF-002",

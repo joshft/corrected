@@ -149,7 +149,7 @@ tested, assumed, and still trusted.
   run in-process on a .NET 10 host for parse / resolve / Z3-backed verify /
   resolved-AST recovery — **has now been validated** by the permanent
   `spikes/dafny-compat/` conformance harness. Both integration routes are
-  **COMPATIBLE** (suite-attested, 273/273): Route A (`DafnyDriver` /
+  **COMPATIBLE** (suite-attested, 274/274): Route A (`DafnyDriver` /
   `CliCompilation`, additionally loading `DafnyLanguageServer`) and Route B
   (hand-assembled `DafnyCore` + `DafnyPipeline` + `Boogie.ExecutionEngine`).
   Recorded in provisional `docs/adr/ADR-0001-dafny-integration-boundary.md`.

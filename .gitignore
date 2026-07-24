@@ -38,4 +38,10 @@ dist/
 # the install manifest records the local plugin cache dir)
 .correctless/.install-manifest.json
 .correctless/config/workflow-config.json
+# Per-run bookkeeping (adherence progress, audit trail, cost/token cache) — run
+# state, not committed evidence (the tracked artifacts/*.json evidence is added
+# explicitly). cost-cache is private (0600) local spend data.
+.correctless/artifacts/adherence-state-*.json
+.correctless/artifacts/audit-trail-*.jsonl
+.correctless/artifacts/cost-cache-*.json
 TestResults/

@@ -131,6 +131,36 @@ public static class SpikePaths
         return dir;
     }
 
+    /// <summary>
+    /// Peak-disk reduction: a <see cref="TestScratch"/> whose directory is
+    /// deleted on Dispose ONLY if <see cref="ScratchScope.Commit"/> was reached
+    /// — i.e. only when the test PASSED (an xUnit assertion failure throws before
+    /// Commit(), so a failing test KEEPS its artifacts for debugging). Used by
+    /// the handful of full-controller tests whose run roots each materialize a
+    /// ~550MB package-cache copy (run-spike.sh cache_copy); with no in-run
+    /// cleanup the suite's peak scratch is the SUM of all live roots (~10GB, a
+    /// quota-backed-CI portability risk). xUnit v2's Dispose cannot observe
+    /// pass/fail, so the Commit() sentinel supplies it. The between-run token
+    /// sweep (QA-021) and clean-runs.sh remain the cross-run net; this attacks
+    /// in-run PEAK, which neither addresses.
+    /// </summary>
+    public static ScratchScope TransientScratch(string name) => new(TestScratch(name));
+
+    public sealed class ScratchScope : IDisposable
+    {
+        private bool _committed;
+        public string Root { get; }
+        public ScratchScope(string root) => Root = root;
+        /// <summary>Mark the test as passed; the run root is reclaimed on Dispose.</summary>
+        public void Commit() => _committed = true;
+        public void Dispose()
+        {
+            if (!_committed) return; // failed/aborted test — keep the run root for debugging
+            try { Directory.Delete(Root, recursive: true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best-effort */ }
+        }
+    }
+
     public static bool IsLinuxX64 =>
         OperatingSystem.IsLinux() && System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.X64;
 

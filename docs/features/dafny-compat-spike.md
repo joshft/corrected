@@ -20,7 +20,7 @@ reproduced integration failure.
 
 This spike builds a tracked, permanent harness under `spikes/dafny-compat/` that produces
 **evidence + ADR-0001**, not production code (`src/` stays empty). Its result: **both
-integration routes are COMPATIBLE**, suite-attested (273/273 tests green,
+integration routes are COMPATIBLE**, suite-attested (274/274 tests green,
 `final_suite_status = success`).
 
 | Route | How it verifies | Loads |
@@ -48,9 +48,10 @@ env -i HOME="$HOME" bash -p spikes/dafny-compat/scripts/run-spike.sh
 ```
 
 A canonical run (~13–15 min) mints a `run_id`, provisions Z3, does a locked restore +
-build under the pinned SDK, publishes `out/current`, runs the `dotnet test` suite with
-`SPIKE_RUN_CONTEXT` set, then aggregates and prints a per-route terminal verdict summary
-(no JSON parsing needed).
+build under the pinned SDK, runs the `dotnet test` suite with `SPIKE_RUN_CONTEXT` set
+(bound to a run-local settings file, **not** `out/current`), aggregates, prints a per-route
+terminal verdict summary (no JSON parsing needed), and **only then** publishes
+`out/current` — a run aborted before aggregation leaves the pointer untouched (bug-#3 fix).
 
 Running the suite directly (`cd spikes/dafny-compat && dotnet test DafnyCompatSpike.sln
 -noAutoResponse`) requires a prior **canonical** controller run to have published
@@ -66,8 +67,7 @@ from the repo root is **not** a reliable gate: it binds to whatever last publish
 flowchart TD
     P["provision Z3 4.12.1 (digest-verified)"] --> R["locked restore (NuGet lockfiles)"]
     R --> B["build under pinned SDK 10.0.302"]
-    B --> PUB["publish out/current"]
-    PUB --> T["dotnet test suite (SPIKE_RUN_CONTEXT set)"]
+    B --> T["dotnet test suite (run-local SPIKE_RUN_CONTEXT)"]
     T -->|launches child processes| HA["RouteA harness (net10.0)"]
     T -->|launches child processes| HB["RouteB harness (net10.0)"]
     HA --> AGG["SpikeAggregator"]
@@ -76,6 +76,7 @@ flowchart TD
     AGG --> V{"all 22 (probe,route) entries pass AND suite success?"}
     V -->|yes| OK["route verdict: COMPATIBLE"]
     V -->|no| INC["INCOMPLETE — fail-closed, never COMPATIBLE"]
+    AGG --> PUB["publish out/current (only after aggregation, canonical run)"]
 ```
 
 The bootstrap controller (`run-spike.sh`) — the first thing that runs — holds the single

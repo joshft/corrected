@@ -1521,7 +1521,12 @@ public static class HarnessCore
             "fi\n" +
             $"ENTRIES_DIR='{entriesDir}'\n" +
             "mkdir -p \"$ENTRIES_DIR\" || exit 0\n" +
-            "ENTRY_FILE=$(mktemp \"$ENTRIES_DIR/entry-XXXXXXXX\") || exit 0\n" +
+            // Write to a temp name the reader's `entry-*` glob IGNORES, then
+            // atomically rename into place (below): a concurrent reader — or a
+            // shim descheduled/killed mid-write under heavy contention — can then
+            // NEVER observe a partial `entry-*` file, which would otherwise be
+            // counted as a malformed entry and fail P05/P08 (INV-003/RS-003d).
+            "ENTRY_TMP=$(mktemp \"$ENTRIES_DIR/.wip-XXXXXXXX\") || exit 0\n" +
             "{\n" +
             $"  printf '%s' '{nonceB64}'\n" +
             $"  printf ' %s' '{tagB64}'\n" +
@@ -1529,7 +1534,7 @@ public static class HarnessCore
             "    printf ' %s' \"$(printf '%s' \"$a\" | base64 | tr -d '\\n')\"\n" +
             "  done\n" +
             "  printf '\\n'\n" +
-            "} > \"$ENTRY_FILE\"\n" +
+            "} > \"$ENTRY_TMP\" && mv -f \"$ENTRY_TMP\" \"$ENTRIES_DIR/entry-${ENTRY_TMP##*/.wip-}\" 2>/dev/null || rm -f \"$ENTRY_TMP\" 2>/dev/null\n" +
             "exit 0\n";
     }
 

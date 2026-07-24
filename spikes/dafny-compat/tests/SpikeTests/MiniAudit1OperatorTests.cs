@@ -36,7 +36,8 @@ public class MiniAudit1OperatorTests
     [Fact]
     public void Hi1_InheritedDotnetRoot_CannotHijackToolchain()
     {
-        var scratch = SpikePaths.TestScratch("ma1-hi1-dotnetroot");
+        using var scope = SpikePaths.TransientScratch("ma1-hi1-dotnetroot");
+        var scratch = scope.Root;
         var marker = Path.Combine(scratch, "HIJACK-MARKER");
         var fakeSdk = Path.Combine(scratch, "fakesdk");
         SpikePaths.WriteExecutable(Path.Combine(fakeSdk, "dotnet"),
@@ -56,6 +57,8 @@ public class MiniAudit1OperatorTests
         Assert.False(File.Exists(marker),
             "an inherited DOTNET_ROOT selected the SDK — the clean-environment contract failed to strip it (MA-HI-1). "
             + $"marker={marker} stderr(tail)={Tail(result.StdErr)}");
+
+        scope.Commit(); // passed — reclaim the run root (~550MB package copy)
     }
 
     // Tests INV-014/RS-015/MA-UX-1/MA-RB-4 [integration]: an operator SIGTERM
@@ -67,7 +70,8 @@ public class MiniAudit1OperatorTests
     [Fact]
     public void SignalTrap_OperatorSigterm_SweepsInner_TypedReport_OutCurrentUntouched()
     {
-        var runRoot = SpikePaths.TestScratch("ma1-signal");
+        using var scope = SpikePaths.TransientScratch("ma1-signal");
+        var runRoot = scope.Root;
         var report = Path.Combine(runRoot, "run-report.json");
         var currentPointer = SpikePaths.P("out", "current", "spike.runsettings");
         var currentBefore = File.Exists(currentPointer) ? File.ReadAllText(currentPointer) : null;
@@ -132,6 +136,8 @@ public class MiniAudit1OperatorTests
             // at all — the shared pointer is untouched.
             var currentAfter = File.Exists(currentPointer) ? File.ReadAllText(currentPointer) : null;
             Assert.Equal(currentBefore, currentAfter);
+
+            scope.Commit(); // passed — reclaim the run root (~630MB)
         }
         finally
         {
@@ -351,7 +357,8 @@ public class MiniAudit1OperatorTests
     [Fact]
     public void Pr005_DuplicateConfigKey_LastWins()
     {
-        var scratch = SpikePaths.TestScratch("ma1-pr005");
+        using var scope = SpikePaths.TransientScratch("ma1-pr005");
+        var scratch = scope.Root;
         var cfg = Path.Combine(scratch, "run-config.json");
         File.WriteAllText(cfg,
             "{\n  \"wall_clock_bound_seconds\": 1800,\n  \"wall_clock_bound_seconds\": 4,\n  \"monotonic_source\": \"/proc/uptime\"\n}\n");
@@ -363,6 +370,8 @@ public class MiniAudit1OperatorTests
             $"run took {result.DurationMs}ms — a duplicate key resolved first-wins (1800s) instead of last-wins (4s) (PR-005 reverted)");
         Assert.True(File.Exists(report), "no synthetic report on the wall-clock kill");
         Assert.Contains("wall-clock", File.ReadAllText(report));
+
+        scope.Commit(); // passed — reclaim the run root (~630MB)
     }
 
     // Tests INV-009/MA-ED-3 [integration] (producer-side): no class-2 subtree
