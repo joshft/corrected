@@ -37,25 +37,64 @@
           "status": "proposed — requires human approval (edits the approved spec); not applied by this postmortem"
         }
       }
+    },
+    {
+      "id": "PMB-002",
+      "date": "2026-07-23",
+      "description": "The full canonical suite is red (1 failure) from any state lacking a prior green suite-receipt in live `out/` — i.e. from a clean checkout (`rm -rf out`). MaIdR22_SuiteReceipt_ProduceSideBinding_AndPathMatchesConstant (MiniAudit2OperatorTests.cs) enumerates prior run roots on disk (out/runid-*, out/regen-*) and asserts at least one PRIOR run's receipts/suite-receipt.json carries suite_exit==0. That green receipt is only produced by a SUCCESSFUL suite, but this test is itself a member of that suite — so the gate can never bootstrap from clean and deadlocks: a failing MaIdR22 makes the suite exit non-zero, so the receipt this run writes records suite_exit != 0, and no subsequent run ever produces the green prior receipt it requires.",
+      "severity": "high",
+      "found_by": "external code review (GPT 5.6) of the spike harness — one of three harness-reliability findings (bug #1); the developer's suite read green only because the working tree carried an accumulated prior green `out/`, masking the deadlock",
+      "root_cause": "The MA-ID-R2-2 class-fix test validated the PRODUCE side of suite-receipt binding by reading a PRIOR run's receipt discovered on disk (Directory.EnumerateDirectories(out, runid-*/regen-*)) and requiring suite_exit==0, instead of binding to the CURRENT run's receipt produced within this run by the controller/aggregator and surfaced via RunContext. Because the test is itself part of the suite whose success it demands, the required precondition — a green suite-receipt in live out/ — is only producible by a run in which this same test already passed: an unreachable fixpoint from a clean checkout. This regressed the spec's own RS-010 principle (aggregator derives its set from the committed manifest, 'never from reports found on disk'; 'violated when the aggregator iterates reports found on disk') by committing the forbidden disk-iteration / prior-run dependency inside a suite test.",
+      "spec_existed": true,
+      "spec_id": "dafny-compat-spike",
+      "invariant_existed": true,
+      "invariant_id": "INV-006 / MA-ID-R2-2 (RS-010 current-run-binding principle)",
+      "phase_that_should_have_caught": "audit",
+      "phase_was_skipped": false,
+      "why_missed": "The circular gate was INTRODUCED by the mini-audit (round 2) as the class fix for MA-ID-R2-2 (produce-side suite-receipt binding). The mini-audit ran the new test in a working tree that already held an accumulated green `out/` from earlier verification/regen runs, so MaIdR22 passed on leaked prior-run state (AP-010) and the round closed green. cverify (tdd-verify) then marked every invariant 'covered, no weak tests' — but its 'fresh canonical run' (273/273) was launched over that same populated `out/`, not from `rm -rf out`, so it too never exercised the clean-checkout path where the deadlock lives. The authoritative from-clean net was the DF-001 clean-checkout (`rm -rf out`) CI job — the SAME deferred/unwired safety net implicated in PMB-001. No phase ever ran the suite from a state with no accumulated `out/`, which is the only state that reveals the circular gate.",
+      "contributing_causes": [
+        "audit (class-fix quality): QA-022's own rule — 'a class fix is not closed until a test exists that FAILS when the fix is reverted' — was not applied to MaIdR22. It passes or fails on accumulated `out/` state independent of whether the produce-side binding is correct, so it is a wrong-reason test (AP-010) that cannot bootstrap, not a regression guard.",
+        "spec: the MA-ID-R2-2 finding framed the produce side around 'the substrate run's receipts/suite-receipt.json' (a prior-run product / out/current referent), baking the prior-run dependency into the corrective action rather than requiring binding to the current run's own receipt.",
+        "deferred safety net: DF-001 (from-clean `rm -rf out` CI job) is open/unwired — the same structural gap that let PMB-001 escape now let a second, unrelated post-merge bug escape. Two post-merge bugs share one missing gate.",
+        "recurrence: the same 'gate satisfiable only from an already-green / prior state' class already existed as the QA-001+QA-024 evidence-binding deadlock; that earlier instance was dispositioned as an evidence-regeneration caveat (an instance fix), not a class fix — so the class recurred in MaIdR22. Per the constraint on too-narrow prior QA corrective actions, the class fix that should have been applied then is AP-021's from-clean-provability rule plus the current-run-binding enforcement."
+      ],
+      "corrective_action": {
+        "antipattern_added": true,
+        "antipattern_id": "AP-021",
+        "invariant_template_updated": false,
+        "template": null,
+        "addition": null,
+        "drift_debt_created": false,
+        "structural_gate_recommended": {
+          "what": "Promote DF-001 from deferred to a WIRED executable gate now: run the full canonical suite once from `rm -rf out` (or a fresh clone) and require green, as a local pre-merge gate (`rm -rf out && scripts/run-spike.sh`) until the CI job lands. A from-clean run is the structural detector for the entire AP-021 class — any test depending on accumulated prior-run state fails from clean.",
+          "why": "Turns 'the suite is green on my tree' (which silently depended on a leftover green out/) into 'the suite is green from nothing'. One gate catches every prior-run-state dependency at once — including the class that also produced QA-001/QA-024 — and it is the shared missing net behind both PMB-001 and PMB-002, so wiring it discharges risk from two post-merge bugs.",
+          "status": "proposed — requires human approval (wires a gate / edits workflow config); not applied by this postmortem"
+        },
+        "spec_enforcement_update_recommended": {
+          "what": "Amend the MA-ID-R2-2 / suite-receipt enforcement in .correctless/specs/dafny-compat-spike.md: the produce-side binding must be validated against the CURRENT run's receipt — produced within this run by the controller/aggregator and surfaced via RunContext — asserting {run_id, nonce, suite_exit, source_manifest_sha256} against the run-context, provable from `rm -rf out` in a SINGLE run. Reading a prior run's receipt discovered by enumerating `out/runid-*` on disk does NOT satisfy it (it regresses RS-010's 'never from reports found on disk'). Add a general clause: no suite/gate test may require a prior successful run of the same suite as its precondition.",
+          "status": "proposed — requires human approval (edits the approved spec); not applied by this postmortem"
+        },
+        "instance_fix_note": "The instance fix — rewrite MaIdR22 to validate the current run's receipt post-suite via the aggregator/controller and prove convergence from `rm -rf out` — belongs to the bug #1 /ctdd cycle, not this postmortem."
+      }
     }
   ],
   "phase_effectiveness": {
     "spec": {
       "invariants_authored": null,
-      "misses": 1,
-      "notes": "INV-014 operator-surface invariant existed but its Enforcement was specified as a doc-reference check, not an execution — the miss originated in the spec's choice of enforcement level (PMB-001)."
+      "misses": 2,
+      "notes": "INV-014 operator-surface invariant existed but its Enforcement was specified as a doc-reference check, not an execution — the miss originated in the spec's choice of enforcement level (PMB-001). MA-ID-R2-2 corrective framing bound the produce-side suite-receipt check to 'the substrate run' (a prior-run product / out/current referent) rather than the current run's own receipt, regressing RS-010's never-from-disk principle and admitting a non-bootstrappable circular gate (PMB-002)."
     },
     "tdd-qa": {
       "misses": 1,
       "notes": "Operator-entry-point invariant 'covered' by a README keyword-presence assert; every controller launch normalized the invocation to absolute-path + fixed cwd, so the documented relative-path/repo-root invocation was never executed (PMB-001). Pattern to watch: entry-point/CLI invariants tested through a normalized proxy launch rather than the documented command form."
     },
     "tdd-verify": {
-      "misses": 1,
-      "notes": "cverify marked INV-014 'covered' on the strength of a reference check + absolute-path launches without flagging that the documented invocation form was never exercised (PMB-001)."
+      "misses": 2,
+      "notes": "cverify marked INV-014 'covered' on the strength of a reference check + absolute-path launches without flagging that the documented invocation form was never exercised (PMB-001). cverify's 'fresh canonical run' (273/273) was launched over an accumulated `out/`, not from `rm -rf out`, so the clean-checkout deadlock in MaIdR22 was invisible and every invariant was marked 'covered, no weak tests' (PMB-002). Pattern to watch: full-suite-green evidence gathered without a from-clean run — leaked prior-run state hides both entry-point and bootstrap defects."
     },
     "audit": {
-      "misses": 1,
-      "notes": "Mini-audit added operator tests (MiniAudit1OperatorTests) but reused the same absolute-path/spike-cwd launch helper, so the form-specific defect escaped audit too (PMB-001)."
+      "misses": 2,
+      "notes": "Mini-audit added operator tests (MiniAudit1OperatorTests) but reused the same absolute-path/spike-cwd launch helper, so the form-specific defect escaped audit too (PMB-001). Worse, the mini-audit INTRODUCED a circular/bootstrap gate (MaIdR22) as the class fix for MA-ID-R2-2 and closed the round green on leaked prior-run `out/` state (AP-010); QA-022's own 'a class fix is not closed until a test FAILS on revert' rule was not applied to it (PMB-002). Pattern to watch: audit-authored class-fix tests not proven from a clean (`rm -rf out`) state."
     }
   }
 }
