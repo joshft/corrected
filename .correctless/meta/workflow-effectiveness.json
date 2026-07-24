@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "post_merge_bugs": [
+    {
+      "id": "PMB-001",
+      "date": "2026-07-23",
+      "description": "The sole documented root-README entry point `env -i HOME=\"$HOME\" bash -p spikes/dafny-compat/scripts/run-spike.sh` (run from the repo root) exited 127. The controller cd's into SPIKE_ROOT and relaunches its inner controller via `setsid bash -p -- \"$SCRIPT_SELF\"`; SCRIPT_SELF held a repo-relative BASH_SOURCE, which no longer resolved from the new cwd, so the inner controller failed to launch.",
+      "severity": "high",
+      "found_by": "external code review of the spike (merged as PR #3); the test suite was green and did not catch it",
+      "root_cause": "SCRIPT_SELF=\"${BASH_SOURCE[0]}\" captured the invocation path verbatim. For the documented invocation this is repo-relative (`spikes/dafny-compat/scripts/run-spike.sh`). The controller later runs `cd -- \"$SPIKE_ROOT\"` and then `setsid -w bash -p -- \"$SCRIPT_SELF\"` for the inner-controller relaunch — the relative path is resolved against the new cwd (SPIKE_ROOT) where it does not exist -> exit 127. Only invocations passing an ABSOLUTE path (the test harness via SpikePaths.P, regen-sample.sh via $SCRIPT_DIR) escaped. Fixed by canonicalizing SCRIPT_SELF to $SCRIPT_DIR/basename immediately after SCRIPT_DIR (already absolute) is computed.",
+      "spec_existed": true,
+      "spec_id": "dafny-compat-spike",
+      "invariant_existed": true,
+      "invariant_id": "INV-014",
+      "phase_that_should_have_caught": "tdd-qa",
+      "phase_was_skipped": false,
+      "why_missed": "INV-014 (operator surface: 'the spike is runnable by a stranger') covers exactly this, but its enforcement was specced and implemented as a README keyword-presence check (`Assert.Contains(\"scripts/run-spike.sh\", readme)` in Inv014OperatorSurfaceTests) — a reference check, not an execution (AP-011). Every behavioral test that DOES launch the controller does so through Launch.Script -> ScriptCore, which resolves the script to an ABSOLUTE path via SpikePaths.P and sets WorkingDirectory=SpikeRoot. That launch form is structurally unable to reproduce the documented invocation, which uses a repo-RELATIVE argv[0] from the repo-root cwd — the exact two conditions the bug depends on. The mini-audit added more operator tests (MiniAudit1OperatorTests) but kept the same absolute-path/spike-cwd launch form, so caudit missed it too. The full-regression safety net for the documented entry point was explicitly deferred to the DF-001 clean-checkout (`rm -rf out`) CI job, which is not yet wired. Net: no phase ever executed the exact command the README tells an operator to type.",
+      "contributing_causes": [
+        "spec: INV-014 Enforcement clause specified 'README existence + entry-point reference check' — a doc grep — as the coverage for the documented entry point, so creview/creview-spec/cverify accepted a reference check as 'covered'.",
+        "test infrastructure: the only script-launch helper (Launch.ScriptCore) normalizes every invocation to absolute-path + SpikeRoot cwd; a RepoRoot/Repo() helper exists in SpikePaths but no test launches the entry point from the repo root with a relative path.",
+        "deferred safety net: DF-001 (the clean-checkout CI job that would exercise the documented entry point directly) is open/unwired."
+      ],
+      "corrective_action": {
+        "antipattern_added": true,
+        "antipattern_id": "AP-020",
+        "invariant_template_updated": false,
+        "template": null,
+        "addition": null,
+        "drift_debt_created": false,
+        "structural_test_recommended": {
+          "what": "A test that parses each fenced shell command out of spikes/dafny-compat/README.md that invokes a committed script, and executes it VERBATIM from the documented working directory (repo root) with the documented argv[0] form (relative), asserting it gets past the inner-controller relaunch (no exit 127 / 'No such file or directory'). Scope it to a fast smoke of the launch/provision boundary rather than a full ~13-min canonical run.",
+          "why": "Turns 'the README mentions the script' (AP-011 reference check) and 'a normalized proxy invocation runs' into 'exactly what the operator is told to type, from where they are told to type it, runs'. Catches the whole class: relative-path resolution after cd, cwd assumptions, argv[0] parsing, env stripping.",
+          "status": "proposed — requires human approval (writes a new test); not applied by this postmortem"
+        },
+        "spec_enforcement_update_recommended": {
+          "what": "Amend INV-014 Enforcement in .correctless/specs/dafny-compat-spike.md: replace 'README existence + entry-point reference check' with 'a test executes each documented operator command verbatim (documented cwd + relative/absolute argv[0] form as written) and asserts it launches'. A reference/keyword-presence check does not satisfy an operator-surface invariant.",
+          "status": "proposed — requires human approval (edits the approved spec); not applied by this postmortem"
+        }
+      }
+    }
+  ],
+  "phase_effectiveness": {
+    "spec": {
+      "invariants_authored": null,
+      "misses": 1,
+      "notes": "INV-014 operator-surface invariant existed but its Enforcement was specified as a doc-reference check, not an execution — the miss originated in the spec's choice of enforcement level (PMB-001)."
+    },
+    "tdd-qa": {
+      "misses": 1,
+      "notes": "Operator-entry-point invariant 'covered' by a README keyword-presence assert; every controller launch normalized the invocation to absolute-path + fixed cwd, so the documented relative-path/repo-root invocation was never executed (PMB-001). Pattern to watch: entry-point/CLI invariants tested through a normalized proxy launch rather than the documented command form."
+    },
+    "tdd-verify": {
+      "misses": 1,
+      "notes": "cverify marked INV-014 'covered' on the strength of a reference check + absolute-path launches without flagging that the documented invocation form was never exercised (PMB-001)."
+    },
+    "audit": {
+      "misses": 1,
+      "notes": "Mini-audit added operator tests (MiniAudit1OperatorTests) but reused the same absolute-path/spike-cwd launch helper, so the form-specific defect escaped audit too (PMB-001)."
+    }
+  }
+}
