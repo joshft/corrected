@@ -317,19 +317,47 @@ public class QaFixRound2Tests
 
     // ------------------------------------------------------------------ QA-021
 
-    // QA-021 class fix: after any nested/variance controller runs, out/current
-    // still points at THIS suite's canonical run context — nested runs may
-    // never republish the shared pointer, and it never points into a
-    // test-scratch fixture root.
+    // QA-021 class fix (SPIKE_CANONICAL guard) + bug-#3 fix (deferred publish).
+    // out/current is the dev-loop's "last COMPLETED canonical run" pointer. Two
+    // properties are observable from WITHIN the suite and are pinned here:
+    //   (1) the ACTIVE suite binding (SPIKE_RUN_CONTEXT, delivered by the
+    //       controller's RUN-LOCAL settings file) resolves to a real canonical
+    //       run context under out/ — never a test-scratch fixture root;
+    //   (2) out/current, IF a prior canonical run published it, points at a
+    //       run-context under out/ and never into test-scratch — nested/variance
+    //       runs never republish the shared pointer (the original QA-021 defect).
+    //
+    // NOTE — this REPLACES the old `out/current == the current run` equality on
+    // purpose (bug #3): out/current is now published only AFTER aggregation, so
+    // DURING this suite it does not yet reflect the current run — it may be absent
+    // (fresh out/) or still point at the PREVIOUS completed run. The end-to-end
+    // "out/current advances to the just-completed run, and a run aborted before
+    // aggregation leaves it untouched" invariant is a POST-controller property,
+    // proven by the operator-path execution test and the DF-001 clean-checkout CI
+    // job. An in-suite test cannot observe its own publish timing, and scanning
+    // the script for statement order would be a proxy, not execution (AP-020).
     [Fact]
-    public void QA021_OutCurrent_PointsAtCanonicalRunContext_NeverAtTestScratch()
+    public void QA021_SuiteBoundToCanonicalContext_AndOutCurrentNeverTestScratch()
     {
+        var sep = Path.DirectorySeparatorChar;
+        var scratchFragment = $"{sep}test-scratch{sep}";
+        var outFragment = $"{sep}out{sep}";
+
+        // (1) the active binding is a real canonical run context, not scratch.
+        var active = RunContext.RequirePath();
+        Assert.Contains(outFragment, active);
+        Assert.DoesNotContain(scratchFragment, active);
+        Assert.EndsWith($"{sep}{RunLayout.RunContextFileName}", active);
+
+        // (2) the shared pointer, if present, is canonical and never test-scratch.
         var runsettings = Path.Combine(SpikePaths.SpikeRoot, "out", "current", "spike.runsettings");
-        Assert.True(File.Exists(runsettings),
-            "out/current/spike.runsettings missing — only canonical controller runs publish it; run scripts/run-spike.sh (QA-021)");
-        var published = SpikePaths.Xml(runsettings).Descendants("SPIKE_RUN_CONTEXT").Single().Value;
-        Assert.Equal(RunContext.RequirePath(), published);
-        Assert.DoesNotContain($"{Path.DirectorySeparatorChar}test-scratch{Path.DirectorySeparatorChar}", published);
+        if (File.Exists(runsettings))
+        {
+            var published = SpikePaths.Xml(runsettings).Descendants("SPIKE_RUN_CONTEXT").Single().Value;
+            Assert.Contains(outFragment, published);
+            Assert.DoesNotContain(scratchFragment, published);
+            Assert.EndsWith($"{sep}{RunLayout.RunContextFileName}", published);
+        }
     }
 
     // ------------------------------------------------------------------ QA-022

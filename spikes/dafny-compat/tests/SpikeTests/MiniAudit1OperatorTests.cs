@@ -127,8 +127,9 @@ public class MiniAudit1OperatorTests
             Assert.True(survived.Count == 0,
                 "inner-session processes survived the operator cancel (MA-UX-1/MA-RB-4): " + string.Join("; ", survived));
 
-            // out/current is published only after the suite phase, which a
-            // cancelled variance run never reaches — the shared pointer is untouched.
+            // out/current is published only by a CANONICAL run, and only after it
+            // completes aggregation; this cancelled VARIANCE run never publishes it
+            // at all — the shared pointer is untouched.
             var currentAfter = File.Exists(currentPointer) ? File.ReadAllText(currentPointer) : null;
             Assert.Equal(currentBefore, currentAfter);
         }
