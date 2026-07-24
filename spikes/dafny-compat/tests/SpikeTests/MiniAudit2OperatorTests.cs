@@ -355,53 +355,49 @@ public class MiniAudit2AggregatorTests
 
     // ------------------------------------------------------------------ MA-ID-R2-2
 
-    // Tests INV-006/MA-ID-R2-2 [integration] (PRODUCE side + shell<->C# binding):
-    // (1) run-spike.sh emits the suite receipt at a path whose relative form
-    // equals RunLayout.SuiteReceiptRelativePath (the previously-unbound duplicated
-    // literal). (2) A completed canonical run's suite receipt BINDS to its own
-    // run-context — run_id matches, nonce present, suite_exit==0,
-    // source_manifest_sha256 == the run-context source_set_sha256. The CURRENT
-    // run's receipt is written only AFTER the suite (unreadable here); the
-    // out/current referent (protected from prune by MA-RB-R2-4) is the substrate.
+    // Tests INV-006/MA-ID-R2-2 [integration] (PRODUCE side + shell<->C# binding),
+    // provable green from a SINGLE clean-checkout run (`rm -rf out`) — AP-021.
+    // The suite receipt is the controller's product of THIS run, written only
+    // AFTER the suite phase, so an in-suite test can never read the current run's
+    // own suite receipt — and it MUST NOT enumerate PRIOR run roots for one. The
+    // former version did: it required at least one prior run's receipt to carry
+    // suite_exit==0, i.e. a prior successful suite to prove this suite can succeed
+    // — a non-bootstrappable circular gate that passed only on leaked accumulated
+    // `out/` state (AP-010) and deadlocked from clean (PMB-002). Two from-clean,
+    // current-run-bound checks replace it:
+    //   (1) shell<->C# binding: run-spike.sh writes the suite receipt at the path
+    //       RunLayout.SuiteReceiptRelativePath names, and binds its
+    //       source_manifest_sha256 to $SRC_DIGEST — the SAME variable the
+    //       run-context writes as source_set_sha256 — so source_manifest ==
+    //       source_set holds by construction, from clean, not via a prior green
+    //       receipt. (The produced receipt's run_id/nonce binding to the current
+    //       run is additionally enforced at RUNTIME, fail-closed, by the aggregator
+    //       on every canonical run — SpikeAggregator MA-VI-6.)
+    //   (2) the produce-side binding pattern on a REAL artifact of THIS run,
+    //       reached via RunContext (never a prior run root on disk): the build
+    //       receipt (written before the suite) binds to the current run-context —
+    //       run_id == RunContext.RunId(), nonce present.
     [Fact]
     public void MaIdR22_SuiteReceipt_ProduceSideBinding_AndPathMatchesConstant()
     {
-        // (1) shell<->C# path binding (mirrors QA-013/Ea008).
+        // (1) shell<->C# path + field binding (mirrors QA-013/Ea008; no prior run).
         var script = File.ReadAllText(SpikePaths.P("scripts", "run-spike.sh"));
         Assert.Contains("SUITE_RECEIPT=\"$RUN_ROOT/receipts/suite-receipt.json\"", script);
         Assert.Equal("receipts/suite-receipt.json", RunLayout.SuiteReceiptRelativePath);
+        // source_manifest_sha256 (suite receipt) and source_set_sha256
+        // (run-context) are both written from $SRC_DIGEST => equal by construction.
+        Assert.Contains("\"source_manifest_sha256\": \"%s\"", script);
+        Assert.Contains("${SRC_DIGEST:-unknown}", script);
+        Assert.Contains("\"source_set_sha256\": \"%s\",\\n' \"$SRC_DIGEST\"", script);
 
-        // (2) produce-side binding on a completed canonical run's receipt.
-        var outDir = Path.Combine(SpikePaths.SpikeRoot, "out");
-        var validated = 0;
-        var sawSuccess = false;
-        var candidates = Directory.EnumerateDirectories(outDir, "runid-*")
-            .Concat(Directory.EnumerateDirectories(outDir, "regen-*"));
-        foreach (var root in candidates)
-        {
-            var receiptPath = Path.Combine(root, RunLayout.SuiteReceiptRelativePath.Replace('/', Path.DirectorySeparatorChar));
-            var ctxPath = Path.Combine(root, RunLayout.RunContextFileName);
-            if (!File.Exists(receiptPath) || !File.Exists(ctxPath))
-            {
-                continue;
-            }
-            using var receipt = SpikePaths.Json(receiptPath);
-            using var ctx = SpikePaths.Json(ctxPath);
-            var r = receipt.RootElement;
-            var c = ctx.RootElement;
-            Assert.Equal(c.GetProperty("run_id").GetString(), r.GetProperty("run_id").GetString());
-            Assert.False(string.IsNullOrEmpty(r.GetProperty("nonce").GetString()), $"suite receipt at {receiptPath} has no nonce");
-            Assert.Equal(c.GetProperty("source_set_sha256").GetString(), r.GetProperty("source_manifest_sha256").GetString());
-            if (r.GetProperty("suite_exit").GetInt32() == 0)
-            {
-                sawSuccess = true;
-            }
-            validated++;
-        }
-        Assert.True(validated >= 1,
-            "no completed canonical run's suite-receipt found to validate the PRODUCE side (MA-ID-R2-2) — a prior canonical run's root should carry receipts/suite-receipt.json (protected from prune by MA-RB-R2-4).");
-        Assert.True(sawSuccess,
-            "no suite-receipt with suite_exit==0 found — the produce side never attested a successful canonical suite (MA-ID-R2-2).");
+        // (2) produce-side binding on a REAL current-run artifact, via RunContext
+        // (AP-021). The build receipt is written before the suite phase, so it is
+        // present while this test runs, and binds to this run's context.
+        var runRoot = RunContext.RunRoot();
+        using var build = Launch.Receipt(runRoot, RunLayout.BuildReceiptRelativePath);
+        Assert.Equal(RunContext.RunId(), build.RootElement.GetProperty("run_id").GetString());
+        Assert.False(string.IsNullOrEmpty(build.RootElement.GetProperty("nonce").GetString()),
+            "current run's build receipt has no nonce — the produce side did not bind it to the run (MA-ID-R2-2).");
     }
 
     // ------------------------------------------------------------------ MA-ID-R2-4
