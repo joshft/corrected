@@ -8,7 +8,7 @@
       "deferred_at": "2026-07-21T02:49:44Z",
       "source_file": ".correctless/specs/dafny-compat-spike.md",
       "finding_id": "DD-005",
-      "summary": "Deferred obligation: wire the committed stub workflow under spikes/dafny-compat/ci/ as a permanent CI job when the CI feature lands (spike suite becomes CI-enforced). Dischargeable only by the CI feature's spec."
+      "summary": "Deferred obligation: wire the committed stub workflow under spikes/dafny-compat/ci/ as a permanent CI job when the CI feature lands (spike suite becomes CI-enforced). The wired job MUST run FROM-CLEAN (rm -rf out / fresh checkout, no cached out/runid-* run roots — a warm out/ masks the AP-021 circular-gate class; this net's absence let both PMB-001 and PMB-002 escape). The stub encodes this (QA-023 note 5), test-asserted. Dischargeable only by the CI feature's spec."
     },
     {
       "id": "DF-002",

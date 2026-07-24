@@ -801,8 +801,8 @@ if [ "$INNER" = 0 ]; then
   # parent of the inner session, so it traps the operator signals, sweeps every
   # descendant session (inner controller + the active phase's detached setsid
   # session) with TERM->KILL, writes a typed OperatorCancelled synthetic
-  # INCOMPLETE, and exits nonzero. out/current is published only AFTER the suite
-  # phase, which the swept inner never reaches, so the shared pointer is left
+  # INCOMPLETE, and exits nonzero. out/current is published only AFTER aggregation
+  # succeeds, which the swept inner never reaches, so the shared pointer is left
   # untouched.
   on_operator_signal() { # signal-name
     local sig="$1" leader delivered="" leaders
@@ -1421,20 +1421,22 @@ SRC_DIGEST="$(sha_of "$SRC_MANIFEST")"
 } > "$RUN_ROOT/run-context.json.tmp"
 run_cmd mv -- "$RUN_ROOT/run-context.json.tmp" "$RUN_ROOT/run-context.json"
 
-# QA-021: ONLY canonical operator runs publish the out/current pointer.
-# Nested/variance runs (--run-root/--out/--config/--solver — the form every
-# in-suite launch uses) must never mutate shared cross-run state outside their
-# own run root: republishing out/current from a nested test run left the dev
-# loop's "latest run" pointing at a mutable test-fixture scratch root.
+# --- run-local test settings (bug #3 fix) ---------------------------------------
+# The in-controller suite binds to THIS run's run-context through a settings file
+# INSIDE the run root — never the shared out/current pointer. Publishing
+# out/current (the dev-loop's "last COMPLETED run" pointer) here, BEFORE the
+# probes and suite, left it aimed at aborted/failed/concurrent runs that never
+# finished; it is now published only AFTER aggregation succeeds (below). Only
+# canonical runs execute the suite, so only they need the run-local settings.
+RUN_LOCAL_SETTINGS="$RUN_ROOT/spike.runsettings"
 if [ "${SPIKE_CANONICAL:-0}" = 1 ]; then
-  run_cmd mkdir -p -- "$SPIKE_ROOT/out/current"
   {
     printf '<?xml version="1.0" encoding="utf-8"?>\n'
     printf '<RunSettings>\n  <RunConfiguration>\n    <EnvironmentVariables>\n'
     printf '      <SPIKE_RUN_CONTEXT>%s</SPIKE_RUN_CONTEXT>\n' "$RUN_ROOT/run-context.json"
     printf '    </EnvironmentVariables>\n  </RunConfiguration>\n</RunSettings>\n'
-  } > "$SPIKE_ROOT/out/current/spike.runsettings.tmp"
-  run_cmd mv -- "$SPIKE_ROOT/out/current/spike.runsettings.tmp" "$SPIKE_ROOT/out/current/spike.runsettings"
+  } > "$RUN_LOCAL_SETTINGS.tmp"
+  run_cmd mv -- "$RUN_LOCAL_SETTINGS.tmp" "$RUN_LOCAL_SETTINGS"
 fi
 
 # --- phase: route probes (route children own P03, P05-P12 only) ------------------
@@ -1463,7 +1465,11 @@ SUITE_STATUS="unknown"
 SUITE_EXIT=0
 if [ "${SPIKE_CANONICAL:-0}" = 1 ]; then
   set +e
-  run_with_env test run_cmd dotnet test DafnyCompatSpike.sln --no-build -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL"
+  # -p:RunSettingsFilePath binds the suite to the RUN-LOCAL settings (SPIKE_RUN_CONTEXT
+  # -> this run's run-context.json), independent of the shared out/current pointer
+  # (which is not published until after aggregation — bug #3). Setting the property
+  # explicitly also suppresses the Directory.Build.props out/current fallback.
+  run_with_env test run_cmd dotnet test DafnyCompatSpike.sln --no-build -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL" -p:RunSettingsFilePath="$RUN_LOCAL_SETTINGS"
   SUITE_EXIT=$?
   set -e
   phase_guard test "$SUITE_EXIT"
@@ -1491,6 +1497,28 @@ set -e
 phase_guard aggregation "$AGG_EXIT"
 if [ ! -f "$OUT_PATH" ]; then
   fail_run MissingReport "aggregation produced no run-level report (exit $AGG_EXIT) — a missing report is its own state, never pass (AP-009)"
+fi
+
+# --- publish out/current (bug #3 fix — deferred to post-aggregation) -------------
+# QA-021: ONLY canonical operator runs publish the shared out/current pointer;
+# nested/variance runs (--run-root/--out/--config/--solver — the form every
+# in-suite launch uses) must never mutate cross-run state outside their own run
+# root. It is published HERE — after the suite ran AND the aggregator produced a
+# run report — so the dev-loop's "last completed run" pointer only ever advances
+# to a run that finished its full pipeline. A run swept mid-flight (operator
+# cancel, phase timeout, crash) exits above without reaching this point, leaving
+# the previous pointer intact. The pointer content is identical to the run-local
+# settings; it is regenerated here (not copied — `cp` is not in the PRH-004
+# run_cmd allowlist) and swapped in atomically (write-temp-then-mv).
+if [ "${SPIKE_CANONICAL:-0}" = 1 ]; then
+  run_cmd mkdir -p -- "$SPIKE_ROOT/out/current"
+  {
+    printf '<?xml version="1.0" encoding="utf-8"?>\n'
+    printf '<RunSettings>\n  <RunConfiguration>\n    <EnvironmentVariables>\n'
+    printf '      <SPIKE_RUN_CONTEXT>%s</SPIKE_RUN_CONTEXT>\n' "$RUN_ROOT/run-context.json"
+    printf '    </EnvironmentVariables>\n  </RunConfiguration>\n</RunSettings>\n'
+  } > "$SPIKE_ROOT/out/current/spike.runsettings.tmp"
+  run_cmd mv -- "$SPIKE_ROOT/out/current/spike.runsettings.tmp" "$SPIKE_ROOT/out/current/spike.runsettings"
 fi
 
 # QA-014(1): housekeeping — drop provisioning scratch (extract dirs, .corrupt,

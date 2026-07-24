@@ -30,6 +30,18 @@
 #    synthesize WallClockExpiry INCOMPLETE: MEASURE the run on the chosen
 #    runner class before wiring, and take any bound change through the DD-006
 #    evidence procedure (never a silent config edit).
+# 5. FROM-CLEAN (PMB-002/AP-021) — the gate MUST run from a checkout with NO
+#    accumulated run products: a fresh clone, or `rm -rf out` before the run.
+#    Persisting or caching `out/runid-*` run roots (or the `out/current` pointer)
+#    between CI runs is FORBIDDEN — a warm `out/` lets the suite pass on leaked
+#    prior-run state and masks exactly the bootstrap / accumulated-state defects
+#    this gate exists to catch. Both post-merge bugs (PMB-001 exit-127 entry
+#    point; PMB-002 the MaIdR22 circular suite-receipt gate) escaped local
+#    `dotnet test` on a warm tree; the from-clean run is the structural detector
+#    for the whole AP-021 circular-gate class. Only `out/cache` (provisioning:
+#    Z3 / net8 runtime / NuGet — no run roots or receipts) MAY be cached, and
+#    only when restored into an otherwise-empty `out/`. The gate signal is the
+#    CONTROLLER_EXIT of a single from-clean run.
 name: dafny-compat-spike (permanent conformance job — DD-005/DD-006)
 on:
   workflow_call: {}
@@ -41,5 +53,5 @@ jobs:
         run: 'echo "STUB: the CI feature wires actions/checkout with fetch-depth: 0 here (DF-001/QA-023)"'
       - name: pinned SDK 10.0.302 per spikes/dafny-compat/global.json
         run: 'echo "STUB: install exact pinned SDK"'
-      - name: provision -> locked restore -> build -> test (README phase ordering; controller exit is the gate)
-        run: 'echo "STUB: env -i HOME=$HOME bash -p spikes/dafny-compat/scripts/run-spike.sh"'
+      - name: FROM-CLEAN provision -> restore -> build -> test (controller exit is the gate — QA-023 notes 3 + 5)
+        run: 'echo "STUB: rm -rf spikes/dafny-compat/out && env -i HOME=$HOME bash -p spikes/dafny-compat/scripts/run-spike.sh"'

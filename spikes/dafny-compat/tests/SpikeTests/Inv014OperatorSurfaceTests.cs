@@ -167,7 +167,7 @@ public class Inv014OperatorSurfaceTests
 
     // Tests DD-005 [unit]: the stub CI workflow file exists under
     // spikes/dafny-compat/ci/ — the structural handoff artifact the CI feature
-    // must wire (DF-001).
+    // must wire (DF-001) — and it encodes the FROM-CLEAN gate (PMB-002/AP-021).
     [Fact]
     public void StubCiWorkflow_Committed_AsHandoffArtifact()
     {
@@ -176,5 +176,11 @@ public class Inv014OperatorSurfaceTests
         var text = File.ReadAllText(ci);
         Assert.Contains("DF-001", text);
         Assert.Contains("linux-x64", text);
+        // DF-001 must encode the FROM-CLEAN gate — the single net that would have
+        // caught BOTH post-merge bugs (PMB-001, PMB-002). A warm out/ lets the
+        // suite pass on leaked prior-run state and masks the AP-021 circular-gate
+        // class, so the stub must carry the clean-checkout requirement and command.
+        Assert.Contains("FROM-CLEAN", text);
+        Assert.Contains("rm -rf", text);
     }
 }

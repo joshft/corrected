@@ -127,8 +127,9 @@ public class MiniAudit1OperatorTests
             Assert.True(survived.Count == 0,
                 "inner-session processes survived the operator cancel (MA-UX-1/MA-RB-4): " + string.Join("; ", survived));
 
-            // out/current is published only after the suite phase, which a
-            // cancelled variance run never reaches — the shared pointer is untouched.
+            // out/current is published only by a CANONICAL run, and only after it
+            // completes aggregation; this cancelled VARIANCE run never publishes it
+            // at all — the shared pointer is untouched.
             var currentAfter = File.Exists(currentPointer) ? File.ReadAllText(currentPointer) : null;
             Assert.Equal(currentBefore, currentAfter);
         }
@@ -136,6 +137,124 @@ public class MiniAudit1OperatorTests
         {
             foreach (var pid in SurvivorsReferencing(runRoot)) { try { kill(pid, 9); } catch { /* best effort */ } }
             if (!proc.HasExited) { try { proc.Kill(entireProcessTree: true); } catch { /* best effort */ } }
+        }
+    }
+
+    // Tests INV-014/AP-020/PMB-001 [integration]: the DOCUMENTED root operator
+    // command LAUNCHES — run VERBATIM, exactly as the repo-root README tells the
+    // operator to type it: same working directory (repo root) and same RELATIVE
+    // argv[0] form (`spikes/dafny-compat/scripts/run-spike.sh`), under the hardened
+    // `env -i HOME="$HOME" bash -p` invocation. This is the form that regressed to
+    // exit 127 (PMB-001): the controller cd'd into SPIKE_ROOT and relaunched its
+    // inner from a repo-relative BASH_SOURCE that no longer resolved. A README
+    // keyword-presence check, or a launch normalized to an absolute script path /
+    // fixed cwd / injected env (Launch.Script uses SpikePaths.P — an absolute
+    // path), could NOT catch it (AP-020). We assert the inner controller actually
+    // starts (a new out/runid-*/.inner-pid appears, and no "No such file"/127
+    // signal), then STOP the run at that early milestone — BEFORE its suite phase,
+    // so a canonical run launched from inside this very suite cannot recurse and
+    // never publishes shared state. It also pins bug #3 at the operator surface:
+    // a canonical run stopped before aggregation must leave out/current untouched.
+    // SPIKE_PARENT_DEADLINE is injected into the hardened env solely as an
+    // anti-recursion/leak backstop (a whitelisted re-exec var); it does not alter
+    // the argv[0] form, cwd, or `env -i … bash -p` hardening under test.
+    [Fact]
+    public void Inv014_DocumentedRootCommand_VerbatimForm_LaunchesInner_NoExit127()
+    {
+        var repoRoot = SpikePaths.RepoRoot;
+        var readme = File.ReadAllText(Path.Combine(repoRoot, "README.md"));
+        var cmdMatch = Regex.Match(readme, @"env -i HOME=""\$HOME"" bash -p (spikes/\S*run-spike\.sh)");
+        Assert.True(cmdMatch.Success,
+            "repo-root README no longer documents the hardened `env -i HOME=\"$HOME\" bash -p spikes/.../run-spike.sh` operator command with a repo-relative path (INV-014/AP-020).");
+        var relScriptPath = cmdMatch.Groups[1].Value;
+
+        // Backstop deadline: the run self-terminates well before its (~minutes-in)
+        // suite phase even if this test's own kill/cleanup never runs.
+        var deadline = Uptime() + 150;
+        var command = $"env -i HOME=\"$HOME\" SPIKE_PARENT_DEADLINE={deadline} bash -p {relScriptPath}";
+
+        var outDir = Path.Combine(SpikePaths.SpikeRoot, "out");
+        var before = new HashSet<string>(
+            Directory.EnumerateDirectories(outDir, "runid-*").Select(d => Path.GetFileName(d)!),
+            StringComparer.Ordinal);
+        var currentPointer = SpikePaths.P("out", "current", "spike.runsettings");
+        var currentBefore = File.Exists(currentPointer) ? File.ReadAllText(currentPointer) : null;
+
+        var psi = new System.Diagnostics.ProcessStartInfo("bash")
+        {
+            WorkingDirectory = repoRoot,   // the DOCUMENTED cwd (repo root)
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add(command);
+        var stderr = new System.Text.StringBuilder();
+        using var proc = new System.Diagnostics.Process { StartInfo = psi };
+        proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) { lock (stderr) { stderr.AppendLine(e.Data); } } };
+        proc.OutputDataReceived += (_, _) => { };
+
+        string? childRunRoot = null;
+        var exitedBeforeLaunch = false;
+        try
+        {
+            proc.Start();
+            proc.BeginErrorReadLine();
+            proc.BeginOutputReadLine();
+
+            var pollEnd = DateTime.UtcNow.AddSeconds(90);
+            while (childRunRoot is null && DateTime.UtcNow < pollEnd)
+            {
+                foreach (var d in Directory.EnumerateDirectories(outDir, "runid-*"))
+                {
+                    var name = Path.GetFileName(d)!;
+                    if (!before.Contains(name) && File.Exists(Path.Combine(d, ".inner-pid")))
+                    {
+                        childRunRoot = d;
+                        break;
+                    }
+                }
+                if (childRunRoot is null && proc.HasExited) { exitedBeforeLaunch = true; break; }
+                if (childRunRoot is null) { Thread.Sleep(200); }
+            }
+
+            var err = stderr.ToString();
+            // The exact PMB-001 signature: the relaunch could not resolve the script.
+            Assert.DoesNotContain("No such file or directory", err);
+            Assert.False(exitedBeforeLaunch && childRunRoot is null,
+                $"documented command exited (code {(proc.HasExited ? proc.ExitCode : -1)}) before its inner controller launched — exit-127-class launch failure (INV-014/AP-020). stderr: {Tail(err)}");
+            Assert.True(childRunRoot is not null,
+                $"documented command never launched its inner controller (no new out/runid-*/.inner-pid within 90s) — exit-127-class regression (INV-014/AP-020). stderr: {Tail(err)}");
+
+            // Stop the run at the early milestone. Sweep the child by its UNIQUE run
+            // root fragment only — never the bare script name, which would also match
+            // THIS suite's own live parent controller.
+            foreach (var pid in SurvivorsReferencing(childRunRoot!)) { try { kill(pid, SIGTERM); } catch { /* best effort */ } }
+            if (!proc.HasExited) { try { kill(proc.Id, SIGTERM); } catch { /* best effort */ } }
+            proc.WaitForExit(60_000);
+
+            var survivors = WaitForNoSurvivorReferencing(childRunRoot!, TimeSpan.FromSeconds(30));
+            Assert.True(survivors.Count == 0,
+                "child controller session survived cleanup (INV-014): " + string.Join("; ", survivors));
+
+            // Bug #3 at the operator surface: a canonical run stopped before
+            // aggregation must NOT have advanced the shared out/current pointer.
+            var currentAfter = File.Exists(currentPointer) ? File.ReadAllText(currentPointer) : null;
+            Assert.Equal(currentBefore, currentAfter);
+        }
+        finally
+        {
+            if (childRunRoot is not null)
+            {
+                foreach (var pid in SurvivorsReferencing(childRunRoot)) { try { kill(pid, 9); } catch { /* best effort */ } }
+            }
+            if (!proc.HasExited) { try { proc.Kill(entireProcessTree: true); } catch { /* best effort */ } }
+            // Killed at .inner-pid (before provisioning), so the child root holds only
+            // writable bootstrap files — best-effort remove it so it does not accrete.
+            if (childRunRoot is not null && Directory.Exists(childRunRoot))
+            {
+                try { Directory.Delete(childRunRoot, recursive: true); } catch { /* best effort */ }
+            }
         }
     }
 
