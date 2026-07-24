@@ -17,10 +17,85 @@ tested, assumed, and still trusted.
 
 | Component | Planned location | Purpose |
 |-----------|------------------|---------|
-| C# core worker | TBD (monorepo package) | Deterministic policy/acceptance core on .NET 10 LTS. Owns run state, intake/lock resolution, ownership classification, verification, acceptance evaluation, receipt emission. Uses pinned Dafny SDK packages (`DafnyCore`, `DafnyPipeline`, …). |
-| `corrected` CLI | TBD (part of core distribution) | Reference acceptance implementation: `corrected init`, `corrected check`, `corrected certify`, etc. Runnable with no model, Node.js, TypeScript, or Pi session. |
-| TypeScript Pi adapter | TBD (monorepo package) | Small integration package realizing the core-defined methodology inside the Pi agent runtime. Manages Pi lifecycle, cancellation, progress, proposal transport. Integration code only — not a second policy implementation. |
-| Worker↔adapter protocol | Defined by core schemas | Strict LF-delimited JSON over stdin/stdout; versioned commands/events/results; large artifacts by content-addressed descriptor. |
+| C# core worker | `src/Corrected.Core/` | Deterministic policy/acceptance core on .NET 10 LTS. Owns run state, intake/lock resolution, ownership classification, verification, acceptance evaluation, receipt emission. Uses pinned Dafny SDK packages (`DafnyCore`, `DafnyPipeline`, …). |
+| DafnyAdapter | `src/Corrected.DafnyAdapter/` | The single Dafny SDK boundary (PAT-001) — the sole package that imports Dafny/Boogie assemblies and hosts the in-process solver. Core reaches Dafny only through it (INV-006/034/035). |
+| `corrected` CLI | `src/Corrected.Cli/` | Reference acceptance implementation: `corrected init`, `corrected check`, `corrected certify`, `corrected explain`. Runnable with no model, Node.js, TypeScript, or Pi session. |
+| Test/build-gate carrier (NOT shipped) | `gate/`, `test/` | Homes the readiness-gate checker (INV-001/002/036), the append-only schema-version *history* registry + meta-test (INV-044), and the from-clean / path-scoped gates. Kept OUT of the shipped core/CLI so the gate can enforce itself without tripping its own production-code ban (INV-036). |
+| TypeScript Pi adapter | `adapters/pi/` (Phase 1) | Small integration package realizing the core-defined methodology inside the Pi agent runtime. Manages Pi lifecycle, cancellation, progress, proposal transport. Integration code only — not a second policy implementation. |
+| Worker↔adapter protocol | Defined by core schemas (Phase 1) | Strict LF-delimited JSON over stdin/stdout; versioned commands/events/results; large artifacts by content-addressed descriptor. |
+
+> **Planned paths, not artifacts.** `src/` is empty; the locations above are the
+> design-stage layout the Phase 0.1 entrypoints bind to. The `DafnyPipeline`
+> mention in the core-worker row is retained pending the DD-007 propagation, which
+> is DF-002's obligation (checked by P1's component-table gate), not `/carchitect`'s.
+
+## Entrypoints
+
+> **Design-stage (discharges OQ-002 of the Phase 0.1 worker spec).** `src/` is
+> empty; the handlers/scopes below are the **planned** contract that the Phase 0.1
+> spec's `[integration]` invariants bind their Entry/Through/Exit to. No code exists
+> yet — these are commitments, not artifacts. Defined greenfield-additively by
+> `/carchitect` (2026-07-24) without disturbing the frozen PAT/PROHIBIT/TB entries.
+
+<!-- correctless:entrypoints:start -->
+```yaml
+- name: "corrected-cli"
+  type: cli
+  handler: "src/Corrected.Cli/Program.cs:Main"
+  test_via: "exec the PUBLISHED self-contained `corrected` binary VERBATIM — same argv[0] form and working directory the docs specify (AP-020; never a normalized/absolute-path proxy) — asserting init/check/certify/explain behavior"
+  scope:
+    - "src/Corrected.Cli/**"
+- name: "corrected-core"
+  type: library
+  handler: "src/Corrected.Core/CertificationRun.cs:Execute"
+  test_via: "public API import from the integration test project — drive the in-process certification pipeline (intake -> lock -> ownership/protected-surface -> verify -> honesty -> vacuity -> predicate -> receipt) over a fixture lock + subject; assert the fixture fails BEFORE the guard runs (AP-010)"
+  scope:
+    - "src/Corrected.Core/**"
+- name: "dafny-adapter"
+  type: library
+  handler: "src/Corrected.DafnyAdapter/DafnyAdapter.cs:Resolve"
+  test_via: "public API import within the adapter's AssemblyLoadContext, plus a static import-boundary scan and a runtime loaded-assembly assertion (INV-006/034) and the solver-identity / locked-restore / config-isolation tests carried from the spike (INV-035)"
+  scope:
+    - "src/Corrected.DafnyAdapter/**"
+- name: "readiness-build-gate"
+  type: cli
+  handler: "gate/Corrected.Gate/ReadinessGate.cs:Evaluate"
+  test_via: "exec the gate project from a CLEAN checkout (git clone + `rm -rf out`) via `dotnet test gate/Corrected.Gate`, driving EvaluateReadiness over the committed SUPPLIED-block fixture table (BLOCKED-all-false -> Pass; READY+satisfied:false/evidence:null/refuted-probe -> Fail); also homes the INV-044 history-registry meta-test and the INV-036 production-surface path scan"
+  scope:
+    - "gate/**"
+    - "test/**"
+    - ".correctless/specs/phase-0-1-worker.md"
+- name: "reference-ci-provenance"
+  type: cli
+  handler: ".github/workflows/phase-0-1-reference-ci.yml:verify-before-run"
+  test_via: "run the reference-CI lane (or its extracted script) with the PINNED external SLSA/signature verifier + pinned Cosign identity against a tampered-artifact fixture (INV-031/032/033), plus the determinism lane that emits a counted ran/skipped outcome with observed cores + RID (INV-005 / P3)"
+  scope:
+    - ".github/workflows/**"
+    - "gate/Corrected.Provenance/**"
+```
+<!-- correctless:entrypoints:end -->
+
+### Entrypoint → invariant-group map (design-stage)
+
+- **corrected-cli** — the operator surface and the AP-020 verbatim-invocation home; `corrected explain` renders receipts / INV-038 failure artifacts to human-actionable text (INV-040).
+- **corrected-core** — the in-process certification pipeline; Entry/Through/Exit for the bulk of the `[integration]` invariants: intake/lock/identity (INV-007..013), ownership/protected-surface (INV-014..018), fragment gate + verification + resource plan + watchdog (INV-019..023), honesty/vacuity (INV-024..026), success-predicate/receipt/schemas (INV-027..030, INV-041/042/047), and INV-037/038/039/045/046/048. INV-044's **runtime** supported-version dispatch table ships here.
+- **dafny-adapter** — the single Dafny boundary (PAT-001 / PROHIBIT-002); INV-006/034/035.
+- **readiness-build-gate** — the test/build-gate carrier; INV-001/002/003/004/036/043 and INV-044's append-only **history** registry + meta-test. The readiness gate lives here so it can enforce itself without tripping its own production-code ban.
+- **reference-ci-provenance** — the release-provenance / determinism lane (TB-003); INV-005/031/032/033.
+
+### Production-surface partition (INV-036, deny-by-default)
+
+INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can fail a PR that lands production code while `implementation_readiness.status = BLOCKED`:
+
+- **Production surface** (deny-by-default — non-trivial content here while BLOCKED trips PRH-008): `src/Corrected.Core/**`, `src/Corrected.DafnyAdapter/**`, `src/Corrected.Cli/**`. Any NEW top-level `src/` package is production until explicitly listed as carrier.
+- **Exempt carrier / test / CI surface** (may carry content while BLOCKED): `gate/**`, `test/**`, `.github/workflows/**`, and any `**/*.Tests/**`. Note the split from INV-044: its runtime dispatch table is production (`src/Corrected.Core/**`); only its append-only history registry + meta-test are exempt (`gate/**`).
+
+### Design decisions (this `/carchitect` session, 2026-07-24)
+
+- **Mode:** greenfield-additive — preserved the entire existing doc (frozen PAT-001..004, PROHIBIT-001/002, TB-001..004, Conventions, Known Limitations); added only the two component rows, the Entrypoints block, the invariant-group map, and the surface partition.
+- **Planned .NET layout:** `src/Corrected.Core` (core worker) + `src/Corrected.DafnyAdapter` (sole Dafny boundary) + `src/Corrected.Cli` (`corrected`); non-shipped `gate/` (readiness + build gates) and `test/` (integration tests); `.github/workflows/` (reference CI). Paths are commitments, not artifacts.
+- **Entrypoint granularity:** one per invariant-testing surface (CLI exec, in-process core API, adapter boundary, readiness/build gate, reference-CI lane) so every `[integration]` invariant has a concrete Entry/Through/Exit.
+- **NOT touched:** the DD-007 component-set change (drop `DafnyPipeline`, add `DafnyLanguageServer`) remains DF-002's obligation and is verified by P1's component-table gate — not done here.
 
 ## Design Patterns
 
