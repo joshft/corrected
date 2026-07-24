@@ -52,16 +52,43 @@ jobs:
 
       - name: FROM-CLEAN conformance run (PMB-002/AP-021 — controller exit is the gate)
         run: |
+          set -o pipefail
           # No cached run roots / out/current may persist between runs — a warm
           # out/ lets the suite pass on leaked prior-run state and masks the
           # AP-021 circular-gate class. A fresh checkout has no out/; rm -rf is
-          # the explicit belt-and-suspenders.
+          # the explicit belt-and-suspenders. tee captures the controller output
+          # (pipefail keeps the controller exit as the primary gate) for the
+          # independent verify step below.
           rm -rf spikes/dafny-compat/out
-          env -i HOME="$HOME" bash -p spikes/dafny-compat/scripts/run-spike.sh
+          env -i HOME="$HOME" bash -p spikes/dafny-compat/scripts/run-spike.sh 2>&1 | tee "$RUNNER_TEMP/controller.log"
+
+      - name: Independent suite-outcome check (defence-in-depth against a false-green)
+        run: |
+          # The controller exit (previous step, under pipefail) is the primary
+          # gate. This step is belt-and-suspenders: on a contended runner the
+          # suite-exit propagation proved unreliable once (a run went green with
+          # xUnit [FAIL]s present), so we ALSO fail the job on any failure marker
+          # in the captured output — independent of the controller's exit code.
+          log="$RUNNER_TEMP/controller.log"
+          rc=0
+          if grep -qE "\[FAIL\]|Failed [A-Za-z0-9_.]+\.Tests\." "$log"; then
+            echo "::error::xUnit failure marker(s) present — failing the gate independently of the controller exit"
+            grep -nE "\[FAIL\]|Failed [A-Za-z0-9_.]+\.Tests\." "$log" | head -30
+            rc=1
+          fi
+          if ! grep -q "suite: success" "$log"; then
+            echo "::error::controller did not report 'suite: success'"; rc=1
+          fi
+          exit $rc
 
       - name: Diagnostics (always)
         if: always()
         run: |
           echo "== disk =="; df -h .
           echo "== out/current =="; ls -la spikes/dafny-compat/out/current 2>/dev/null || echo "(no out/current)"
-          echo "== run report (tail) =="; tail -c 4000 spikes/dafny-compat/out/current/run-report.json 2>/dev/null || true
+          echo "== suite receipts (suite_exit — what the controller captured) =="
+          find spikes/dafny-compat/out -name suite-receipt.json -exec sh -c 'echo "--- $1 ---"; cat "$1"' _ {} \; 2>/dev/null | head -40
+          echo "== run reports (final_suite_status / route verdict states) =="
+          find spikes/dafny-compat/out -path '*/reports/run-report.json' -exec sh -c 'echo "--- $1 ---"; grep -oE "\"final_suite_status\":[^,]*|\"state\":[^,]*" "$1" | head' _ {} \; 2>/dev/null | head -40
+          echo "== controller.log tail (captured stdout+stderr) =="
+          tail -60 "$RUNNER_TEMP/controller.log" 2>/dev/null || true
