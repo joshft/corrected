@@ -90,5 +90,13 @@ jobs:
           find spikes/dafny-compat/out -name suite-receipt.json -exec sh -c 'echo "--- $1 ---"; cat "$1"' _ {} \; 2>/dev/null | head -40
           echo "== run reports (final_suite_status / route verdict states) =="
           find spikes/dafny-compat/out -path '*/reports/run-report.json' -exec sh -c 'echo "--- $1 ---"; grep -oE "\"final_suite_status\":[^,]*|\"state\":[^,]*" "$1" | head' _ {} \; 2>/dev/null | head -40
+          echo "== FAILING nested route reports (which probe failed, and why) =="
+          # inv010's failed run root is preserved (TransientScratch keeps it on
+          # failure). Dump any route report that carries a failing probe so we can
+          # see the exact probe + adjudication behind the route-B ProbeFailure(10).
+          for r in $(grep -rlE '"status": *"fail"' spikes/dafny-compat/out --include='route-*.json' 2>/dev/null | head -6); do
+            echo "--- $r ---"
+            grep -oE '"probe": *"[^"]*"|"status": *"[^"]*"|"detail": *"[^"]*"|"verdict_reason":[^}]*|"variant": *"[^"]*"|"terminal_state": *"[^"]*"|"typed_diagnostic": *"[^"]*"' "$r" | head -30
+          done | head -120
           echo "== controller.log tail (captured stdout+stderr) =="
           tail -60 "$RUNNER_TEMP/controller.log" 2>/dev/null || true
