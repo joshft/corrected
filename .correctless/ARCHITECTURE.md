@@ -17,7 +17,7 @@ tested, assumed, and still trusted.
 
 | Component | Planned location | Purpose |
 |-----------|------------------|---------|
-| C# core worker | `src/Corrected.Core/` | Deterministic policy/acceptance core on .NET 10 LTS. Owns run state, intake/lock resolution, ownership classification, verification, acceptance evaluation, receipt emission. Uses pinned Dafny SDK packages (`DafnyCore`, `DafnyPipeline`, …). |
+| C# core worker | `src/Corrected.Core/` | Deterministic policy/acceptance core on .NET 10 LTS. Owns run state, intake/lock resolution, ownership classification, verification, acceptance evaluation, receipt emission. Uses pinned Dafny SDK packages for the selected Route A (`DafnyCore`, `DafnyDriver`, `DafnyLanguageServer`, …; `DafnyPipeline` is NOT loaded on Route A — ADR-0001/DD-007). |
 | DafnyAdapter | `src/Corrected.DafnyAdapter/` | The single Dafny SDK boundary (PAT-001) — the sole package that imports Dafny/Boogie assemblies and hosts the in-process solver. Core reaches Dafny only through it (INV-006/034/035). |
 | `corrected` CLI | `src/Corrected.Cli/` | Reference acceptance implementation: `corrected init`, `corrected check`, `corrected certify`, `corrected explain`. Runnable with no model, Node.js, TypeScript, or Pi session. |
 | Test/build-gate carrier (NOT shipped) | `gate/`, `test/` | Homes the readiness-gate checker (INV-001/002/036), the append-only schema-version *history* registry + meta-test (INV-044), and the from-clean / path-scoped gates. Kept OUT of the shipped core/CLI so the gate can enforce itself without tripping its own production-code ban (INV-036). |
@@ -25,9 +25,12 @@ tested, assumed, and still trusted.
 | Worker↔adapter protocol | Defined by core schemas (Phase 1) | Strict LF-delimited JSON over stdin/stdout; versioned commands/events/results; large artifacts by content-addressed descriptor. |
 
 > **Planned paths, not artifacts.** `src/` is empty; the locations above are the
-> design-stage layout the Phase 0.1 entrypoints bind to. The `DafnyPipeline`
-> mention in the core-worker row is retained pending the DD-007 propagation, which
-> is DF-002's obligation (checked by P1's component-table gate), not `/carchitect`'s.
+> design-stage layout the Phase 0.1 entrypoints bind to. The core-worker Dafny SDK
+> package set reflects the DD-007 propagation for the selected Route A (`DafnyDriver`
+> + `DafnyCore` + `DafnyLanguageServer`; `DafnyPipeline` not loaded), discharged with
+> ADR-0001's promotion to accepted (DF-002, 2026-07-24); P1's component-table gate
+> (INV-003 enforcement-(b), in the build-gate carrier) re-checks it against
+> `route-a.json`.
 
 ## Entrypoints
 
@@ -95,7 +98,7 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
 - **Mode:** greenfield-additive — preserved the entire existing doc (frozen PAT-001..004, PROHIBIT-001/002, TB-001..004, Conventions, Known Limitations); added only the two component rows, the Entrypoints block, the invariant-group map, and the surface partition.
 - **Planned .NET layout:** `src/Corrected.Core` (core worker) + `src/Corrected.DafnyAdapter` (sole Dafny boundary) + `src/Corrected.Cli` (`corrected`); non-shipped `gate/` (readiness + build gates) and `test/` (integration tests); `.github/workflows/` (reference CI). Paths are commitments, not artifacts.
 - **Entrypoint granularity:** one per invariant-testing surface (CLI exec, in-process core API, adapter boundary, readiness/build gate, reference-CI lane) so every `[integration]` invariant has a concrete Entry/Through/Exit.
-- **NOT touched:** the DD-007 component-set change (drop `DafnyPipeline`, add `DafnyLanguageServer`) remains DF-002's obligation and is verified by P1's component-table gate — not done here.
+- **DD-007 (applied later, not in this session):** the component-set change (drop `DafnyPipeline`, add `DafnyDriver` + `DafnyLanguageServer` in the core-worker row) was applied on 2026-07-24 when ADR-0001 was promoted to accepted (DF-002); P1's component-table gate (INV-003 enforcement-(b)) re-verifies it in the build-gate carrier.
 
 ## Design Patterns
 
@@ -227,8 +230,8 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
   **COMPATIBLE** (suite-attested, 274/274): Route A (`DafnyDriver` /
   `CliCompilation`, additionally loading `DafnyLanguageServer`) and Route B
   (hand-assembled `DafnyCore` + `DafnyPipeline` + `Boogie.ExecutionEngine`).
-  Recorded in provisional `docs/adr/ADR-0001-dafny-integration-boundary.md`.
-  Route **A** is the selected boundary; formal ADR promotion
-  (provisional → accepted) and the DD-007 component-table propagation remain
-  pending as the final Phase 0.0 feature's obligation (DF-002). Later Phase 0.0
+  Recorded in `docs/adr/ADR-0001-dafny-integration-boundary.md`, promoted to
+  **accepted** on 2026-07-24 (DF-002). Route **A** is the selected boundary; the
+  DD-007 component-table propagation (drop `DafnyPipeline`, add `DafnyDriver` +
+  `DafnyLanguageServer` in the core-worker row above) is applied. Later Phase 0.0
   gates (bullets 4–12) are still unstarted.

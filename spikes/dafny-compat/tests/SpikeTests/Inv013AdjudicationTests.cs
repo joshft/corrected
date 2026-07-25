@@ -272,8 +272,10 @@ public class Inv013AdjudicationTests
         Assert.NotEmpty(positiveFindings);
     }
 
-    // Tests INV-013 [unit]: the committed provisional ADR carries the mandatory
+    // Tests INV-013 [unit]: the committed ADR carries the mandatory
     // machine-readable field block (closed vocabulary, not prose detection).
+    // Post-DF-002 (2026-07-24) the ADR is promoted to accepted; the block itself
+    // is still mandatory and closed-vocabulary.
     [Fact]
     public void CommittedAdr_CarriesMachineReadableLintBlock()
     {
@@ -281,7 +283,7 @@ public class Inv013AdjudicationTests
         Assert.Contains("adr_lint:", adr);
         Assert.Contains("boundary_decision:", adr);
         Assert.Contains("adjudication_record_id:", adr);
-        Assert.Contains("Status**: provisional", adr);
+        Assert.Contains("Status**: accepted", adr);
     }
 
     // Tests BND-004 [unit]: control projects are net8.0, per route, with
