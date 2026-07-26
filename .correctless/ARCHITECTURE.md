@@ -255,9 +255,10 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
   toolchain-bump spec.
 - **Phase 0.1 extension (readiness-gate carrier):** the gate adds a third-party
   YAML parser (`YamlDotNet`, exact-pinned + locked), the **analysis toolchain**
-  (`Microsoft.CodeAnalysis.CSharp` / `Microsoft.Build.*`, pinned + locked with
-  loaded-version assertions; INV-011 runs the shipped-closure scan **out-of-process
-  against the pinned SDK**, never in-process ambient `MSBuildLocator`), and a
+  (`Microsoft.CodeAnalysis.CSharp` ONLY, pinned + locked — **no `Microsoft.Build.*`
+  PackageReference** (EXT4-04); INV-011 runs the shipped-closure scan **out-of-process
+  against the pinned SDK's MSBuild**, asserted via `dotnet msbuild -version`, never an
+  in-process `Microsoft.Build`/`MSBuildLocator` resolving ambient machine MSBuild), and a
   **repo-root** `global.json` (exact SDK pin, `rollForward: latestPatch` per the
   documented exception above) to this boundary — the general "any dev-time
   third-party NuGet/toolchain artifact" case beyond the Dafny/Z3/SDK set above.
@@ -298,7 +299,10 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
   ADR field) and the evidence-schema integrity anchored to a **compiled** constant; the
   COMPATIBLE recompute guarded by **keyed-set cardinality equality** against the pinned
   probe manifest (no vacuous `∀`); supersession discovered by a **terminal rule** over a
-  **pinned ADR allowlist** (not an open glob). Intake failure is fail-closed
+  **compiled ADR registry** asserted **set-equal** to the ADRs carrying an `adr_lint` block on
+  disk (an unregistered on-disk block fails closed — "register this ADR" — never ignored; the
+  round-2 "pinned allowlist that ignores out-of-list ADRs" was itself the bypass, reversed by
+  R3-B4/EXT4-04). Intake failure is fail-closed
   (reject / BLOCKED), never a silent pass.
 - Violated when: a duplicate/oversize block or a tag/anchor/alias parses; a
   forged second ADR route-claim / forged decision fields / a superseding ADR is missed;

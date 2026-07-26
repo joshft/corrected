@@ -7,20 +7,28 @@
   INV-001/INV-002/INV-036/PRH-008, and — via the **stage-partitioned normative migration manifest** of
   DD-003 — flips `P1.satisfied` to `true` in its `implementation_readiness` block AND updates every parent
   current-state site. **The DD-003 manifest is the single canonical site list**; this line and the
-  Packages-Affected bullet reference it and do NOT re-enumerate — a meta-test asserts the three agree, R3-I4.)
+  Packages-Affected bullet reference it and do NOT re-enumerate — a meta-test asserts each holds ONLY the
+  reference (no local list), not that "three lists agree" (R3-I4/EXT4-05).)
 - **Branch**: feature/readiness-gate-carrier
 - **Research**: `.correctless/artifacts/research/readiness-gate-carrier-research.md`
-- **Review**: codex GPT-5.6-sol (xhigh) + `/creview-spec` 6-agent + self-assessment, **three rounds**
+- **Review**: codex GPT-5.6-sol (xhigh) + `/creview-spec` 6-agent + self-assessment, **four rounds**
   (round 1: 12 codex + ~70 Claude; round 2 on v3: 13 codex + ~40 Claude; round 3 FOCUSED on the v4
-  P1/DD-003/scanner core: codex 6 BLOCKING + P1-red-team/DD-003/scanner agents) — all in
-  `.correctless/artifacts/review-spec-findings-readiness-gate-carrier.md`. This is **v5**, incorporating the
+  P1/DD-003/scanner core: codex 6 BLOCKING + P1-red-team/DD-003/scanner agents; round 4 FINAL codex gate on
+  v5: 6 BLOCKING + 2 IMPORTANT confirmed, EXT4-01..10) — all in
+  `.correctless/artifacts/review-spec-findings-readiness-gate-carrier.md`. **This is now v6.** Its v5 base incorporated the
   round-3 findings (Stage-A DTO required-vs-optional split so the pre-migration ADR parses to
   `evidence-schema-incomplete`; compiled `canonical_sample_sha256`/manifest-file anchors closing the residual
   coherent-tamper forge; duplicate-JSON rejection; the ADR **registry set-equality** replacing v4's
   "ignore out-of-allowlist" bypass; the supersession graph; the default-deny scanner predicate + real-build
   two-phase generator model + toolchain de-vestigialization; the DD-003 Stage-A/B re-partition + ~18-site
-  enumeration + anchor grammar). v5's reconciliations are post-review author edits; pending a focused
-  re-check of the three highest-risk closes (Stage-A-green, sample-pin, ADR-registry).
+  enumeration + anchor grammar). **v6 (2026-07-25)** then applied the round-4 FINAL codex gate: closed-
+  allowlist scanner predicate catching `extern`/positional-`record`/primary-ctor (EXT4-01); nullable
+  supersession link-keys + "exactly one accepted TOTAL" terminal (EXT4-02/07); purely-structural
+  example-vs-block ADR discovery (EXT4-03); the ARCHITECTURE reconcile — dropped `Microsoft.Build.*`,
+  registry set-equality (EXT4-04); paired-marker anchor grammar + pinned manifest schema + reference-not-
+  triple-equality meta-test (EXT4-05); the "does execute / caught by reference-rejection" wording correction
+  (EXT4-06); the OQ-002 built-carrier-half split (EXT4-08); the exact `evidence-schema.json` path constant
+  (EXT4-10). EXT4-09 downgraded (the parent path-scoped INV-036 already catches a standalone `src/` package).
 - **Recommended-intensity**: high
 - **Intensity**: high
 - **Intensity reason**: fail-closed security gate parsing a tamper-checked trust boundary
@@ -140,7 +148,12 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
     `bool HasStatus`, etc., distinguishing *key-absent* from an explicit `null` value — a `required
     string?` would still demand the KEY be present, which hard-rejects today's ADR; that conflation was
     the v4 bug). **Key-absence of `status`** is NOT a parse error — it is surfaced as a typed signal that
-    INV-008(a‴) maps to `evidence-schema-incomplete`.
+    INV-008(a‴) maps to `evidence-schema-incomplete`. **Link-key wire form (EXT4-02)**: `supersedes` /
+    `superseded_by` are **nullable** — a canonical ADR id string, explicit `null`, or key-absent — where
+    **`null` and key-absent BOTH denote "no edge"** (their presence bit is retained for diagnostics but does
+    NOT change edge/terminal semantics; only `status`'s presence bit drives the schema-incomplete
+    short-circuit). So the migrated ADR-0001 `{status: accepted, superseded_by: null}` is well-formed and IS
+    the terminal (no non-null successor) — closing the v5 "explicit null vs absent" contradiction.
   Reusing the readiness DTO verbatim would reject the real ADR — "same parser" means same machinery,
   distinct DTO. The spike's permissive `ExtractLintBlock` line-scanner is **never** used for a trust decision.
 - **AdrLintBlock parse-failure taxonomy (R3-B1b)**: a Stage-1/Stage-2 failure on the `adr_lint` block is
@@ -316,7 +329,8 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
     coherently rewrites the frozen sample (flip every probe to pass / `final_suite_status: success` / route-A
     `COMPATIBLE`) keeping the referenced sha fields at their pinned values and forges P1=true (R3-B2):
     - `canonical_sample_sha256` == SHA-256(the canonical sample file) — **NEW, closes the residual forge**;
-    - `evidence_schema_sha256` == SHA-256(the schema file) == the sample's `evidence_schema_sha256` field;
+    - `evidence_schema_sha256` == SHA-256(the pinned schema file `spikes/dafny-compat/schema/evidence-schema.json`)
+      == the sample's `evidence_schema_sha256` field;
     - `probe_manifest_sha256` == SHA-256(the probe-manifest file) == used by (a″) (R3-B2b).
     A coherent multi-file tamper of the *data files* still fails against these compiled constants. **TCB
     framing (R3-B2 re-check)**: this is NOT a cryptographic barrier against the TB-006 "anyone with commit
@@ -359,24 +373,32 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   - **(a‴) Acceptance + supersession — defined graph + terminal rule + registry set-equality (RS-203/
     EXT2-01 / R3-B1/R3-B4/R3-I6)** — the `adr_lint` DTO (INV-002/RS-206) carries an **optional** `status`
     (enum `{accepted, superseded, provisional}` with a presence bit) and **optional** `supersedes` /
-    `superseded_by` (each a canonical ADR id string or absent). **`status`-key-absent → the (a) step-2
+    `superseded_by` (each a canonical ADR id string, explicit `null`, or absent — **null and absent both
+    denote "no edge"**, EXT4-02). **`status`-key-absent → the (a) step-2
     short-circuit returns `evidence-schema-incomplete` typed-false** (the pre-migration case; these fields
     are added to ADR-0001 in the DD-003 Stage-B changeset, so P1 is schema-incomplete-false until Stage B).
     **Supersession graph (R3-I6)**: `supersedes`/`superseded_by` values are **canonical ADR ids** (e.g.
     `ADR-0001`) drawn from the registry id-space; the gate builds the directed graph over the registered
     ADRs and requires **reciprocal edges** (`X.superseded_by == Y` ⟺ `Y.supersedes == X`; a one-way link →
     fail closed), **reachability of every registered `adr_lint` node from the ADR-0001 root**, and **exactly
-    one** `status==accepted` node with `superseded_by` absent whose boundary is Route-A = the terminal.
+    one** `status==accepted` node whose `superseded_by` is **null-or-absent** (no non-null successor) whose
+    boundary is Route-A = the terminal — **and exactly one `status==accepted` node TOTAL across the
+    registry**: every non-terminal registered node MUST be `status: superseded` (EXT4-07).
     Fail closed on: `provisional`, a non-reciprocal/one-way edge, a dangling target, a cycle, two accepted
-    terminals, a disconnected node, or a non-Route-A terminal.
+    terminals, **an `status==accepted` node that HAS a non-null successor (should be `superseded`, EXT4-07)**,
+    a disconnected node, or a non-Route-A terminal.
     **Registry = authoritative set (R3-B4, closes the round-2 over-correction; supersedes RS-204)**: the ADR
     registry is a **compiled `const`** (R3-B4b) listing every ADR file that carries an `adr_lint` block, and
     the gate asserts **set-equality** between the registry and the ADRs actually carrying an `adr_lint:`
-    block on disk. **Discovery uses the same INV-001-D-grade discriminator** (a single `adr_lint:` key at
-    **column 0 inside the one ` ```yaml … ``` ` fence**; every backticked/inline/prose mention is ignored —
-    R3-B4-recheck) so a future `docs/adr/*.md` file that merely SHOWS an `adr_lint:` example in a fenced
-    documentation snippet is NOT counted as carrying a block (the AP-014/AP-031 prose-mention-as-block trap;
-    a decoy-mention fixture asserts it is not counted). An `adr_lint` block on disk that is **not
+    block on disk. **Discovery is PURELY STRUCTURAL (EXT4-03)**: **every** `adr_lint:` key at **column 0
+    inside a ` ```yaml … ``` ` fence COUNTS as a block** (backticked/inline/prose mentions do not — they are
+    not a column-0 yaml-fenced block). A snippet that must NOT count may **not** rely on surrounding prose to
+    be read as an "example" — it MUST use a **non-matching form** (a non-`yaml` info-string fence, non-column-0
+    indentation, or the sentinel key `adr_lint_example:`); a real column-0 `adr_lint:` inside a `yaml` fence
+    is ALWAYS counted → it must be registered or set-equality fails closed (this removes the v5 ambiguity
+    where a fenced example satisfied both the discriminator and an "example" exemption — R3-B4-recheck
+    superseded). Fixtures: a **decoy in non-matching form** asserts NOT counted; a **matching-form fenced
+    example** asserts IT IS counted → registration required. An `adr_lint` block on disk that is **not
     registered** → **fail closed** ("register this ADR in the gate"), NOT ignored — because "ignore out-of-allowlist"
     (v4) let an attacker add an out-of-list `ADR-0002{status:accepted, supersedes:ADR-0001, Route B}` while
     ADR-0001 stayed the apparent terminal and P1 stayed true (R3-B4). (This restores DoS-resistance the
@@ -430,9 +452,11 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   schema-digest mismatch, coherent three-file schema tamper (still fails), **tampered manifest FILE**,
   **duplicate JSON property name (root/route-verdict/per-probe)**, evidence-schema-mismatch (older) vs
   evidence-schema-newer-than-pinned, the (a″) cardinality/recompute mutations (route-A+shared partition),
-  supersession graph cases {accepted+no-superseded_by→terminal-pass, provisional→false, reciprocal
+  supersession graph cases {accepted+null-or-absent-superseded_by→terminal-pass, migrated
+  `superseded_by:null`→terminal-pass (EXT4-02), provisional→false, reciprocal
   superseded_by→ADR-0002(Route B)→false, one-way/non-reciprocal edge→fail-closed, dangling target→fail,
-  cycle→fail, disconnected node→fail, two terminals→fail} over synthesized registries, **unregistered
+  cycle→fail, disconnected node→fail, two terminals→fail, **accepted-with-non-null-successor→fail (should
+  be `superseded`, EXT4-07)**} over synthesized registries, **unregistered
   on-disk `adr_lint` block → fail-closed ("register this ADR")**, component-table set-equality (drop
   DafnyDriver → fail; Dafny-family exact-match not substring), `out/**` copy not consulted, extracted-lib digest change.
 - **Test approach**: integration · **Risk**: critical · **Cross-ref**: DF-002,
@@ -482,18 +506,27 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
     10.0.302 — a manifest that no `Microsoft.Build.*` in-process reference exists; R3-I1/EXT2-10). **RT-L1
     build-time-code-execution risk** is bounded and stated: the build runs under the pinned SDK + the
     `<clear/>`-isolated locked restore, while BLOCKED `src/` is empty/skeleton (nothing real to execute),
-    and a shipped generator/analyzer is **independently caught pre-execution** as a non-allowlisted
-    non-framework reference (below) — so a malicious generator fails on its *reference*, not only its output.
+    and a shipped generator/analyzer is **caught by the analysis-phase reference-rejection** (below) —
+    AFTER a bounded build-time execution inside that sandboxed pinned-SDK build, NOT before it (EXT4-06:
+    the real build *does* run generators; the ban never needs to trust or pre-empt a generator's body, only
+    to reject its non-allowlisted *reference* and inspect its emitted *output*) — so a malicious generator
+    fails on its *reference* regardless of what its body did at build time.
   - **Analysis phase** — the **gate parses syntax-only** (its own in-process `Microsoft.CodeAnalysis.CSharp`,
     pinned+locked in INV-015; `CSharpSyntaxTree.ParseText`, no Workspaces/MSBuild, and **never re-hosts or
     re-executes** any generator/analyzer in its own compilation; R3-I1) over: committed `Compile` items +
     the emitted generated sources (read from `CompilerGeneratedFilesOutputPath`) + linked `<Compile
-    Include>`. It asserts (i) **no executable content** via a **default-deny Roslyn predicate** — reject
-    `BlockSyntax`, `ArrowExpressionClauseSyntax` (expression-bodied member/property/indexer/ctor),
-    `EqualsValueClauseSyntax` (field/property initializer), `GlobalStatementSyntax` (top-level statements),
-    and constructor / static-constructor / destructor / conversion-operator bodies and anonymous-function
-    bodies — i.e. a **skeleton allowlist** (only namespace/type/member *declarations* with no body/init),
-    NOT the v4 incomplete method-body denylist that missed those forms (R3-B7/EXT2-04-scanner); the
+    Include>`. It asserts (i) **no executable content** via a **CLOSED-ALLOWLIST Roslyn predicate**
+    (default-deny by construction, EXT4-01): the ONLY permitted syntax nodes are namespace/type/member
+    **declarations that carry no body, no initializer, and synthesize no members** — **any** other node fails
+    closed. This rejects, non-exhaustively (the allowlist is the contract, not this list): `BlockSyntax`,
+    `ArrowExpressionClauseSyntax` (expression-bodied member/property/indexer/ctor), `EqualsValueClauseSyntax`
+    (field/property initializer), `GlobalStatementSyntax` (top-level statements), constructor /
+    static-constructor / destructor / conversion-operator bodies, anonymous-function bodies, AND the
+    body-free-but-executable forms the v5 4-node denylist MISSED (EXT4-01): `extern`/`[DllImport]` methods
+    (execute native code with no C# body), **primary constructors** (`class C(int x)` / `struct` / positional
+    `record R(int X)` parameter lists), and record positional-member synthesis. A **meta-test enumerates the
+    allowed declaration-kind set** so a newly-added executable/synthesizing C# form fails closed by default
+    rather than silently passing (NOT the v4 method-body denylist that missed these; R3-B7/EXT2-04-scanner/EXT4-01); the
     policy-interface base-list disjunct stays DROPPED until such interfaces exist (its return tracked by the
     DD-003 parent-INV-036 note); and (ii) the resolved non-framework reference set is an **injectable
     allowlist** (production binds the empty `const` while BLOCKED — so the allow-branch is exercised by a
@@ -503,7 +536,10 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   The **injectable closure-target set** (production binds the `src/Corrected.*` constant; tests bind a
   fixture path — mirroring INV-013) gives the fixtures somewhere to point. The shipped closure **overrides
   path exemption** (`**/*.Tests/**` exempt ONLY for an independent test project not referenced/linked by a
-  shipped project). Any new top-level `src/` package is production until listed as carrier.
+  shipped project). A new top-level `src/` package is caught as production by the **parent's path-scoped
+  INV-036 CI check** (deny-by-default, `phase-0-1-worker.md` INV-036 detection) — INV-011 here is the
+  **complementary closure scan** for linked/generated/binary content that evades path classification, not
+  the path enforcer (EXT4-09).
   **Vacuous-vs-uncomputable discriminator (R3-I3/EA-004)**: the injected target set resolving to **zero
   project files** → the "no production surface (src/ empty)" **PASS** + a distinct stdout notice (INV-012);
   a resolved target whose restore / `dotnet build` / `-getItem` extraction returns **nonzero exit or
@@ -522,8 +558,10 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
 - **Guards against**: AP-005, AP-004, AP-002, AP-015.
 - **Enforcement**: gate precondition — skeleton-only passes; each of {one-real-method, **constructor body**,
   **static-ctor body**, **conversion-operator body**, **expression-bodied property/indexer**, **top-level
-  statement**, nested `src/**/*.Tests` policy, linked `gate/**` source, field/property initializer,
-  generated source (via the committed generator fixture's emitted output), binary first-party reference}
+  statement**, **`extern`/`[DllImport]` method (EXT4-01)**, **primary constructor `class C(int x)` (EXT4-01)**,
+  **positional `record R(int X)` (EXT4-01)**, nested `src/**/*.Tests` policy, linked `gate/**` source,
+  field/property initializer, generated source (via the committed generator fixture's emitted output),
+  binary first-party reference}
   FAILS; the allow-branch fixture (non-empty injected allowlist: allowed ref → pass, one-identity-char-off →
   fail); a vacuous-scan-visibility test (zero project files → pass + notice); a **closure-uncomputable →
   fail-closed** test (a fixture target whose locked restore is forced to fail / a malformed `.csproj`); a
@@ -801,10 +839,16 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
   and its stage**, and a gate enforces **set-equality** between the manifest and the sites it discovers on
   disk (an omitted or stale site fails; RS-222/RS-223/EXT2-03/R3-I4). **The manifest is the single canonical
   site list** — the Metadata `Impacts` line and the "Packages Affected → parent spec" bullet reference it
-  and do NOT re-enumerate; a **meta-test asserts the three lists are identical** (R3-I4: v4 had Metadata +
-  Packages-Affected listing INV-043 while the manifest omitted it).
+  and do NOT re-enumerate; a **meta-test asserts Metadata `Impacts` and Packages-Affected each contain the
+  manifest REFERENCE and maintain NO local site list** (EXT4-05: there is ONE list — the manifest — not three
+  to compare; v4's failure mode was Metadata + Packages-Affected listing INV-043 while the manifest omitted
+  it, so the test asserts absence-of-local-list + presence-of-reference, not list-triple-equality).
   - **Stage-A sites (become true when the carrier LANDS — carrier-existence, not the P1 flip; R3-B5/EXT2-06)**:
-    (A1) parent **OQ-002** "built carrier is open" → closed; (A2) parent **RS-002** ordering (phrased
+    (A1) parent **OQ-002** — close ONLY its **built-carrier half** ("test/build-gate carrier is open" →
+    closed); its **contract half** was already DISCHARGED 2026-07-24 (parent:~1633) and its **production-test-
+    project / entrypoints / reference-provenance (P3) residual** (parent:~170) stays OPEN — A1 must NOT close
+    OQ-002 wholesale (EXT4-08); the stale parent "no entrypoint YAML exists yet — see OQ-002" (parent:~247)
+    is added to the finite literal scan below; (A2) parent **RS-002** ordering (phrased
     commit-level: "carrier + reject corpus proven green at/before the discharge commit", NOT "in a prior PR"
     — so the one-PR option OQ-A#4 keeps open is not retroactively forbidden; R3-M/DD-003-R3-6); (A3) the
     parent **enforcement-carrier prose** "these mechanisms are specified but unhomed / that carrier must
@@ -835,11 +879,17 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
     block gains `status:` + `supersedes`/`superseded_by` (optional keys, INV-002/a‴); (B14) the current-state
     anchors flip to their *post-flip* expected values.
   - **Consistency gate — anchors + finite literal scan (R3-I5/EXT2-08b)**: the gate does NOT claim to detect
-    arbitrary unmarked paraphrase. It (i) reads **machine-readable anchors** — `<!-- correctless:readiness-current-state
-    id="…" before_sha256="…" after_sha256="…" -->` markers placed in `phase-0-1-worker.md` (the marker
-    grammar + the exact anchor-ID set are specified in the manifest), asserts the parent prose spans they wrap
-    hash to the stage-expected `sha256`, and names each disagreeing site (`file:line`, expected vs found;
-    RS-UX-08/UX-005); and (ii) runs a **file-wide scan for the finite set of known stale literals/signatures**
+    arbitrary unmarked paraphrase. It (i) reads **machine-readable anchors** placed in `phase-0-1-worker.md`
+    as **PAIRED start/end markers** (EXT4-05 — a self-closing marker wraps nothing, so the hashed span was
+    undefined): `<!-- correctless:readiness-current-state:start id="…" stage-before="<sha256>" stage-after="<sha256>" -->`
+    … wrapped parent prose … `<!-- correctless:readiness-current-state:end id="…" -->`; the gate hashes the
+    **UTF-8 / LF-normalized bytes strictly BETWEEN the paired markers, excluding the two marker lines**, and
+    asserts that digest equals the **stage-selected** pin (`stage-before` at Stage A, `stage-after` at Stage B),
+    naming each disagreeing site (`file:line`, expected vs found; RS-UX-08/UX-005). The **exact anchor-ID set,
+    the manifest path `gate/Corrected.Gate.Tests/manifests/readiness-migration-manifest.json`, and its closed
+    JSON schema** (`{id, file, stage_before_sha256, stage_after_sha256}` per anchor) are pinned in that manifest
+    — a Stage-A committed artifact with its own schema test — so the RED tests bind a concrete grammar, not a
+    forward reference; and (ii) runs a **file-wide scan for the finite set of known stale literals/signatures**
     (`EvaluateReadiness(blockText)`, `BLOCKED-all-false`, "specified but unhomed", "pending DF-002", the wrong
     `rm -rf out`) so an un-anchored occurrence is still caught. Coverage = "every enumerated/anchored site +
     every known stale literal", NOT "any semantic drift" (R3-I5 downgrade). Placing the anchors is Stage-A

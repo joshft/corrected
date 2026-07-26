@@ -582,3 +582,83 @@ Reviewer: independent red-team re-check, grounded against the tree. **Verdict: a
 - **CLOSE 3 — ADR-registry bypass (R3-B4): CLOSED against codex#2 + codex#9.** Set-equality + fail-on-unregistered closes the out-of-list-ADR bypass; reciprocal-edge + reachability closes the one-way-link hole; the injected-ADR DoS is stated + bounded. Follow-ups applied: fixed the **live self-contradiction** the v5 edit introduced (STRIDE §TB-006 DoS line + BND-003 still said "pinned allowlist, not an open glob" — now record **R3-B4 supersedes RS-204**); **hardened the on-disk discovery discriminator** to INV-001-D-grade (column-0-in-fence + decoy fixture) so a fenced `adr_lint:` doc example isn't counted; noted the registry's live binding is **Stage-B-first**.
 
 **Net: v5's P1/DD-003/scanner core is coherent and satisfiable-from-clean; the re-check's bounded follow-ups are applied. Spec is TDD-ready.**
+
+---
+
+# Round 4 — FINAL codex gate on v5 (2026-07-25)
+
+Reviewer: codex GPT-5.6-sol (xhigh), direct invocation (producer path skipped — nvm-launcher bin, joshft/correctless#199). Full-repo egress to OpenAI disclosed to the maintainer before the run. Prompt: `scratchpad/codex-v5-final-prompt.txt`; raw output: `scratchpad/codex-v5-final-out.md`. This is a go/no-go gate; each finding below carries the LEAD's independent verification verdict (grounded against the tree). **codex verdict: NO-GO.** Lead concurs: this SUPERSEDES the round-3 re-check's "TDD-ready" line above.
+
+external-review status: ran (direct codex, xhigh) · egress: full repo incl. secrets/.env/git history sent to codex (OpenAI) · disable: n/a (direct invocation; producer would gate on require_external_review)
+
+## EXT4-01 (codex#2) — INV-011 default-deny predicate is NOT exhaustive [BLOCKING — CONFIRMED]
+**Source**: codex (external). **Location**: INV-011 `readiness-gate-carrier.md:491-496,523-526`.
+The predicate is described as a "skeleton allowlist" but OPERATIONALIZED as a 4-node denylist (BlockSyntax / ArrowExpressionClause / EqualsValueClause / GlobalStatement + a few named bodies). Two executable forms carry NONE of those nodes and pass: (a) `[DllImport] extern` methods — body-free but execute native code; (b) positional records `record R(int X)` / primary constructors `class C(int x)` — synthesize executable ctor/Equals/members from a declaration with no explicit body. **Verified**: predicate text at :491-496 lists exactly those node types; neither extern nor record-synthesis is covered. Security invariant under-enforces. **Fix**: specify a CLOSED declaration allowlist (true skeleton grammar), reject `extern`, primary ctors, positional/record synthesis, and add one bypass fixture per kind + a meta-test over the allowed declaration-kind set. **Status**: pending.
+
+## EXT4-02 (codex#5) — Stage-B supersession null/absence semantics are contradictory [BLOCKING — CONFIRMED]
+**Source**: codex (external). **Location**: INV-002 `:138-143,167`; INV-008(a‴) `:361-362,368-369`; enforcement `:423`.
+INV-002 DTO parses `superseded_by` with a presence bit distinguishing key-absent from explicit `null`, and the migrated fixture uses `superseded_by: null` EXPLICIT. But (a‴) grammar admits only "canonical ADR id string OR absent" (null not admitted) and the terminal rule requires `superseded_by` **absent**. So the migrated ADR-0001 (explicit null) is neither absent nor an id → malformed OR non-terminal → **Stage B goes RED right after `P1.satisfied:true`**. **Verified**: the three clauses conflict exactly as described. **Fix**: pick one wire form — make link keys nullable where `null` == "no edge", define terminal as "no non-null successor", pin the exact Stage-B ADR-0001 block. **Status**: pending.
+
+## EXT4-03 (codex#6) — ADR discovery can't distinguish a fenced example from a real block [BLOCKING — CONFIRMED]
+**Source**: codex (external). **Location**: INV-008(a‴) `:375-379`.
+The v5 discriminator (single `adr_lint:` at column 0 inside the one ```yaml``` fence; inline/prose ignored) + the "documentation example is NOT counted" exception COLLIDE for a full fenced yaml example: a `docs/adr/ADR-0002.md` that SHOWS a column-0 `adr_lint:` inside a ```yaml``` fence satisfies BOTH "is a block" (→ set-equality counts it → unregistered → fail-closed = false-positive DoS) AND "is an example" (→ ignored → a real superseding Route-B block relabeled 'example' bypasses registry equality). The round-3 re-check's "column-0-in-fence + decoy fixture" hardening does NOT resolve this — a decoy that is a real fence is exactly the ambiguous case. **Verified**: discriminator (:375-377) vs example-exemption (:377-379) are not mechanically separable for a fenced example. **Fix**: count EVERY syntactically-matching fenced block; require examples to use a non-matching key/indentation OR authoritative start/end markers; never infer "example" from surrounding prose. **Status**: pending.
+
+## EXT4-04 (codex#7) — ARCHITECTURE reconciliation is INCOMPLETE (spec↔ARCHITECTURE contradictions) [BLOCKING — CONFIRMED, mechanical]
+**Source**: codex (external). **Location**: `ARCHITECTURE.md:256-263,300-301` vs carrier INV-015 / INV-008(a‴).
+(a) TB-004 Phase-0.1 extension still lists `Microsoft.Build.*` "pinned + locked with **loaded-version assertions**" — directly contradicts INV-015 (drops all `Microsoft.Build.*`, asserts SDK MSBuild via `dotnet msbuild -version`); "loaded-version assertions" is impossible under the chosen out-of-process model. (b) TB-006 invariant still says supersession is "over a **pinned ADR allowlist** (not an open glob)" — contradicts v5's registry set-equality (unregistered block → fail, not ignored). Following ARCHITECTURE's authoritative text recreates the very bypass R3-B4 closed. **Verified directly**: both spans read verbatim as codex states; the round-3 re-check fixed only the STRIDE prose in the SPEC, not these two ARCHITECTURE spans. **Fix**: amend ARCHITECTURE before TDD — drop `Microsoft.Build.*`/loaded assertions → name SDK-MSBuild process assertion; replace the allowlist sentence with compiled-registry ↔ on-disk set-equality + unregistered-block fail. **Status**: pending.
+
+## EXT4-05 (codex#4) — DD-003 anchor/digest protocol not unambiguously implementable [BLOCKING — CONFIRMED (2 of 3 sub-points)]
+**Source**: codex (external). **Location**: DD-003 `:799-805,838-846`; Metadata/Packages `:6-10,803-804`.
+(a) CONFIRMED: the anchor is a SELF-CLOSING marker `<!-- correctless:readiness-current-state id=… before_sha256=… after_sha256=… -->` yet the gate must hash "the parent prose spans they wrap" — a self-closing marker wraps nothing; no end marker / byte-range / UTF-8+LF normalization rule / manifest path+schema is defined at spec level ("specified in the manifest" forward-references a Stage-A artifact the RED tests need NOW). (b) CONFIRMED: the "meta-test asserts the three lists are identical" (:804) is incoherent — Metadata `Impacts` + Packages-Affected are deliberately REFERENCE-ONLY (:803), so there are not three lists to compare; the test must assert they reference the one manifest and hold NO local list. (c) codex MISREAD: "A5 pre-flip vs B14 flip while the marker holds both hashes" is the DESIGN, not a contradiction (one marker carries before+after; Stage A asserts `before`, Stage B asserts `after`) — not a defect. **Fix**: paired start/end markers; digest over UTF-8/LF bytes excluding markers; pinned manifest path + closed schema + exact anchor-ID set; restate the meta-test as reference-not-local-list. **Status**: pending.
+
+## EXT4-06 (codex#3) — "generator caught pre-execution" contradicts "the build DOES execute generators" [BLOCKING — CONFIRMED as contradiction; fix-depth is a maintainer design choice]
+**Source**: codex (external). **Location**: INV-011 `:478-486`.
+Line 478 states the real `dotnet build` "**does execute** the closure's source generators/analyzers"; line 485 claims a shipped generator is "**independently caught pre-execution** as a non-allowlisted non-framework reference." The reference-rejection runs in the ANALYSIS phase, AFTER the build already executed the generator — so "pre-execution" is false. **Verified**: the two clauses contradict. NOTE: the maintainer explicitly chose "keep the out-of-process real-closure build" (round-3 decision), which ACCEPTS build-time generator execution — so the minimal fix is a WORDING correction ("caught by reference-rejection after a bounded, sandboxed build-time execution"), NOT necessarily codex's heavier "restore-only preflight that rejects non-allowlisted generators before the build." Maintainer decides depth. **Status**: pending.
+
+## EXT4-07 (codex#8) — supersession graph permits an accepted NON-terminal predecessor [IMPORTANT — CONFIRMED]
+**Source**: codex (external). **Location**: INV-008(a‴) `:359-371`.
+Rule fails on "two accepted TERMINALS" but not on an accepted node that HAS a successor: ADR-0001 `{accepted, superseded_by: ADR-0002}` + ADR-0002 `{accepted, superseded_by absent, Route A}` → exactly one accepted terminal (ADR-0002) passes, yet ADR-0001 is left `accepted` though it was superseded. **Verified**: terminal counted by "accepted ∧ superseded_by absent", predecessor status unconstrained. **Fix**: require exactly ONE accepted node total (the terminal); every non-terminal must be `status: superseded`. (Clusters with EXT4-02/03 — the supersession-semantics rewrite.) **Status**: pending.
+
+## EXT4-08 (codex#9) — Stage-A closes parent OQ-002 over-broadly [IMPORTANT — CONFIRMED]
+**Source**: codex (external). **Location**: DD-003 A1 `:806-807`; parent OQ-002 `phase-0-1-worker.md:170,1633`.
+A1 closes "parent OQ-002 'built carrier is open' → closed" WHOLESALE, but parent OQ-002 spans (i) a contract half already "DISCHARGED 2026-07-24" and (ii) "the production test project + entrypoints contract" (:170) — a production-harness concern this carrier does NOT build. Migration can pass while leaving the parent's production/provenance residual inconsistent. Also: stale parent phrases ("no entrypoint YAML exists yet" :247; carrier-still-flagged) are not in A1–A5 nor the finite literal scan. **Verified**: OQ-002 is multi-part at parent:170/1633. **Fix**: split A1 — close only the built-carrier portion here; enumerate the retained-open production/provenance parts; add exact Stage-A IDs (+ literal-scan entries) for the stale entrypoint-YAML/flagged phrases. **Status**: pending.
+
+## EXT4-09 (codex#1) — INV-011 "any new top-level src/ package is production" mis-attributed [DOWNGRADED to MINOR/clarity — codex over-rated]
+**Source**: codex (external). **Location**: INV-011 `:503-506`; ARCHITECTURE `:113`.
+codex called it BLOCKING (a standalone `src/Evil/Evil.csproj` → INV-011 closure over `src/Corrected.*` resolves zero → vacuous PASS). **Lead DOWNGRADE**: the PARENT's INV-036 **path-scoped** CI check (`phase-0-1-worker.md:1091-1092,1445-1446`, deny-by-default, "any new top-level package is production") DOES catch a standalone `src/` package BY PATH; INV-011 is the COMPLEMENTARY closure scan for linked/generated/binary content that evades path classification. So the overall policy IS enforced — codex didn't credit the path-scoped sibling. Residual = a genuine CLARITY defect: INV-011 (:506) and ARCHITECTURE (:113) RESTATE the policy as if the closure scan enforces it. **Fix**: reword to attribute the "any new src/ package" catch to the parent path-scoped INV-036 detection; keep INV-011 scoped to the closure it actually computes. **Status**: pending.
+
+## EXT4-10 (codex#10) — schema content-pin lacks an exact path constant [MINOR — CONFIRMED]
+**Source**: codex (external). **Location**: INV-008(a′) `:307-320`.
+`evidence_schema_sha256` references "the schema file" but names no path constant; the real producer `spikes/dafny-compat/schema/evidence-schema.json` EXISTS (verified). **Fix**: name that exact repo-relative constant alongside `canonical_sample_sha256` and `probe_manifest_sha256`. **Status**: pending.
+
+## What HELD UP under the final gate (codex + lead-verified sound)
+- Today's ADR parses to typed `evidence-schema-incomplete` (not a throw / not malformed) under the REQUIRED-vs-OPTIONAL presence-bit DTO — Stage-A green-from-clean at the DTO level holds.
+- The canonical-sample pin targets the correct sample (schema v2, 22 probe results, 2 COMPATIBLE verdicts, `consistent`); variance sample stays INCOMPLETE. The three compiled pins + honest TCB framing close the DATA-ONLY coherent-rewrite forge.
+- `probe-manifest.json` exists (22 composite keys, 12 Route-A/shared); count-aware equality + duplicate-JSON rejection mirror the upstream VerdictAggregator order.
+- TB numbering is correct: readiness/ADR/evidence = TB-006; TB-005 remains the parent's `.dfy`-intake boundary; no mislabeling.
+- The Route-A production-assembly machine block + readiness `test_via` are present with the corrected clean path.
+
+**GATE VERDICT: NO-GO for /ctdd.** 6 BLOCKING (EXT4-01..06) + 2 IMPORTANT (07,08) confirmed; 1 downgraded (09), 1 minor (10). The defect mass is concentrated in the two v5 round-3 REWRITE areas — the supersession-semantics cluster (EXT4-02/03/07) and the scanner predicate (EXT4-01/06) — plus the ARCHITECTURE reconcile I left incomplete (EXT4-04-arch). Bounded → a v6 revision, not a redesign. The round-3 re-check's "TDD-ready" line is retracted.
+
+---
+
+## Round 4 dispositions — v6 applied (2026-07-25)
+
+Maintainer decision: **Revise to v6 now (all confirmed findings)**; design sub-calls = **lightest correct fix** (EXT4-06 wording-only; EXT4-02 nullable link keys, terminal = "no non-null successor").
+
+| Finding | Disposition | v6 change |
+|---|---|---|
+| EXT4-01 | **FIXED** | INV-011 predicate → CLOSED-allowlist (only body/init/synthesis-free declarations permitted; explicitly rejects `extern`/`[DllImport]`, primary ctors, positional records) + meta-test over allowed declaration-kind set + 3 new bypass fixtures |
+| EXT4-02 | **FIXED** (lightest) | INV-002 + INV-008(a‴): `supersedes`/`superseded_by` nullable; **null and absent both == "no edge"**; terminal = "no non-null successor"; migrated `superseded_by:null` is well-formed & terminal |
+| EXT4-03 | **FIXED** | INV-008(a‴) discovery is now PURELY STRUCTURAL: every column-0 `adr_lint:` in a `yaml` fence counts; a non-counting example MUST use a non-matching form (non-`yaml` fence / non-col-0 / `adr_lint_example:` sentinel); no prose-inferred "example" exemption; matching-form example fixture asserts IT IS counted |
+| EXT4-04 | **FIXED** | ARCHITECTURE.md:258 dropped `Microsoft.Build.*` + loaded-version assertion → SDK-MSBuild `dotnet msbuild -version`; :300 "pinned ADR allowlist (not an open glob)" → compiled-registry set-equality + fail-on-unregistered. (Spec INV-015 was already correct; ARCHITECTURE was the lagging file.) |
+| EXT4-05 | **FIXED** | DD-003 anchors → PAIRED start/end markers, digest over UTF-8/LF bytes between markers, pinned manifest path `gate/Corrected.Gate.Tests/manifests/readiness-migration-manifest.json` + closed JSON schema; meta-test restated as "each section holds ONLY the reference, no local list" (not "three lists identical") |
+| EXT4-06 | **FIXED** (lightest) | INV-011: "independently caught pre-execution" → "caught by analysis-phase reference-rejection AFTER a bounded sandboxed build-time execution"; honors the maintainer's "keep the real build" decision |
+| EXT4-07 | **FIXED** | INV-008(a‴): exactly ONE `status==accepted` node TOTAL; every non-terminal MUST be `status: superseded`; accepted-with-non-null-successor → fail-closed + fixture |
+| EXT4-08 | **FIXED** | DD-003 A1 splits OQ-002 — close only the built-carrier half; contract half already discharged 2026-07-24; production-test-project/entrypoints/P3 residual stays open; stale "no entrypoint YAML" phrase added to finite literal scan |
+| EXT4-09 | **NOTED / downgraded** | INV-011:506 reworded to attribute the "any new `src/` package is production" catch to the parent path-scoped INV-036 CI check; INV-011 scoped to the closure it computes. No behavior change (policy already enforced by the parent). |
+| EXT4-10 | **FIXED** | INV-008(a′): `evidence_schema_sha256` names the exact constant `spikes/dafny-compat/schema/evidence-schema.json` |
+
+Metadata bumped to **v6** (four review rounds). Post-edit verification sweep (grep for every straggler phrase — `Microsoft.Build` non-negated, "pinned ADR allowlist", "three lists identical", "pre-execution", old terminal phrasing, "This is **v5**") returned CLEAN. All EXT4-01..10 tags thread through the spec.
+
+**v6 status: all confirmed round-4 findings applied. A focused re-check of the supersession-semantics cluster (EXT4-02/03/07) + the closed-allowlist predicate (EXT4-01) is the remaining prudent step before /ctdd.**
