@@ -702,3 +702,28 @@ Full cross-model GO/NO-GO on v6 (GPT-5.6-sol, xhigh, read-only). **VERDICT: NO-G
 - **EXT5-04 → fixed**: the exact-`10.0.302` runtime assertions in INV-011, INV-015, and INV-016 (incl. INV-016's internal 690-vs-698 contradiction) replaced with the `latestPatch` band-membership predicate; `10.0.302` kept as floor/requested.
 
 Post-edit verification sweep (residual exact-302 forms, sandbox/bounded framing, inline marker hashes, old B14 phrasing, "three lists agree" residue, dangling B4, A1–A5 range) returned CLEAN. Spec is **v7**.
+
+---
+
+## Round 6 — maintainer-relayed implementation-contract review on v7 (2026-07-25)
+
+Five bounded implementation-contract issues (EXT6-01..05), all CONFIRMED against the tree. The v7 core (P1-derived global stage, sole manifest digest authority, Stage-A correction, dropped fake sandbox claim) was explicitly confirmed sound by the reviewer. These are contract repairs, not a redesign. All five applied in **v8**.
+
+### EXT6-01 (contradiction → fixed): canonical command was split three ways
+INV-012 needs the banner on the documented command's stdout; INV-014 defined that command as bare `dotnet test <AGGREGATOR>`; INV-017 put the TRX guard + renderer in a separate script → three different "canonical commands." **Fix**: the canonical operator + CI command is the committed runnable script `<GATE-SCRIPT>` (`gate/run-readiness-gate.sh`) which runs `dotnet test` → validates TRX → renders the INV-012 status → returns the final exit code. CI executes it directly; the verbatim-behavior assertion lives in the out-of-suite reference-CI lane under a re-entry sentinel (`CORRECTED_GATE_INNER=1`) so an in-suite xUnit test never invokes its own enclosing script (recursion). Reconciled INV-012/014/017 + the doc-home AP-020 verbatim test onto `<GATE-SCRIPT>`.
+
+### EXT6-02 (too-narrow residual → fixed): build-execution beyond generators/analyzers
+Committed MSBuild `Target`/`UsingTask`/`Exec`/non-SDK `Import`/build-events also execute during `dotnet build` and evade the C#/reference scan; analyzers are MSBuild `Analyzer` items, not ordinary references. **Fix**: `Analyzer` items extracted via `-getItem:Analyzer` and fed to the allowlist; ALL committed build extensions named in the accepted residual; a closed PRESENCE policy fails closed on any committed custom target/task/`Exec`/non-SDK import/build-event; new Analyzer + BeforeBuild/Exec enforcement fixtures.
+
+### EXT6-03 (indeterminate bound + overclaim → fixed): latestPatch
+Root `global.json` now sets `allowPrerelease: false` (the CLI defaults to considering prerelease SDKs outside Visual Studio); the band predicate is precise (major 10, minor 0, feature-band 3xx, resolved `>= 10.0.302`); "reproducibility held by the committed lockfile" replaced with the honest claim that the lockfile pins PACKAGE versions but does NOT make different SDK patches identical (`latestPatch` selects the highest installed qualifying patch; Microsoft recommends `disable` for strict lockstep — https://learn.microsoft.com/en-us/dotnet/core/tools/global-json). Reconciled in ARCHITECTURE TB-004.
+
+### EXT6-04 (contract vs schema → fixed): DD-003 manifest
+DD-003 said the manifest lists "each replacement and stage," but rows are `{id,file,stage_before_sha256,stage_after_sha256}` with stage derived globally. **Fix**: the after-digest IS the replacement (content hash — no replacement string stored); stage is never stored per row; discovery scope = parent-spec anchors in `phase-0-1-worker.md` ONLY; the ADR B13 change is explicitly OUT of the anchor scan (verified separately by INV-008's own ADR parse — terminal rule + compiled-registry set-equality).
+
+### EXT6-05 (unsatisfiable-or-weak → fixed): purity check scope
+A scan over the whole `Corrected.Gate` compilation false-positives on the parser/orchestrator's legitimate I/O; a scan of only `EvaluateReadiness` misses helper-hidden I/O + nondeterminism. **Fix (isolate option)**: the kernel + DTOs live in a tiny I/O-free project `gate/Corrected.Gate.Kernel/` (referenced by parser/orchestrator, itself references nothing I/O-capable); the symbol scan over that project is satisfiable (only pure code) + complete (helpers in-project); forbidden set augmented with nondeterminism APIs (`DateTime.Now`/`UtcNow`, `DateTimeOffset.Now`/`UtcNow`, `Environment`, `Random`, `Guid.NewGuid`). Ripple: adds one new project to the gate solution.
+
+**Two either/or sub-choices resolved toward the cleaner option (maintainer may redirect):** EXT6-04 → ADR excluded from the anchor scan (already covered by INV-008), not "discovery covers both parent+ADR"; EXT6-05 → isolate the kernel in an I/O-free project, not a transitive call-graph forbidden-API scan.
+
+**Round-6 disposition: applied in v8, EXT6-01..05 → fixed. Post-edit sweep CLEAN (all five EXT6 tags thread through; no residual "documented invocation"/"reproducibility held"/old purity scope/old DD-003 contract phrasing; doc-home verbatim test rebound to `<GATE-SCRIPT>`). Spec is v8; UNCOMMITTED (awaiting maintainer commit/advance decision).**

@@ -226,9 +226,12 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
   `<clear/>`-scoped single-source config, SHA-256-pinned solver assets
   installed outside ambient discovery locations, exact SDK pin with
   roll-forward disabled (the repo-root Phase-0.1 `global.json` documents a
-  `rollForward: latestPatch` **exception** for repo-wide security-patch
-  availability — reproducibility held by the committed lockfile + a build-time
-  SDK-band assertion; see the Phase-0.1 extension below) — and evidence binds
+  `rollForward: latestPatch` **exception** with `allowPrerelease: false` for
+  repo-wide security-patch availability — the committed lockfile pins PACKAGE
+  versions but does NOT make different SDK patches identical; `latestPatch` picks
+  the highest installed qualifying patch, bounded to feature-band 3xx >= 10.0.302,
+  and a build-time band assertion records the resolved SDK; see the Phase-0.1
+  extension below and Microsoft's global.json docs, EXT6-03) — and evidence binds
   claims to the identities actually loaded/executed, never merely referenced.
   Intake failure is fail-closed: no verdict, never a silent fallback to ambient resolution.
 - Violated when: a floating/range version resolves; a machine-level source,

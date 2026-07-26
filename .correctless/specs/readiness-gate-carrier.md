@@ -11,12 +11,13 @@
   reference (no local list), not that "three lists agree" (R3-I4/EXT4-05).)
 - **Branch**: feature/readiness-gate-carrier
 - **Research**: `.correctless/artifacts/research/readiness-gate-carrier-research.md`
-- **Review**: codex GPT-5.6-sol (xhigh) + `/creview-spec` 6-agent + self-assessment, **five rounds**
+- **Review**: codex GPT-5.6-sol (xhigh) + `/creview-spec` 6-agent + self-assessment, **six rounds**
   (round 1: 12 codex + ~70 Claude; round 2 on v3: 13 codex + ~40 Claude; round 3 FOCUSED on the v4
   P1/DD-003/scanner core: codex 6 BLOCKING + P1-red-team/DD-003/scanner agents; round 4 codex gate on
-  v5: 6 BLOCKING + 2 IMPORTANT confirmed, EXT4-01..10; round 5 FINAL codex gate on v6: 2 BLOCKING +
-  2 IMPORTANT confirmed, EXT5-01..04) — all in
-  `.correctless/artifacts/review-spec-findings-readiness-gate-carrier.md`. **This is now v7.** Its v5 base incorporated the
+  v5: 6 BLOCKING + 2 IMPORTANT confirmed, EXT4-01..10; round 5 codex gate on v6: 2 BLOCKING +
+  2 IMPORTANT confirmed, EXT5-01..04; round 6 maintainer-relayed impl-contract review on v7: 5 bounded issues
+  EXT6-01..05) — all in
+  `.correctless/artifacts/review-spec-findings-readiness-gate-carrier.md`. **This is now v8.** Its v5 base incorporated the
   round-3 findings (Stage-A DTO required-vs-optional split so the pre-migration ADR parses to
   `evidence-schema-incomplete`; compiled `canonical_sample_sha256`/manifest-file anchors closing the residual
   coherent-tamper forge; duplicate-JSON rejection; the ADR **registry set-equality** replacing v4's
@@ -37,7 +38,20 @@
   analysis-phase reference-rejection the named control (EXT5-02); the entrypoint current-state correction
   re-staged Stage-B→Stage-A + three stale literals enumerated in the finite scan (EXT5-03); the exact-
   `10.0.302` runtime assertions in INV-011/015/016 replaced with the `latestPatch` band-membership predicate
-  (EXT5-04). The round-4 rewrite clusters (EXT4-01/02/03/04/07/09/10) were codex-verified sound — no regression.
+  (EXT5-04). The round-4 rewrite clusters (EXT4-01/02/03/04/07/09/10) were codex-verified sound — no regression. **v8
+  (2026-07-25)** applied a round-6 maintainer-relayed implementation-contract review of v7 (5 bounded issues;
+  the v7 core — P1-derived global stage, sole manifest digest authority, Stage-A correction, dropped fake
+  sandbox — confirmed sound): the canonical operator/CI command unified onto the committed runnable gate
+  script `<GATE-SCRIPT>` (runs `dotnet test`→TRX-validate→render→exit), reconciling INV-012/014/017 with a
+  recursion guard (EXT6-01); INV-011's build-execution residual broadened to ALL committed build extensions
+  (MSBuild `Target`/`UsingTask`/`Exec`/`Import`/build-events) with `Analyzer` items extracted+rejected and
+  new Analyzer/BeforeBuild/Exec fixtures (EXT6-02); the `latestPatch` bound made deterministic — root
+  `allowPrerelease:false`, a precise band predicate (major 10, minor 0, band 3xx, >= 10.0.302), and the
+  "reproducibility held" overclaim replaced with an honest lockfile-pins-packages-not-SDK-patches statement
+  (EXT6-03); DD-003's manifest contract reconciled with its schema — after-digest IS the replacement, stage
+  never stored per row, ADR B13 excluded from the anchor scan (verified by INV-008) (EXT6-04); and INV-004's
+  purity check made satisfiable+complete by isolating the kernel+DTOs in a tiny I/O-free
+  `gate/Corrected.Gate.Kernel/` project + a nondeterminism forbidden-set (EXT6-05).
 - **Recommended-intensity**: high
 - **Intensity**: high
 - **Intensity reason**: fail-closed security gate parsing a tamper-checked trust boundary
@@ -208,12 +222,20 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
 - **Statement**: `EvaluateReadiness(block: ReadinessBlock, probeResults: IReadOnlyDictionary<
   PreconditionId, ProbeResult>) → {Pass | Fail, offending_precondition}` takes **caller-supplied**
   inputs (not the live probes/file), so every branch is reachable with supplied results. It performs
-  **no I/O**. The no-I/O check is a **Roslyn symbol-usage scan** over the kernel's compilation that fails
-  if any symbol under `System.IO.{File,Directory,Path,Stream,FileStream,…}` or `System.Diagnostics.Process`
-  is referenced (an assembly-reference scan is INSUFFICIENT on .NET 10 — `System.IO.File` lives in
-  `System.Private.CoreLib`/`System.Runtime`, not a separately-referenced `System.IO` assembly, so a
-  reference scan passes even for a kernel calling `File.ReadAllText`; RS-260). A complementary behavioral
-  check asserts the kernel touches no fixture file. Verdict defined by INV-005.
+  **no I/O and is deterministic**. **The kernel + its DTOs live in a tiny, I/O-free project
+  `gate/Corrected.Gate.Kernel/` (EXT6-05)** that the parser/orchestrator reference but that itself references
+  nothing I/O-capable — so the no-I/O check is a **Roslyn symbol-usage scan over the KERNEL PROJECT's whole
+  compilation**, which is both **satisfiable** (the project holds ONLY the pure kernel + DTOs, so there is no
+  legitimate I/O to false-positive on — a whole-`Corrected.Gate` scan would trip on the parser/orchestrator's
+  real I/O) and **complete** (any private helper is in the same project, so I/O hidden behind a helper is
+  still in scope — a scan of only the `EvaluateReadiness` method body would miss it; EXT6-05). It fails if any
+  symbol under `System.IO.{File,Directory,Path,Stream,FileStream,…}`, `System.Diagnostics.Process`, or the
+  **nondeterminism set** (`System.DateTime.Now`/`UtcNow`, `System.DateTimeOffset.Now`/`UtcNow`,
+  `System.Environment`, `System.Random`, `System.Guid.NewGuid`) is referenced (an assembly-reference scan is
+  INSUFFICIENT on .NET 10 — `System.IO.File` lives in `System.Private.CoreLib`/`System.Runtime`, not a
+  separately-referenced `System.IO` assembly, so a reference scan passes even for a kernel calling
+  `File.ReadAllText`; RS-260). A complementary behavioral check asserts the kernel touches no fixture file and
+  returns identical verdicts across repeated calls with identical inputs. Verdict defined by INV-005.
 - **Violated when**: the kernel reads the committed file / calls probes internally; it does I/O (caught by
   the symbol scan); the failure omits the offending id. · **Enforcement**: gate precondition — INV-007
   fixtures + the Roslyn no-I/O symbol scan + the no-file-touch behavioral check. · **Test approach**: unit · **Risk**: high
@@ -511,16 +533,26 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
     generated sources come to exist) and emits them to disk via `EmitCompilerGeneratedFiles=true` →
     `CompilerGeneratedFilesOutputPath` (R3-B6 — v4's "do not execute generators" was incoherent with a real
     build; the ban never needed to *inspect a generator's body*, only its *emitted output* + *its reference*).
-    The committed `Compile` items are extracted via `dotnet build -getItem:Compile` (SDK ≥ 8, present on
-    10.0.302 — a manifest that no `Microsoft.Build.*` in-process reference exists; R3-I1/EXT2-10). **RT-L1
+    The committed `Compile` items are extracted via `dotnet build -getItem:Compile`, and the committed
+    **`Analyzer` items** via `dotnet build -getItem:Analyzer` — analyzers/source-generators ship as MSBuild
+    `Analyzer` items, NOT necessarily ordinary assembly `Reference`s, so both feed the analysis-phase
+    allowlist below (EXT6-02) (SDK ≥ 8, present on 10.0.302 — a manifest that no `Microsoft.Build.*`
+    in-process reference exists; R3-I1/EXT2-10). **RT-L1
     build-time-code-execution risk** is stated and SCOPED AS AN ACCEPTED RESIDUAL (EXT5-02): the build runs
     under the pinned SDK + the `<clear/>`-isolated locked restore, and while BLOCKED `src/` is empty/skeleton
     (nothing real to execute). The real out-of-process build **does execute** any committed source
     generator/analyzer BEFORE the analysis phase rejects its non-allowlisted reference; this gate specifies
     **no** build-time containment boundary (no scrubbed env / network restriction / timeout / process-tree
-    kill) — arbitrary build-time execution of committed generators is an **accepted CI-runner-scoped
-    residual**, with containment delegated to the CI runner's own sandbox and NOT claimed by this gate (the
-    earlier "bounded/sandboxed" framing was dropped as an unbacked overclaim, EXT5-02). The named control is
+    kill) — arbitrary build-time execution of committed generators, analyzers, AND **MSBuild build extensions**
+    (custom `<Target>`/`BeforeBuild`/`AfterBuild`, `<UsingTask>`, `<Exec>`, non-SDK `<Import>`, pre/post-build
+    events — all of which run during `dotnet build` and evade the C#/reference scan) is an **accepted
+    CI-runner-scoped residual**, with containment delegated to the CI runner's own sandbox and NOT claimed by
+    this gate (the earlier "bounded/sandboxed" framing was dropped as an unbacked overclaim, EXT5-02). **But
+    committed build extensions do NOT get a free pass on PRESENCE (EXT6-02, closed policy)**: the shipped
+    closure's `.csproj`/`.targets`/`.props` must declare NONE of the above (only the closed SDK-default set is
+    permitted — empty while BLOCKED); a committed custom target/task/`Exec`/non-SDK import/build-event FAILS
+    closed, and non-allowlisted `Analyzer` items are rejected by the analysis-phase allowlist alongside
+    references. The named control is
     the **analysis-phase reference-rejection** (below): a shipped generator/analyzer is caught by its
     non-allowlisted *reference* AFTER it has already run (EXT4-06: the real build *does* run generators; the
     ban never needs to trust or pre-empt a generator's body, only to reject its non-allowlisted *reference*
@@ -578,7 +610,9 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   statement**, **`extern`/`[DllImport]` method (EXT4-01)**, **primary constructor `class C(int x)` (EXT4-01)**,
   **positional `record R(int X)` (EXT4-01)**, nested `src/**/*.Tests` policy, linked `gate/**` source,
   field/property initializer, generated source (via the committed generator fixture's emitted output),
-  binary first-party reference}
+  binary first-party reference, **non-allowlisted `Analyzer` item (via `-getItem:Analyzer`; EXT6-02)**,
+  **committed custom `<Target>` / `BeforeBuild` / `<Exec>` (EXT6-02)**, **committed `<UsingTask>` or non-SDK
+  `<Import>` (EXT6-02)**}
   FAILS; the allow-branch fixture (non-empty injected allowlist: allowed ref → pass, one-identity-char-off →
   fail); a vacuous-scan-visibility test (zero project files → pass + notice); a **closure-uncomputable →
   fail-closed** test (a fixture target whose locked restore is forced to fail / a malformed `.csproj`); a
@@ -595,10 +629,11 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   expected Phase-0.1 state (P2/P3 not yet dischargeable)" — vs a **violation is a FAIL** naming the
   offending precondition (RS-UX-05). **Green-path visibility (RS-290/UX-001, HIGH)**: because `dotnet test`
   swallows passing-test output, the banner + the INV-011 "no production surface (src/ empty)" notice + each
-  unsatisfied precondition's rendered reason MUST be emitted to **stdout of the documented invocation** (via
-  the out-of-suite reference-CI lane / a small console renderer the documented command runs), not merely as
-  an xUnit assertion — and a test asserts the banner text appears on that stdout, so an operator who sees
-  green also sees the valence. It renders **each INV-006 reason-taxonomy category distinctly** (RS-291/
+  unsatisfied precondition's rendered reason MUST be emitted to **stdout of the canonical gate command** — the committed runnable script `<GATE-SCRIPT>`
+  (INV-014/INV-017, EXT6-01) that runs `dotnet test`, then renders the banner/notice/reasons and returns the
+  final exit code — not merely as an xUnit assertion; a test asserts the banner text appears on the **script's**
+  stdout, so an operator who sees green also sees the valence (EXT6-01: the renderer is a step in `<GATE-SCRIPT>`
+  AFTER `dotnet test`, NOT inside the swallowed xUnit suite). It renders **each INV-006 reason-taxonomy category distinctly** (RS-291/
   UX-002): `validator-deferred` → "expected while BLOCKED; not yet dischargeable" (with the INV-009/010
   discharge pointer); `evidence-absent`/`evidence-malformed`/`evidence-schema-incomplete` → "degraded
   environment / pre-migration — NOT a code regression; restore the committed evidence / apply the DD-003
@@ -641,14 +676,20 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
 ### INV-014: The documented command provably runs a non-zero test set (guard OUTSIDE the suite)
 - **Type**: must · **Category**: functional
 - **Statement**: the aggregator filename is a **single referenced constant** `<AGGREGATOR>` used by every
-  site (INV-006 Entry, this command, INV-017 CI, ARCHITECTURE `test_via`, the README + AGENT_CONTEXT doc
+  site (INV-006 Entry, the gate script, INV-017 CI, ARCHITECTURE `test_via`, the README + AGENT_CONTEXT doc
   homes) — its value is `gate/Corrected.Gate.slnx` **iff** the INV-014 pre-flight proves `.slnx` builds on
   SDK 10.0.302, else the classic `.sln` fallback (OQ-A#2; resolving it updates the one constant, not ~6
-  literals; RS-250/RS-A-02/RS-UC-08). The documented invocation is `dotnet test <AGGREGATOR> --logger
-  "trx;LogFileName=gate.trx"` from the repo root on a clean checkout (the logger is **baked into the
-  documented command** so the verbatim command and the counted-execution assertion are the same argv,
-  reconciling AP-020 with TRX parsing; RS-A-07) — and ARCHITECTURE's `test_via` is reconciled to this exact
-  argv (the v3 `--logger trx` mismatch, RS-251, is corrected). A step **outside the discovered suite** (the
+  literals; RS-250/RS-A-02/RS-UC-08). **The canonical operator + CI command is the committed runnable script
+  `<GATE-SCRIPT>` (`gate/run-readiness-gate.sh`, EXT6-01)** — a second single referenced constant — which
+  runs `dotnet test <AGGREGATOR> --logger "trx;LogFileName=gate.trx"` from the repo root on a clean checkout
+  (the logger is **baked in** so the counted-execution assertion sees the same argv the script runs), THEN
+  validates the TRX (executed-count floor + named-fixture outcomes), renders the INV-012 status
+  banner/notice/reasons to stdout, and **returns the final gate exit code**. The doc homes (README +
+  AGENT_CONTEXT) document `<GATE-SCRIPT>` as the command to run, and the AP-020 verbatim test executes THAT
+  script (not bare `dotnet test`, which swallows the banner); ARCHITECTURE's `test_via` is reconciled to
+  `<GATE-SCRIPT>` (the v3 `--logger trx` mismatch, RS-251, corrected). This puts INV-012 (banner on the
+  command's stdout), INV-014 (counted execution), and INV-017 (the runnable script) onto ONE canonical
+  command, resolving the v7 three-way split (EXT6-01). A step **outside the discovered suite** (the
   reference-CI lane / a standalone runnable script) parses the TRX and FAILS on zero discovery or a
   below-floor executed count, and asserts the specific fixtures (INV-005 rows, INV-008 P1 cases, the
   partition/bypass, the committed-state test) each `Passed` — so dropping `Corrected.Gate.Tests` from the
@@ -659,8 +700,10 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   (count + names) so dropping a fixture from both silently is caught. The doc home is a **dedicated fenced
   `## Running the readiness gate` section** (mirroring the spike; a markdown table cell cannot hold a fenced
   block, RS-292/UX-003) in the named file(s), and the AP-020 verbatim test parses the fenced command from
-  that section; if two doc homes exist, each is verbatim-tested byte-for-byte against `<AGGREGATOR>` (RS-292/
-  UX-004). `<AGGREGATOR>` extension is proven by the pre-flight restore/build test (RS-A-02/RS-UC-08).
+  that section; the fenced command is `<GATE-SCRIPT>` (EXT6-01 — the canonical gate command, NOT bare `dotnet
+  test`), and if two doc homes exist each is verbatim-tested byte-for-byte against `<GATE-SCRIPT>` (RS-292/
+  UX-004). `<AGGREGATOR>` extension (the solution the script runs) is proven by the pre-flight restore/build
+  test (RS-A-02/RS-UC-08).
 - **Guards against**: AP-020, AP-013, AP-011, AP-018, AP-002.
 - **Enforcement**: CI test / the reference-CI lane parsing TRX (executed-count floor + named-fixture
   outcomes) + the guard-self-tests + the fixture-name meta-test + the `<AGGREGATOR>` pre-flight + the
@@ -700,21 +743,31 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   are **semantically synced on the load-bearing `sdk.version` field** (parse both, compare the version
   string) — **NOT byte-identical** (the v3 byte-identical clause was unsatisfiable: the spike file is
   `rollForward: disable` with a `"//"` comment + `allowPrerelease`; RS-240/EXT2-06, maintainer decision
-  2026-07-25 = semantic sync). `rollForward`, `allowPrerelease`, and comments are explicitly allowed to
-  differ per context; both files carry the DD-006 bump affordance. A committed **`gate/NuGet.Config` with
+  2026-07-25 = semantic sync). `rollForward` and comments are explicitly allowed to
+  differ per context, but the **repo-root `global.json` sets `allowPrerelease: false` explicitly** (EXT6-03 —
+  the CLI defaults `allowPrerelease` to true outside Visual Studio, so an unqualified `latestPatch` would
+  consider prerelease SDKs; the spike's `disable` file is unaffected); both files carry the DD-006 bump affordance. A committed **`gate/NuGet.Config` with
   `<clear/>` + a single pinned source** (mirroring the spike) makes the gate restore single-source-isolated
   (else NuGet config merges upward to machine/user sources — a TB-004 hole; RS-A-01/RS-UC-06), and a **CPM
   opt-out** (`gate/Directory.Packages.props` or `ManagePackageVersionsCentrally=false`, with a regression
   test that drops a dummy repo-root `Directory.Packages.props` into a temp copy and asserts the gate still
   restores its inline+locked versions; RS-UC-11) prevents a future repo-root `Directory.Packages.props`
-  from capturing the gate's inline `Version=`. A build-time `NETCoreSdkVersion` patch-band-membership assertion (per the roll-forward clause below — NOT
-  exact `== 10.0.302`; `10.0.302` is the floor, EXT5-04) + a
-  from-repo-root `dotnet --version` check cover both the pin and the muxer-resolution clause.
+  from capturing the gate's inline `Version=`. A build-time `NETCoreSdkVersion` band-membership assertion — the predicate is **exactly: major `10`,
+  minor `0`, feature-band `3xx` (the hundreds digit of the patch == `3`), and resolved patch `>= 10.0.302`**
+  (per the roll-forward clause below — NOT exact `== 10.0.302`; `10.0.302` is the floor/requested,
+  EXT5-04/EXT6-03) + a from-repo-root `dotnet --version` check cover both the pin and the muxer-resolution
+  clause.
 - **Boundary**: TB-004.
 - **Statement (roll-forward)**: `rollForward` is set to **`latestPatch`** at the repo root (maintainer
-  decision 2026-07-25; reproducibility held by the committed lockfile + the build-time SDK assertion;
-  availability/security via patch roll-forward), rather than `disable`, so a security patch is not blocked
-  repo-wide (RS-UC-07). ARCHITECTURE **TB-004 is amended** to record this `latestPatch` exception for the
+  decision 2026-07-25) with **`allowPrerelease: false`**, rather than `disable`, so a security patch is not
+  blocked repo-wide (RS-UC-07). **Honest reproducibility claim (EXT6-03)**: the committed lockfile pins
+  PACKAGE versions (a reproducible restore) but does NOT make two different SDK patches byte-identical —
+  `latestPatch` selects the **highest installed qualifying patch** (Microsoft's global.json docs describe
+  exactly this and recommend `disable` when strict SDK↔lockfile lockstep is required:
+  https://learn.microsoft.com/en-us/dotnet/core/tools/global-json). This gate deliberately trades exact-SDK
+  reproducibility for security-patch availability, **bounded** to feature-band 3xx `>= 10.0.302` with
+  prerelease excluded; the build-time band assertion records the actual resolved SDK so the receipt cites
+  what ran. ARCHITECTURE **TB-004 is amended** to record this `latestPatch` exception for the
   repo-root `global.json` (the spike's `disable` invariant is unchanged; RS-240/EXT2-06/DC-MED). The
   build-time assertion checks membership of the resolved `NETCoreSdkVersion` in the pinned patch-band, not
   exact-only equality, consistent with `latestPatch`.
@@ -730,12 +783,17 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
 ### INV-017: The gate is WIRED to run from clean in CI via a runnable script (not a grep, not deferred)
 - **Type**: must · **Category**: security
 - **Statement**: an **executable CI job** runs the gate **from clean** (`rm -rf spikes/dafny-compat/out/`,
-  EXT2-11) with the INV-014 TRX guard and gates PRs — landed as part of GREEN, NOT deferred. **The from-clean
-  invocation + TRX executed-count guard are extracted into a runnable script** (the ARCHITECTURE
-  `reference-ci-provenance` "or its extracted script") that a test **executes verbatim from a clean
-  checkout** — asserting the script's behavior, NOT merely `Assert.Contains(command, workflow.yml)`, because
-  a YAML-presence assertion is a doc-grep (AP-011) and the exact PMB-001 trap (INV-017/RS-253/RT-H6/DC-MED).
-  A built-but-grep-asserted gate is the PMB-001/PMB-002 deferred-net class. EA-005 notes this job assumes a
+  EXT2-11) and gates PRs — landed as part of GREEN, NOT deferred. **The canonical operator + CI command is the
+  committed runnable script `<GATE-SCRIPT>` (INV-014/INV-012, EXT6-01)**: it runs `dotnet test <AGGREGATOR>
+  --logger trx` from clean, validates the TRX executed-count guard, renders the INV-012 status to stdout, and
+  returns the final gate exit code. **CI executes `<GATE-SCRIPT>` DIRECTLY** — the primary from-clean
+  execution and the real evidence, NOT merely `Assert.Contains(command, workflow.yml)` (a doc-grep, AP-011 /
+  the exact PMB-001 trap; INV-017/RS-253/RT-H6/DC-MED). The **verbatim-behavior assertion** lives in the
+  **out-of-suite reference-CI lane** (NOT inside `<AGGREGATOR>`'s discovered suite) and runs `<GATE-SCRIPT>`
+  in a subprocess under a **re-entry sentinel** (e.g. `CORRECTED_GATE_INNER=1`) so the script's inner `dotnet
+  test <AGGREGATOR>` never re-triggers the wrapper — an in-suite xUnit test invoking its own enclosing script
+  would recurse (EXT6-01), which is why it is deliberately NOT in the suite. A built-but-grep-asserted gate is
+  the PMB-001/PMB-002 deferred-net class. EA-005 notes this job assumes a
   network-connected CI (nuget.org restore); an air-gapped lane needs a committed/cached package store.
 - **Guards against**: AP-002, AP-021, AP-011, AP-020. · **Enforcement**: a committed `.github/workflows` gate
   job + its extracted from-clean script, whose **execution** (not just presence) is asserted verbatim from a
@@ -856,9 +914,15 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
   path; NEVER the variance `run-report.sample.json`, RS-210); P2 `test/manifests/phase-0.0-completion.json`;
   P3 `test/attestations/inv010-determinism.json` (durable + provenance-bound, INV-010).
 - **DD-003 (the atomic P1 flip — a STAGE-PARTITIONED normative migration manifest)**: a machine-readable
-  **migration manifest** committed in the carrier lists **every exact parent/ADR anchor, its replacement,
-  and its stage**, and a gate enforces **set-equality** between the manifest and the sites it discovers on
-  disk (an omitted or stale site fails; RS-222/RS-223/EXT2-03/R3-I4). **The manifest is the single canonical
+  **migration manifest** committed in the carrier lists **every exact parent-spec anchor by `{id, file}`**;
+  per EXT5-01 each row stores `stage_before_sha256` + `stage_after_sha256` where the **after-digest IS the
+  replacement** (its content hash — no replacement string is stored) and the **stage is NEVER stored per row**
+  (it is derived globally from committed `P1.satisfied`; EXT5-01/EXT6-04). A gate enforces **set-equality**
+  between the manifest and the current-state anchors it discovers **in `phase-0-1-worker.md`** (an omitted or
+  stale site fails; RS-222/RS-223/EXT2-03/R3-I4). **The `docs/adr/ADR-0001` `adr_lint` change (B13) is
+  EXPLICITLY OUT of this anchor scan (EXT6-04)** — it is not a current-state anchor; its Stage-B edit (adding
+  `status`/`supersedes`/`superseded_by`) is verified separately by INV-008's own ADR parse (the terminal rule
+  + compiled-registry set-equality), so the manifest's discovery scope is parent-spec anchors ONLY. **The manifest is the single canonical
   site list** — the Metadata `Impacts` line and the "Packages Affected → parent spec" bullet reference it
   and do NOT re-enumerate; a **meta-test asserts Metadata `Impacts` and Packages-Affected each contain the
   manifest REFERENCE and maintain NO local site list** (EXT4-05: there is ONE list — the manifest — not three
