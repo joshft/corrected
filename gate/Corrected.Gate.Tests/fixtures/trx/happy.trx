@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- INV-014 guard-self-test fixture: HAPPY. Executed count above the floor and the
+     named fixtures (representative INV-005 rows + INV-008 P1 cases + the
+     committed-state test) each Passed. The out-of-suite guard MUST exit zero. -->
+<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <ResultSummary outcome="Completed">
+    <Counters total="120" executed="120" passed="120" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+  </ResultSummary>
+  <Results>
+    <UnitTestResult testName="Corrected.Gate.Tests.Inv005VerdictTableTests.Null_false_true_is_Fail" computerName="ci-runner" outcome="Passed" />
+    <UnitTestResult testName="Corrected.Gate.Tests.Inv005VerdictTableTests.Null_false_false_is_consistent" computerName="ci-runner" outcome="Passed" />
+    <UnitTestResult testName="Corrected.Gate.Tests.Inv008P1ProbeTests.PreMigration_adr_is_schema_incomplete" computerName="ci-runner" outcome="Passed" />
+    <UnitTestResult testName="Corrected.Gate.Tests.Inv006OrchestrationTests.StageA_committed_block_is_Pass_BLOCKED" computerName="ci-runner" outcome="Passed" />
+  </Results>
+</TestRun>

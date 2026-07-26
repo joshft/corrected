@@ -1,0 +1,3 @@
+# INV-011 fixture (QA-002): a committed MSBuild auto-response file. Its mere presence in a
+# closure dir injects switches into every build invoked here and FAILS the presence policy.
+-property:InjectedFromResponseFile=true

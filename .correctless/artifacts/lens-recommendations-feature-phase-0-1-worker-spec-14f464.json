@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "branch": "feature/phase-0.1-worker-spec",
+  "recommended_lenses": [
+    {
+      "lens_name": "enumeration-vs-closure",
+      "rationale": "DESIGN §8.3 explicitly states a lexical/enumerated scan cannot be the certification mechanism, yet the highest-value invariants (honesty, fragment allowlist, protected surface, path/package gates) are all enforced by one-fixture-per-known-class. Enumeration is only sound if the complement is provably empty over a closed allowlist — which the spec never proves. This is the reward-hack heart of an assurance tool.",
+      "focus_areas": [
+        "INV-024 bypass set must be derived as (INV-020 allowlist intersect full DESIGN §8.3 class list), with an exhaustiveness argument over the closed fragment, not a hand-picked list",
+        "honesty scan recurses into nested proof blocks (assert-by, calc hints, forall bodies) — the assert Post by { assume false; } bypass through an allowed edit class",
+        "INV-020/INV-015/INV-019/INV-008 test the ALLOWLIST complement (reject-by-construction), not an enumerated blocklist",
+        "real-producer dafny audit fixture that reports a finding at exit-0 (exit-status-only check is fail-open)"
+      ],
+      "severity_guidance": "CRITICAL if any in-fragment construct can produce a proposition/assumption not scanned, or if a bypass reaches certification; HIGH if the enforcement is enumerated with no closure proof; MEDIUM if closure is argued but a fixture class is missing.",
+      "source_agent": "red-team,testability",
+      "source_finding": "RS-005",
+      "source_finding_summary": "INV-024 honesty policy enumerated; DESIGN §8.3 says enumeration cannot certify; nested-assume + audit-exit-0 + subset-of-§8.3 bypasses."
+    },
+    {
+      "lens_name": "fail-closed-branch-reachability",
+      "rationale": "Multiple fail-closed guarantees are structurally unreachable in the shipping state: the readiness gate's READY-rejection branch is dead code (committed block is BLOCKED-all-false), the predicate's empty-set conjuncts pass when the finder never ran, and the completed-phase plan is self-declared. A guard whose rejecting branch never executes is AP-002 with green coverage.",
+      "focus_areas": [
+        "INV-002 rejection + evidence-re-derivation path exercised via SUPPLIED/synthetic READY blocks, not only the committed file",
+        "INV-027 empty-negative conjuncts (unapproved_logical_assumptions=∅) gated on a positive attestation + honesty_policy_executed, never a default-empty pass",
+        "INV-030 expected-phase set derived from the immutable lock, never self-declared",
+        "every 'fail-closed' invariant has a negative fixture that FAILS when the guard is removed (AP-010 precondition assertion)"
+      ],
+      "severity_guidance": "CRITICAL if a fail-closed branch can never execute in any test (dead code) or an empty/absent set is read as pass; HIGH if the branch is reachable only after a real precondition discharges; MEDIUM if reachable but under-fixtured.",
+      "source_agent": "red-team,testability",
+      "source_finding": "RS-002",
+      "source_finding_summary": "INV-002 READY-rejection branch is dead code as specified; empty-set-means-pass; self-declared plan."
+    },
+    {
+      "lens_name": "from-clean-evidence-binding",
+      "rationale": "The readiness gate claims bootstrappability from clean, but 'clean checkout' is not clean (committed spikes/dafny-compat/out/ ships in every clone), and the claim silently assumes every probe degrades to satisfied=false rather than throwing on an absent artifact — while two of three artifacts do not exist yet. This is the exact PMB-002/AP-021 circular-gate class the project already hit.",
+      "focus_areas": [
+        "define clean = git clone PLUS rm -rf out; stop committing out/; bind own-product probes to RunContext not on-disk prior-run roots",
+        "pin and test: every evidence probe returns satisfied=false with a typed reason (never throws/skips) when its target artifact is absent or pending",
+        "P2 completion-manifest resolver and P3 lane probe exercised against a MISSING-artifact fixture from a fresh clone",
+        "OQ-005: P2/DF-003 discharge must not require regenerating frozen spike evidence that cannot reconverge (a freeze with no affordance is AP-005)"
+      ],
+      "severity_guidance": "HIGH if a probe can pass on committed leaked state or throw from clean; HIGH if P2 is structurally undischargeable; MEDIUM if the from-clean contract is unstated but no concrete leak path exists.",
+      "source_agent": "assumptions,red-team",
+      "source_finding": "RS-004",
+      "source_finding_summary": "Committed out/ means clone != clean; absent-evidence-must-not-throw unpinned; OQ-005 frozen-evidence deadlock."
+    },
+    {
+      "lens_name": "determinism-substrate",
+      "rationale": "Every reproducibility/assurance claim (receipt core, fingerprints, vacuity) rests on determinism the spec under-scopes: EA-003 covers only resource units, the pinned solver seed is omitted from the locked plan, JCS does not order arrays, and P3's determinism runner may be a different platform than the shipped RID. Determinism claims are unfalsifiable by two-run sampling.",
+      "focus_areas": [
+        "INV-022 must include the pinned solver seed(s) as a fixed, receipt-recorded element (DESIGN pins random seeds; the spec omits them)",
+        "INV-028 receipt core as an ALLOWLIST of normative-tagged fields (deny-by-default), and every core array has a defined total order (no HashSet/Dictionary/parallel-LINQ enumeration)",
+        "INV-018/INV-039 determinism run over the accept corpus with process hash-seed perturbation, not a single-fixture repeat",
+        "P3/INV-018 runner RID bound to EA-001's built RID, or scoped differential-only in the residual ledger"
+      ],
+      "severity_guidance": "HIGH if an unpinned seed or unordered collection can change a receipt_core_digest, or determinism is attested on a non-shipped platform; MEDIUM if determinism is under-sampled but structurally ordered.",
+      "source_agent": "assumptions,red-team,testability",
+      "source_finding": "RS-017",
+      "source_finding_summary": "Solver seed omitted from locked plan; receipt-core blocklist + unordered arrays; P3 platform tension."
+    },
+    {
+      "lens_name": "provenance-trust-anchor",
+      "rationale": "The release-provenance group pins the Cosign TOOL VERSION but not the verification IDENTITY (issuer/subject/key), enforces verify-before-run only in the reference-CI YAML (local certify has no gate), and lets core-equality be mistaken for authenticity. Whoever controls the trust root forges provenance a version-pinned Cosign accepts.",
+      "focus_areas": [
+        "pin the Cosign verification identity (keyless issuer+subject, or public key + trust root), not just the tool version; mismatch fail-closed",
+        "make provenance a fail-closed precondition IN THE BINARY (verify a signed bootstrap attestation with a pinned key, non-recursive), not only a CI-config assertion",
+        "keyless-vs-key-backed Cosign mode declared, with its env/network/clock prerequisites (EA-006)",
+        "document that receipt-core equality is a reproducibility property, never a standalone trust token"
+      ],
+      "severity_guidance": "HIGH if provenance can be forged with a version-pinned-but-identity-unpinned verifier, or local certify has no provenance gate; MEDIUM for the core-equality-vs-authenticity documentation gap.",
+      "source_agent": "red-team,assumptions",
+      "source_finding": "RS-021",
+      "source_finding_summary": "Pinned Cosign version != pinned trust anchor; local certify has no provenance gate; core-equality != authenticity."
+    },
+    {
+      "lens_name": "actionable-diagnostics",
+      "rationale": "The spec is rigorous on fail-closed correctness but consistently under-specifies the human-facing feedback on the far side of every fail-closed edge. 'Typed reason' is never pinned to a closed vocabulary with a human message and offending locus; non-success terminals carry no remediation class; the BLOCKED gate and honest-BLOCKED state emit no actionable message. INV-002's 'name the offending precondition' discipline is never generalized to the surfaces developers actually hit.",
+      "focus_areas": [
+        "RejectionReason as a total closed-vocabulary schema {code, human_message, offending_locus}, added to INV-029's totality set",
+        "remediation_class on every non-success terminal (fix_infrastructure | raise_resource_limit_and_relock | fix_candidate | escalate_spec)",
+        "INV-036 actionable BLOCKED message + a readiness-status reporter rendering each precondition -> discharge -> evidence-state",
+        "corrected explain scope decision (human recovery renderer) — accept into scope or defer with the gap in the residual ledger"
+      ],
+      "severity_guidance": "Advisory lens (never gates progression). MEDIUM where a typed state is unactionable to the user who must recover from it; LOW for cosmetic message wording.",
+      "source_agent": "ux",
+      "source_finding": "RS-035",
+      "source_finding_summary": "Typed reasons not a closed vocabulary; no remediation_class; BLOCKED gate/state emits no actionable message."
+    }
+  ]
+}

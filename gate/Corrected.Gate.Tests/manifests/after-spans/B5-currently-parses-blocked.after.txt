@@ -1,0 +1,1 @@
+a separate test asserts the committed file currently parses to P1=true, P2/P3 false -> BLOCKED (post-flip)

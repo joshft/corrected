@@ -1,0 +1,8 @@
+{
+  "//": "INV-016 (RED SCAFFOLD placement): the SPEC requires a REPO-ROOT global.json with rollForward: latestPatch + allowPrerelease:false. STAGE-A scope boundary forbids creating files outside gate/, so this gate-local pin stands in for RED; the INV-016 tests assert a repo-root global.json and will FAIL (RED) until GREEN adds it. sdk.version is semantically synced with spikes/dafny-compat/global.json (10.0.302).",
+  "sdk": {
+    "version": "10.0.302",
+    "rollForward": "latestPatch",
+    "allowPrerelease": false
+  }
+}

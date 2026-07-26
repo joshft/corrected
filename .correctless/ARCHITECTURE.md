@@ -17,10 +17,108 @@ tested, assumed, and still trusted.
 
 | Component | Planned location | Purpose |
 |-----------|------------------|---------|
-| C# core worker | TBD (monorepo package) | Deterministic policy/acceptance core on .NET 10 LTS. Owns run state, intake/lock resolution, ownership classification, verification, acceptance evaluation, receipt emission. Uses pinned Dafny SDK packages (`DafnyCore`, `DafnyPipeline`, …). |
-| `corrected` CLI | TBD (part of core distribution) | Reference acceptance implementation: `corrected init`, `corrected check`, `corrected certify`, etc. Runnable with no model, Node.js, TypeScript, or Pi session. |
-| TypeScript Pi adapter | TBD (monorepo package) | Small integration package realizing the core-defined methodology inside the Pi agent runtime. Manages Pi lifecycle, cancellation, progress, proposal transport. Integration code only — not a second policy implementation. |
-| Worker↔adapter protocol | Defined by core schemas | Strict LF-delimited JSON over stdin/stdout; versioned commands/events/results; large artifacts by content-addressed descriptor. |
+| C# core worker | `src/Corrected.Core/` | Deterministic policy/acceptance core on .NET 10 LTS. Owns run state, intake/lock resolution, ownership classification, verification, acceptance evaluation, receipt emission. Uses pinned Dafny SDK packages for the selected Route A (`DafnyCore`, `DafnyDriver`, `DafnyLanguageServer`, …; `DafnyPipeline` is NOT loaded on Route A — ADR-0001/DD-007). |
+| DafnyAdapter | `src/Corrected.DafnyAdapter/` | The single Dafny SDK boundary (PAT-001) — the sole package that imports Dafny/Boogie assemblies and hosts the in-process solver. Core reaches Dafny only through it (INV-006/034/035). |
+| `corrected` CLI | `src/Corrected.Cli/` | Reference acceptance implementation: `corrected init`, `corrected check`, `corrected certify`, `corrected explain`. Runnable with no model, Node.js, TypeScript, or Pi session. |
+| Test/build-gate carrier (NOT shipped) | `gate/`, `test/` | Homes the readiness-gate checker (INV-001/002/036), the append-only schema-version *history* registry + meta-test (INV-044), and the from-clean / path-scoped gates. Kept OUT of the shipped core/CLI so the gate can enforce itself without tripping its own production-code ban (INV-036). |
+| TypeScript Pi adapter | `adapters/pi/` (Phase 1) | Small integration package realizing the core-defined methodology inside the Pi agent runtime. Manages Pi lifecycle, cancellation, progress, proposal transport. Integration code only — not a second policy implementation. |
+| Worker↔adapter protocol | Defined by core schemas (Phase 1) | Strict LF-delimited JSON over stdin/stdout; versioned commands/events/results; large artifacts by content-addressed descriptor. |
+
+> **Planned paths, not artifacts.** `src/` is empty; the locations above are the
+> design-stage layout the Phase 0.1 entrypoints bind to. The core-worker Dafny SDK
+> package set reflects the DD-007 propagation for the selected Route A (`DafnyDriver`
+> + `DafnyCore` + `DafnyLanguageServer`; `DafnyPipeline` not loaded), discharged with
+> ADR-0001's promotion to accepted (DF-002, 2026-07-24); P1's component-table gate
+> (INV-003 enforcement-(b), in the build-gate carrier) re-checks it against
+> `route-a.json`.
+
+**Route-A production-assembly set (machine-readable — authoritative for P1's
+component-table propagation check, readiness-gate-carrier INV-008(b)/EXT2-08).** P1
+asserts **exact set-equality** of `route-a.json`'s loaded Route-A Dafny-family set
+against this pinned set (so reverting this block, or dropping an anchor, FAILS P1 —
+the check proves *propagation*, not merely "LanguageServer present / Pipeline absent"):
+
+<!-- correctless:route-a-production-assemblies:start -->
+```yaml
+route: A
+dafny_family_loaded:
+  - DafnyCore        # anchor
+  - DafnyDriver      # anchor
+  - DafnyLanguageServer  # in route-a.json assemblies[], NOT anchors
+dafny_family_absent:
+  - DafnyPipeline    # NOT loaded on Route A (ADR-0001/DD-007)
+```
+<!-- correctless:route-a-production-assemblies:end -->
+
+## Entrypoints
+
+> **Design-stage (discharges OQ-002 of the Phase 0.1 worker spec).** `src/` is
+> empty; the handlers/scopes below are the **planned** contract that the Phase 0.1
+> spec's `[integration]` invariants bind their Entry/Through/Exit to. No code exists
+> yet — these are commitments, not artifacts. Defined greenfield-additively by
+> `/carchitect` (2026-07-24) without disturbing the frozen PAT/PROHIBIT/TB entries.
+
+<!-- correctless:entrypoints:start -->
+```yaml
+- name: "corrected-cli"
+  type: cli
+  handler: "src/Corrected.Cli/Program.cs:Main"
+  test_via: "exec the PUBLISHED self-contained `corrected` binary VERBATIM — same argv[0] form and working directory the docs specify (AP-020; never a normalized/absolute-path proxy) — asserting init/check/certify/explain behavior"
+  scope:
+    - "src/Corrected.Cli/**"
+- name: "corrected-core"
+  type: library
+  handler: "src/Corrected.Core/CertificationRun.cs:Execute"
+  test_via: "public API import from the integration test project — drive the in-process certification pipeline (intake -> lock -> ownership/protected-surface -> verify -> honesty -> vacuity -> predicate -> receipt) over a fixture lock + subject; assert the fixture fails BEFORE the guard runs (AP-010)"
+  scope:
+    - "src/Corrected.Core/**"
+- name: "dafny-adapter"
+  type: library
+  handler: "src/Corrected.DafnyAdapter/DafnyAdapter.cs:Resolve"
+  test_via: "public API import within the adapter's AssemblyLoadContext, plus a static import-boundary scan and a runtime loaded-assembly assertion (INV-006/034) and the solver-identity / locked-restore / config-isolation tests carried from the spike (INV-035)"
+  scope:
+    - "src/Corrected.DafnyAdapter/**"
+- name: "readiness-build-gate"
+  type: cli
+  handler: "gate/Corrected.Gate.Kernel/ReadinessGate.cs:EvaluateReadiness (pure kernel + DTOs in the isolated I/O-free Corrected.Gate.Kernel project, EXT6-05: (ReadinessBlock, probeResults) -> {Pass|Fail, offending}) + a separate probe orchestrator (IEvidenceProbe/ProbeResult) and a shipped-closure ProductionSurfaceScanner in gate/Corrected.Gate/"
+  test_via: "from a CLEAN checkout (git clone + `rm -rf spikes/dafny-compat/out/` — the correct path; there is no top-level out/, and that tree is gitignored) run the DOCUMENTED command — the committed runnable gate script `gate/run-readiness-gate.sh` (<GATE-SCRIPT>, EXT6-01/EXT7-01; NOT bare `dotnet test`, which swallows the banner and runs no executed-count guard), which internally runs `dotnet test <AGGREGATOR> --logger \"trx;LogFileName=gate.trx\"`, then validates the TRX, renders the INV-012 status to stdout, and returns the final gate exit code — where <AGGREGATOR> is the single pinned constant `gate/Corrected.Gate.slnx` iff an INV-014 pre-flight proves `.slnx` on SDK 10.0.302, else the classic `.sln` fallback (a `.slnx`/`.sln` aggregator over gate/Corrected.Gate + gate/Corrected.Gate.Kernel + gate/Corrected.Gate.Tests + gate/Corrected.Gate.Lint). Parse the TRX so zero-discovery / a below-floor executed count FAILS — the executed-count guard lives OUTSIDE the discovered suite, in an EXTRACTED RUNNABLE SCRIPT executed verbatim from clean (never a YAML/README grep — the PMB-001 trap). It drives the pure kernel over the committed SUPPLIED-(block, probeResults) fixture table (BLOCKED-all-false -> Pass; READY+satisfied:false/evidence:null/refuted-probe/unresolvable-reference -> Fail; indeterminate -> Fail) AND the real probe orchestrator (Stage A pre-migration: P1 evidence-schema-incomplete false; Stage B post-migration: P1 true; P2/P3 false-on-absent -> BLOCKED either way). It also homes the INV-036 production-surface SHIPPED-CLOSURE scan (out-of-process pinned-SDK build, not a path scan). NOTE: the INV-044 history-registry meta-test is a DEFERRED extension of this entrypoint (lands with Phase-0.1 certification runtime, readiness-gate-carrier DD-005) — NOT part of this carrier's required suite"
+  scope:
+    - "gate/**"
+    - "test/**"
+    - "global.json"
+    - "spikes/dafny-compat/**"
+    - ".correctless/specs/phase-0-1-worker.md"
+- name: "reference-ci-provenance"
+  type: cli
+  handler: ".github/workflows/phase-0-1-reference-ci.yml:verify-before-run"
+  test_via: "run the reference-CI lane (or its extracted script) with the PINNED external SLSA/signature verifier + pinned Cosign identity against a tampered-artifact fixture (INV-031/032/033), plus the determinism lane that emits a counted ran/skipped outcome with observed cores + RID (INV-005 / P3)"
+  scope:
+    - ".github/workflows/**"
+    - "gate/Corrected.Provenance/**"
+```
+<!-- correctless:entrypoints:end -->
+
+### Entrypoint → invariant-group map (design-stage)
+
+- **corrected-cli** — the operator surface and the AP-020 verbatim-invocation home; `corrected explain` renders receipts / INV-038 failure artifacts to human-actionable text (INV-040).
+- **corrected-core** — the in-process certification pipeline; Entry/Through/Exit for the bulk of the `[integration]` invariants: intake/lock/identity (INV-007..013), ownership/protected-surface (INV-014..018), fragment gate + verification + resource plan + watchdog (INV-019..023), honesty/vacuity (INV-024..026), success-predicate/receipt/schemas (INV-027..030, INV-041/042/047), and INV-037/038/039/045/046/048. INV-044's **runtime** supported-version dispatch table ships here.
+- **dafny-adapter** — the single Dafny boundary (PAT-001 / PROHIBIT-002); INV-006/034/035.
+- **readiness-build-gate** — the test/build-gate carrier; INV-001/002/003/004/036/043. INV-044's append-only **history** registry + meta-test is *homed* here but is a **deferred extension** built with Phase-0.1 certification runtime (readiness-gate-carrier DD-005), NOT part of the carrier's initial required suite. The readiness gate lives here so it can enforce itself without tripping its own production-code ban.
+- **reference-ci-provenance** — the release-provenance / determinism lane (TB-003); INV-005/031/032/033.
+
+### Production-surface partition (INV-036, deny-by-default)
+
+INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can fail a PR that lands production code while `implementation_readiness.status = BLOCKED`:
+
+- **Production surface** (deny-by-default — non-trivial content here while BLOCKED trips PRH-008): `src/Corrected.Core/**`, `src/Corrected.DafnyAdapter/**`, `src/Corrected.Cli/**`. Any NEW top-level `src/` package is production until explicitly listed as carrier.
+- **Exempt carrier / test / CI surface** (may carry content while BLOCKED): `gate/**`, `test/**`, `.github/workflows/**`, and `**/*.Tests/**` — but the **shipped compilation closure overrides path exemption** (spec-review EXT-04/RS-RT-04): `**/*.Tests/**` is exempt ONLY for an *independent top-level test project* neither referenced nor linked by any shipped `src/Corrected.*` project. A `*.Tests` directory, a linked `<Compile Include>`, a generated/analyzer-emitted source, or a first-party binary `<PackageReference>`/`<Reference>` that lands *inside* a shipped project's built closure is **production**, not exempt — INV-011 enforces over the real MSBuild/Roslyn closure (Compile items + project/assembly references + generated sources), not a path/content scan. Note the split from INV-044: its runtime dispatch table is production (`src/Corrected.Core/**`); only its append-only history registry + meta-test are exempt (`gate/**`).
+
+### Design decisions (this `/carchitect` session, 2026-07-24)
+
+- **Mode:** greenfield-additive — preserved the entire existing doc (frozen PAT-001..004, PROHIBIT-001/002, TB-001..004, Conventions, Known Limitations); added only the two component rows, the Entrypoints block, the invariant-group map, and the surface partition.
+- **Planned .NET layout:** `src/Corrected.Core` (core worker) + `src/Corrected.DafnyAdapter` (sole Dafny boundary) + `src/Corrected.Cli` (`corrected`); non-shipped `gate/` (readiness + build gates) and `test/` (integration tests); `.github/workflows/` (reference CI). Paths are commitments, not artifacts.
+- **Entrypoint granularity:** one per invariant-testing surface (CLI exec, in-process core API, adapter boundary, readiness/build gate, reference-CI lane) so every `[integration]` invariant has a concrete Entry/Through/Exit.
+- **DD-007 (applied later, not in this session):** the component-set change (drop `DafnyPipeline`, add `DafnyDriver` + `DafnyLanguageServer` in the core-worker row) was applied on 2026-07-24 when ADR-0001 was promoted to accepted (DF-002); P1's component-table gate (INV-003 enforcement-(b)) re-verifies it in the build-gate carrier.
 
 ## Design Patterns
 
@@ -73,6 +171,23 @@ tested, assumed, and still trusted.
 - Violates it: prose-only tool restrictions, comment-documented protocol
   constraints with no validator, review checklists with no gate.
 
+### PAT-005: Readiness-gate block checked by test; the exempt carrier enforces itself
+- A machine-readable `implementation_readiness` block (in a committed spec) is
+  the single source of truth for whether production implementation may land; a
+  fail-closed gate test re-derives executable evidence for each precondition and
+  refuses READY without it (never trusting the declared flag). The gate + the
+  production-surface ban live in the **non-shipped exempt carrier** (`gate/`,
+  `test/`) so the enforcement can run without tripping its own production-code
+  ban (INV-036 self-enforcement). Realizes PAT-004 for the readiness gate.
+- A precondition's `satisfied:true` flip is legitimate only when bound to a
+  passing gate; the block is never edited to READY/`satisfied:true` ahead of the
+  evidence the gate re-derives (spec-review parent-carrier-atomicity lens).
+- Violates it: trusting the `satisfied` flag without re-deriving evidence; homing
+  the gate in a shipped `src/` package; a committed `satisfied:true` with no
+  passing carrier test re-deriving it.
+- Registered by the readiness-gate-carrier feature
+  (`.correctless/specs/readiness-gate-carrier.md`, INV-002/004/005/011 + PRH-002).
+
 ## Prohibitions
 
 - **PROHIBIT-001**: The TypeScript adapter never owns run state, parses
@@ -110,9 +225,15 @@ tested, assumed, and still trusted.
   before use — locked-mode NuGet restore (content hashes) under a
   `<clear/>`-scoped single-source config, SHA-256-pinned solver assets
   installed outside ambient discovery locations, exact SDK pin with
-  roll-forward disabled — and evidence binds claims to the identities
-  actually loaded/executed, never merely referenced. Intake failure is
-  fail-closed: no verdict, never a silent fallback to ambient resolution.
+  roll-forward disabled (the repo-root Phase-0.1 `global.json` documents a
+  `rollForward: latestPatch` **exception** with `allowPrerelease: false` for
+  repo-wide security-patch availability — the committed lockfile pins PACKAGE
+  versions but does NOT make different SDK patches identical; `latestPatch` picks
+  the highest installed qualifying patch, bounded to feature-band 3xx >= 10.0.302,
+  and a build-time band assertion records the resolved SDK; see the Phase-0.1
+  extension below and Microsoft's global.json docs, EXT6-03) — and evidence binds
+  claims to the identities actually loaded/executed, never merely referenced.
+  Intake failure is fail-closed: no verdict, never a silent fallback to ambient resolution.
 - Violated when: a floating/range version resolves; a machine-level source,
   environment variable, or inherited MSBuild props alters resolution; an
   ambient solver answers instead of the pinned one; a verdict or receipt
@@ -135,6 +256,68 @@ tested, assumed, and still trusted.
   `.correctless/specs/dafny-compat-spike.md`, review finding RS-013); DD-006
   there makes this boundary a standing obligation for every future
   toolchain-bump spec.
+- **Phase 0.1 extension (readiness-gate carrier):** the gate adds a third-party
+  YAML parser (`YamlDotNet`, exact-pinned + locked), the **analysis toolchain**
+  (`Microsoft.CodeAnalysis.CSharp` ONLY, pinned + locked — **no `Microsoft.Build.*`
+  PackageReference** (EXT4-04); INV-011 runs the shipped-closure scan **out-of-process
+  against the pinned SDK's MSBuild**, asserted via `dotnet msbuild -version`, never an
+  in-process `Microsoft.Build`/`MSBuildLocator` resolving ambient machine MSBuild), and a
+  **repo-root** `global.json` (exact SDK pin, `rollForward: latestPatch` per the
+  documented exception above) to this boundary — the general "any dev-time
+  third-party NuGet/toolchain artifact" case beyond the Dafny/Z3/SDK set above.
+  Exercised at: `gate/NuGet.Config` (`<clear/>` single-source), a per-project `packages.lock.json`
+  (one per gate project — Gate/Kernel/Tests/Lint; INV-015),
+  `gate/Directory.Build.props`, the repo-root `global.json` (its `sdk.version` kept
+  **semantically synced** — NOT byte-identical — with `spikes/dafny-compat/global.json`
+  by a version-field sync test; `rollForward`/comments legitimately differ). See
+  `.correctless/specs/readiness-gate-carrier.md` INV-011/INV-015/INV-016/BND-002.
+
+### TB-005: (reserved) Source-byte intake — untrusted `.dfy` source → policy TCB
+- **Reserved by the parent** `phase-0-1-worker.md` (BND-003) for arbitrary handed
+  `.dfy` source-byte intake into the policy TCB; to be registered here by the
+  parent's own `/cupdate-arch`. It is a **distinct boundary** from the readiness/ADR
+  intake boundary (TB-006 below). The readiness-gate carrier does NOT define TB-005;
+  the v3 carrier amendment mistakenly registered the readiness boundary as TB-005 and
+  mislabeled it "Parent BND-003" — corrected 2026-07-25 to TB-006 (readiness-gate
+  round-2 EXT2-09). Parent BND-003 anchors: snapshot-first (O_NOFOLLOW) + path grammar
+  + UTF-8 + single-file/fragment gate; typed `RejectionReason`; fail-closed.
+
+### TB-006: Readiness-block / ADR / evidence intake / tamper boundary
+- The committed `implementation_readiness` block (in
+  `.correctless/specs/phase-0-1-worker.md`) and the committed ADR/evidence the P1
+  probe reads (`docs/adr/ADR-0001-*.md`, the pinned canonical evidence sample,
+  `route-a.json`) are **untrusted, tamperable input** to the readiness gate:
+  anyone with commit access can duplicate the block, inject keys, flip a
+  `satisfied` flag, forge an ADR claim or its decision fields, strip an evidence
+  sample's probe results, or repoint an evidence path. Crosses:
+  committed markdown/JSON → the gate's parse + verdict decision. (Distinct from the
+  parent's TB-005 source-byte boundary; the parent flagged its own BND-003 for TB-005.)
+- Invariant: exactly one bounded readiness block; an AST-hardened,
+  closed-vocabulary, tag/anchor/alias-rejecting strict parse into a validated
+  immutable domain type; the **same hardening machinery** applied to the ADR
+  `adr_lint` block via a **distinct `AdrLintBlock` DTO** (no reuse of the spike's
+  permissive line-scanner for a trust-boundary decision); the ADR's decision fields
+  (`selected_route == A`, `verdict == COMPATIBLE`) asserted in the authoritative path;
+  each precondition's evidence re-derived and cross-checked against the declared flag;
+  the P1 evidence path pinned to the **canonical** sample (not taken from the tamperable
+  ADR field) and the evidence-schema integrity anchored to a **compiled** constant; the
+  COMPATIBLE recompute guarded by **keyed-set cardinality equality** against the pinned
+  probe manifest (no vacuous `∀`); supersession discovered by a **terminal rule** over a
+  **compiled ADR registry** asserted **set-equal** to the ADRs carrying an `adr_lint` block on
+  disk (an unregistered on-disk block fails closed — "register this ADR" — never ignored; the
+  round-2 "pinned allowlist that ignores out-of-list ADRs" was itself the bypass, reversed by
+  R3-B4/EXT4-04). Intake failure is fail-closed
+  (reject / BLOCKED), never a silent pass.
+- Violated when: a duplicate/oversize block or a tag/anchor/alias parses; a
+  forged second ADR route-claim / forged decision fields / a superseding ADR is missed;
+  a stripped/plan-shrunk evidence sample passes the recompute; a P1 evidence
+  path is read from the ADR field or resolved by glob (a leaked `out/**` copy);
+  the ADR block is parsed by the non-hardened spike scanner.
+- Exercised at (Phase 0.1, readiness-gate carrier): `gate/Corrected.Gate/**`
+  (parser + probes + scanner) + `gate/Corrected.Gate.Kernel/**` (the isolated pure kernel + DTOs, EXT6-05)
+  + `gate/Corrected.Gate.Lint/**` and its `*.Tests` fixture corpus.
+- Test: `.correctless/specs/readiness-gate-carrier.md` INV-001/002/003/005/008 +
+  BND-001/BND-003 + the STRIDE-for-TB-006 section. Registered by that feature.
 
 ## Conventions
 
@@ -152,8 +335,8 @@ tested, assumed, and still trusted.
   **COMPATIBLE** (suite-attested, 274/274): Route A (`DafnyDriver` /
   `CliCompilation`, additionally loading `DafnyLanguageServer`) and Route B
   (hand-assembled `DafnyCore` + `DafnyPipeline` + `Boogie.ExecutionEngine`).
-  Recorded in provisional `docs/adr/ADR-0001-dafny-integration-boundary.md`.
-  Route **A** is the selected boundary; formal ADR promotion
-  (provisional → accepted) and the DD-007 component-table propagation remain
-  pending as the final Phase 0.0 feature's obligation (DF-002). Later Phase 0.0
+  Recorded in `docs/adr/ADR-0001-dafny-integration-boundary.md`, promoted to
+  **accepted** on 2026-07-24 (DF-002). Route **A** is the selected boundary; the
+  DD-007 component-table propagation (drop `DafnyPipeline`, add `DafnyDriver` +
+  `DafnyLanguageServer` in the core-worker row above) is applied. Later Phase 0.0
   gates (bullets 4–12) are still unstarted.

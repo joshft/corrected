@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-004 negative fixture (B4): a "kernel" project that DECLARES a
+       PackageReference. KernelPurityScanner.KernelHasNoProjectOrPackageReference must
+       REJECT it (return false) — the project-graph bound must not rest on convention
+       (EXT7-04: a symbol scan alone would miss a ProjectReference to an I/O-capable
+       orchestrator that is never symbolically used). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>BadKernel.HasReference</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The declared reference the project-graph meta-test must reject. -->
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,36 @@
+{
+  "manifest_version": 1,
+  "note": "DD-003 stage-partitioned normative migration manifest. Closed DISCRIMINATED UNION on `kind` (EXT9-01): digest rows {id,file,kind:digest,stage_before_sha256,stage_after_sha256} name a canonical after-span fixture under manifests/after-spans/; the single STRUCTURAL row {id,file,kind:structural,stage_predicate} is B1's GREEN-assigned P1.evidence (no static after-digest). The manifest is the SOLE digest authority; the stage is NEVER stored per row (derived globally from committed P1.satisfied). Digests are REAL: stage_before_sha256 is the SHA-256 of the LF-normalized bytes between the id's paired current-state anchors in phase-0-1-worker.md (as extracted by MigrationManifest.DiscoverAnchors), and stage_after_sha256 is the SHA-256 of the committed after-span fixture (trailing newline stripped). A2/B5 are genuine before!=after P1-flip transitions; A6-no-entrypoint-yaml is an A-site whose current-state correction landed with the carrier (before==after), so the anchor's presence + digest is still enforced. No all-zero placeholders remain (Dd003 meta-test rejects them).",
+  "rows": [
+    {
+      "id": "A2",
+      "file": ".correctless/specs/phase-0-1-worker.md",
+      "kind": "digest",
+      "stage_before_sha256": "6d5daab29e8e0cd68020fcd24fe9df2eae8772f5b0fad3d3c8bf94f080b36a11",
+      "stage_after_sha256": "3953e80c952f7bf2a0aa6041a3a5037b37b14733b9f73d373894f6da25e24489",
+      "after_span_fixture": "manifests/after-spans/A2.after.txt"
+    },
+    {
+      "id": "A6-no-entrypoint-yaml",
+      "file": ".correctless/specs/phase-0-1-worker.md",
+      "kind": "digest",
+      "stage_before_sha256": "c17b23ad615ad2d500e66bed25a74512dbf9ad2bdb0e3578f7d8e155b8a79840",
+      "stage_after_sha256": "c17b23ad615ad2d500e66bed25a74512dbf9ad2bdb0e3578f7d8e155b8a79840",
+      "after_span_fixture": "manifests/after-spans/A6-no-entrypoint-yaml.after.txt"
+    },
+    {
+      "id": "B5-currently-parses-blocked",
+      "file": ".correctless/specs/phase-0-1-worker.md",
+      "kind": "digest",
+      "stage_before_sha256": "b1398a9bda7a63dcc4761c47c3f545301f404d9da9db50292ea8e195a06c9186",
+      "stage_after_sha256": "2b79da389acc5f286a7e3708f6fa2e62a7ae0d9531f5693c6e0e592d45fff6dd",
+      "after_span_fixture": "manifests/after-spans/B5-currently-parses-blocked.after.txt"
+    },
+    {
+      "id": "B1-p1-evidence",
+      "file": ".correctless/specs/phase-0-1-worker.md",
+      "kind": "structural",
+      "stage_predicate": "P1.satisfied == true AND P1.evidence == <the gate's own registered test id>"
+    }
+  ]
+}

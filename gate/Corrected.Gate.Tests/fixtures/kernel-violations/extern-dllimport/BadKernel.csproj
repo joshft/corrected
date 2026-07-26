@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-004 negative fixture (B4): extern/[DllImport] P/Invoke (EXT9-03). Scoped as
+       an ACCIDENTAL first-party bypass the extern-rejection catches; the check does
+       NOT claim to prove no-I/O against a determined P/Invoke (honest scope, EXT9-03). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>BadKernel.ExternDllImport</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,119 @@
+{
+  "note": "INV-007 SUPPLIED-(block, probeResults) kernel-branch corpus. Drives ReadinessGate.EvaluateReadiness through every INV-005 total-table row with CALLER-SUPPLIED inputs (not the live probes). The INV-007 coverage meta-test enumerates every row id below (a tested const set) and asserts each is present, so dropping a fixture fails the meta-test rather than silently greening. Expected verdict is Pass|Fail; offending names the precondition on Fail.",
+  "rows": [
+    {
+      "id": "null-false-false-consistent",
+      "desc": "evidence==null AND declared false AND actual false -> consistent (no fail). Stage-A current state.",
+      "block_status": "BLOCKED",
+      "precondition": { "id": "P1", "satisfied": false, "evidence": null },
+      "probe": { "satisfied": false, "referenceResolution": "Resolved" },
+      "expected_verdict": "Pass"
+    },
+    {
+      "id": "null-true-fail",
+      "desc": "evidence==null AND declared true -> Fail (a satisfied claim must cite evidence).",
+      "block_status": "BLOCKED",
+      "precondition": { "id": "P1", "satisfied": true, "evidence": null },
+      "probe": { "satisfied": true, "referenceResolution": "Resolved" },
+      "expected_verdict": "Fail",
+      "offending": "P1"
+    },
+    {
+      "id": "null-false-true-blocked-but-actually-satisfied",
+      "desc": "evidence==null AND declared false AND actual true -> Fail (BLOCKED-but-actually-satisfied). The cell that makes the P1 flip mandatory (RS-DC-02).",
+      "block_status": "BLOCKED",
+      "precondition": { "id": "P1", "satisfied": false, "evidence": null },
+      "probe": { "satisfied": true, "referenceResolution": "Resolved" },
+      "expected_verdict": "Fail",
+      "offending": "P1"
+    },
+    {
+      "id": "nonnull-unresolvable-hard-fail-declared-false",
+      "desc": "evidence!=null AND referenceResolution Unresolvable -> hard Fail regardless of status (declared false).",
+      "block_status": "BLOCKED",
+      "precondition": { "id": "P1", "satisfied": false, "evidence": "some-id" },
+      "probe": { "satisfied": false, "referenceResolution": "Unresolvable" },
+      "expected_verdict": "Fail",
+      "offending": "P1"
+    },
+    {
+      "id": "nonnull-unresolvable-hard-fail-declared-true",
+      "desc": "evidence!=null AND referenceResolution Unresolvable -> hard Fail regardless of status (declared true).",
+      "block_status": "READY",
+      "precondition": { "id": "P1", "satisfied": true, "evidence": "some-id" },
+      "probe": { "satisfied": true, "referenceResolution": "Unresolvable" },
+      "expected_verdict": "Fail",
+      "offending": "P1"
+    },
+    {
+      "id": "nonnull-malformed-hard-fail",
+      "desc": "evidence!=null AND referenceResolution Malformed -> hard Fail.",
+      "block_status": "BLOCKED",
+      "precondition": { "id": "P1", "satisfied": false, "evidence": "some-id" },
+      "probe": { "satisfied": false, "referenceResolution": "Malformed" },
+      "expected_verdict": "Fail",
+      "offending": "P1"
+    },
+    {
+      "id": "nonnull-resolved-crosscheck-mismatch",
+      "desc": "evidence!=null AND Resolved -> cross-check declared vs actual; mismatch (declared true, actual false) -> Fail.",
+      "block_status": "READY",
+      "precondition": { "id": "P1", "satisfied": true, "evidence": "gate-id" },
+      "probe": { "satisfied": false, "referenceResolution": "Resolved" },
+      "expected_verdict": "Fail",
+      "offending": "P1"
+    },
+    {
+      "id": "ready-with-all-true-all-resolved-pass",
+      "desc": "status READY legal iff every actual true AND every reference Resolved.",
+      "block_status": "READY",
+      "precondition": { "id": "P1", "satisfied": true, "evidence": "gate-id" },
+      "probe": { "satisfied": true, "referenceResolution": "Resolved" },
+      "expected_verdict": "Pass"
+    },
+    {
+      "id": "ready-with-any-false-fail",
+      "desc": "status READY with any actual false -> READY Fail.",
+      "block_status": "READY",
+      "precondition": { "id": "P2", "satisfied": true, "evidence": "gate-id" },
+      "probe": { "satisfied": false, "referenceResolution": "Resolved" },
+      "expected_verdict": "Fail",
+      "offending": "P2"
+    },
+    {
+      "id": "ready-with-declared-false-consistent-fail",
+      "desc": "status READY with a declared-false + actual-false (CONSISTENT cell) precondition -> READY Fail. The per-cell loop PASSES this cell (declared==actual==false, no lie), so ONLY INV-005's global READY rule catches it -- the forged-READY hole a mini-audit found: a READY block openly declaring a precondition unmet must not pass.",
+      "block_status": "READY",
+      "precondition": { "id": "P2", "satisfied": false, "evidence": null },
+      "probe": { "satisfied": false, "referenceResolution": "Resolved" },
+      "expected_verdict": "Fail",
+      "offending": "P2"
+    },
+    {
+      "id": "indeterminate-fail",
+      "desc": "status indeterminate (unparseable, INV-002) -> Fail, and INV-011 ban stays active.",
+      "block_status": "Indeterminate",
+      "precondition": { "id": "P1", "satisfied": false, "evidence": null },
+      "probe": { "satisfied": false, "referenceResolution": "Resolved" },
+      "expected_verdict": "Fail"
+    },
+    {
+      "id": "blocked-all-probes-true",
+      "desc": "BLOCKED + all probes true (declared false, actual true) -> Fail (BLOCKED-but-actually-satisfied across the set).",
+      "block_status": "BLOCKED",
+      "precondition": { "id": "P1", "satisfied": false, "evidence": null },
+      "probe": { "satisfied": true, "referenceResolution": "Resolved" },
+      "expected_verdict": "Fail",
+      "offending": "P1"
+    },
+    {
+      "id": "satisfied-true-probe-true-unregistered-evidence-fail",
+      "desc": "satisfied:true + probe-true + UNREGISTERED evidence id -> Fail (evidence-reference registry, RS-RT-05).",
+      "block_status": "READY",
+      "precondition": { "id": "P1", "satisfied": true, "evidence": "not-in-registry" },
+      "probe": { "satisfied": true, "referenceResolution": "Unresolvable" },
+      "expected_verdict": "Fail",
+      "offending": "P1"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+<Solution>
+  <!-- <AGGREGATOR> (INV-014): aggregates EXACTLY the four gate projects
+       (EXT8-07/EXT7-05). A membership meta-test (INV-015) asserts solution
+       membership equals {Corrected.Gate, Corrected.Gate.Kernel,
+       Corrected.Gate.Tests, Corrected.Gate.Lint}. -->
+  <Project Path="Corrected.Gate.Kernel/Corrected.Gate.Kernel.csproj" />
+  <Project Path="Corrected.Gate.Lint/Corrected.Gate.Lint.csproj" />
+  <Project Path="Corrected.Gate/Corrected.Gate.csproj" />
+  <Project Path="Corrected.Gate.Tests/Corrected.Gate.Tests.csproj" />
+</Solution>

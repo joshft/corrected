@@ -382,7 +382,18 @@ public class Inv009EvidenceTests
         Assert.Equal(ExitCodes.RouteProbesPassed, result.ExitCode);
         using var doc = Launch.Report(reportPath);
         var binding = doc.RootElement.GetProperty("binding_identity");
-        Assert.Equal(SpikePaths.GitHeadCommit(), binding.GetProperty("git_commit_id").GetString());
+        // Self-documenting staleness remedy (parity with QA-013): a bare
+        // Assert.Equal here surfaces only "expected <a>, actual <b>", which reads
+        // like a regression when it is in fact a STALE run context. In a fresh
+        // controller run the harness reads <run-root>/git-state.json (stamped =
+        // HEAD at run start), so git_commit_id equals HEAD from clean. A mismatch
+        // means the run context bound to a PRIOR run root (out/current advanced by
+        // an earlier controller run; tree/HEAD moved since) — not a from-clean
+        // failure. Re-run scripts/run-spike.sh to rebuild against current HEAD.
+        var headCommit = SpikePaths.GitHeadCommit();
+        var reportedCommit = binding.GetProperty("git_commit_id").GetString();
+        Assert.True(headCommit == reportedCommit,
+            $"report git_commit_id '{reportedCommit}' != HEAD '{headCommit}': the launched harness was built by an EARLIER controller run (a stale out/current pointer) — re-run scripts/run-spike.sh to rebuild against current HEAD (QA-013/AP-003). A fresh controller run stamps <run-root>/git-state.json = HEAD, so this passes from clean.");
         Assert.True(binding.GetProperty("git_dirty_flag").ValueKind is JsonValueKind.True or JsonValueKind.False);
     }
 

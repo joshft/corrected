@@ -1,0 +1,9 @@
+<Project Sdk="Custom.Injected.Sdk/1.0.0">
+  <!-- INV-011 fixture (QA-002): a non-default <Sdk> resolves an arbitrary SDK NuGet that
+       can inject build logic. Only Microsoft.NET.Sdk[.Web|.Razor] are permitted. Presence
+       policy => Fail (never built). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

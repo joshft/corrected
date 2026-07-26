@@ -1,0 +1,34 @@
+# INV-017: the readiness gate is WIRED to run FROM CLEAN in CI via a runnable script
+# (not a grep, not deferred). CI executes the out-of-suite from-clean harness
+# gate/ci/from-clean-gate.sh DIRECTLY — the primary from-clean execution and the real
+# evidence, NOT merely Assert.Contains(command, workflow.yml) (the PMB-001 doc-grep
+# trap). The harness runs the OUTER <GATE-SCRIPT> with the sentinel unset.
+#
+# OWNERSHIP: added by the readiness-gate carrier; gates PRs that touch the gate/,
+# spike evidence, ADR, parent spec, or repo-root pins. Removing the carrier means
+# removing this job.
+name: readiness-gate
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  readiness-gate-from-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET (repo-root global.json pins the SDK)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Run the readiness gate from a CLEAN checkout
+        # EA-005: assumes a network-connected CI (nuget.org restore).
+        run: bash gate/ci/from-clean-gate.sh

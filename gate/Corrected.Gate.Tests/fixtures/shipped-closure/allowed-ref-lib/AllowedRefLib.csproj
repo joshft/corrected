@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture (QA-002): a BUILDABLE skeleton library that the allow-branch
+       fixture (../with-allowed-ref) references via <ProjectReference>. Its output
+       assembly identity is "AllowedRefLib". Because it is a real, resolvable project,
+       the allow-branch's REAL build succeeds (proving the reference actually resolves)
+       instead of the old phantom <Reference Include="Allowed.Ref"/> that could never
+       build. Skeleton-only source; no executable content. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>AllowedRefLib</RootNamespace>
+  </PropertyGroup>
+</Project>

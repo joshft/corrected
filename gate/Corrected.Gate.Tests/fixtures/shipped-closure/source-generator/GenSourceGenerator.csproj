@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture (QA-002): a REAL IIncrementalGenerator (netstandard2.0, referencing
+       Microsoft.CodeAnalysis.CSharp). It is referenced by ../generated-source as an
+       OutputItemType=Analyzer source-generator and EMITS a .cs carrying an executable
+       member. It lives OUTSIDE any scanned closure dir so the scanner never inspects it
+       directly — it only ever runs as the generator behind the generated-source consumer.
+       Assembly identity: "GenSourceGenerator". -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <RootNamespace>GenSourceGenerator</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-004 negative fixture (B4): a "kernel" project that does REAL first-party
+       System.IO — the Roslyn symbol-usage scan (KernelPurityScanner.ScanKernelProject)
+       must report Fail + the offending System.IO.File symbol. Test-classified: this
+       fixture contains the ACTUAL violation and is Compile-Removed from the test
+       assembly, so it never ships and needs no STUB:TDD marker. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>BadKernel.SystemIo</RootNamespace>
+  </PropertyGroup>
+</Project>

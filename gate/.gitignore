@@ -1,0 +1,14 @@
+# Gate build output + local restore artifacts (RS-254/UX-006). The spec also
+# wants a repo-root .gitignore rule for gate.trx/TestResults; that repo-root file
+# is added at GREEN (Stage-A scope forbids repo-root edits here).
+bin/
+obj/
+TestResults/
+# Generated TRX output. The real gate.trx lands in TestResults/ (ignored above);
+# this is a defensive catch for any stray TRX written elsewhere.
+*.trx
+# ...but the committed TRX FIXTURES for the INV-014 trx-guard self-tests are DATA,
+# not generated output. They MUST be tracked: a fresh CI clone needs them, else
+# trx-guard.sh cannot find happy.trx and the happy-path INV-014 tests fail (a
+# fresh-clone-only failure a local `rm -rf out` run cannot surface).
+!Corrected.Gate.Tests/fixtures/trx/*.trx

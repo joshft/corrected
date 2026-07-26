@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture (QA-002): the injectable-allowlist allow-branch, now BUILDABLE.
+       References the sibling skeleton library ../allowed-ref-lib (assembly identity
+       "AllowedRefLib") via a real <ProjectReference> so the REAL build resolves. With
+       the allowlist {AllowedRefLib} the scan PASSES; with a one-identity-char-off
+       allowlist {AllowedRefLi} it FAILS (exact assembly identity, not substring). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>WithAllowedRef</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../allowed-ref-lib/AllowedRefLib.csproj" />
+  </ItemGroup>
+</Project>

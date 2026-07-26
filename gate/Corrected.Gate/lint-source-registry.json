@@ -1,0 +1,12 @@
+{
+  "note": "INV-008(c) / INV-018 / DD-001: the APPEND-ONLY source-digest registry pinning the EXTRACTED, Dafny-free linter lib (gate/Corrected.Gate.Lint/) — NOT the 1343-line churning spike Components.cs. The reused spike AdrLinter runs only as a redundant cross-check ANDed with the authoritative hardened decision (PRH-005). Sanctioned bump procedure: edit the extracted lib source + append a new row here in ONE commit; a test asserts the current lib source digest equals the newest row.",
+  "rows": [
+    {
+      "version": 1,
+      "source": "gate/Corrected.Gate.Lint/AdrLinter.cs",
+      "sha256": "65cb86df3bc2a13b807dc1e587c7c8cf526cd2021ef9d77b45fb93cda7b0c177",
+      "committed": "2026-07-26",
+      "reason": "Initial extraction of AdrLinter + its transitive type closure (AdjudicationRecord -> RouteState / IncompatibleClass / ThreeCellOutcome / ProbeStatus, RouteClaim) into the single-TFM net10.0 lib, WITHOUT dragging ManagedLauncher/Process.Start."
+    }
+  ]
+}

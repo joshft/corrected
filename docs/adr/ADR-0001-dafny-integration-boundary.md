@@ -1,7 +1,10 @@
-# ADR-0001: Dafny integration boundary (provisional)
+# ADR-0001: Dafny integration boundary (accepted)
 
-- **Status**: provisional (DD-007; promotion to *accepted* is an inherited
-  obligation of the final Phase 0.0 feature — DF-002)
+- **Status**: accepted (DF-002 discharged 2026-07-24 — promoted from provisional:
+  the machine-readable block below carries the in-process-selected / Route A /
+  COMPATIBLE decision, anchored to the canonical committed sample and validated by
+  the INV-013 ADR linter [zero findings]; the DD-007 component-table propagation
+  into ARCHITECTURE.md is done)
 - **Scope**: DESIGN.md Phase 0.0 **bullets 1–3 only**, pinned to DESIGN.md
   v1.13 (bullet numbering is not stable across design revisions). Deferred
   Phase 0.0 gates: bullets 4–12.
@@ -23,25 +26,27 @@ mandatory P03 anchor can never be overridden by ADR prose (OQ-004 gate).
 
 ```yaml
 adr_lint:
-  boundary_decision: pending   # pending | in-process-selected | rejected
-  selected_route: null         # A | B | null
+  boundary_decision: in-process-selected   # pending | in-process-selected | rejected
+  selected_route: A            # A | B | null
   routes:
     - route: A
-      verdict: pending         # COMPATIBLE | INCOMPLETE | INCOMPATIBLE(...) | UPSTREAM_DEFECT | pending
-      adjudication_record_id: null
-      evidence: null
+      verdict: COMPATIBLE      # COMPATIBLE | INCOMPLETE | INCOMPATIBLE(...) | UPSTREAM_DEFECT | pending
+      adjudication_record_id: null   # COMPATIBLE is an all-pass terminal state — no adjudication record (DF-002 linter-contract correction)
+      evidence: spikes/dafny-compat/evidence/samples/run-report.canonical.sample.json
     - route: B
-      verdict: pending
+      verdict: COMPATIBLE
       adjudication_record_id: null
-      evidence: null
+      evidence: spikes/dafny-compat/evidence/samples/run-report.canonical.sample.json
 ```
 
-## Decision (pending — the route selection is a later, human decision)
+## Decision — Route A selected (in-process, `CliCompilation` via `DafnyDriver`)
 
-The boundary decision stays **pending**: selecting a route (or rejecting the
-in-process boundary) is a user decision to be taken later, and the `adr_lint`
-block above deliberately carries `pending` verdicts until that promotion is
-made with schema-valid adjudication records (INV-013/PAT-004).
+The boundary decision is **in-process-selected / Route A**, promoted from
+provisional on 2026-07-24 (DF-002). The `adr_lint` block above now carries the
+selection and the COMPATIBLE verdicts, anchored to the canonical committed
+sample; INV-013's ADR linter validates the positive selection with zero findings
+(the linter's COMPATIBLE contract was corrected as part of this promotion — see
+the linter-contract note below).
 
 The committed evidence state (QA-020 correction; true since the convergence
 pair landed): the **canonical** committed sample
@@ -49,31 +54,54 @@ pair landed): the **canonical** committed sample
 **suite-attested canonical run** — `final_suite_status=success`, exit/report
 matrix consistent, and **both route verdicts COMPATIBLE** — produced by a
 canonical operator run of `spikes/dafny-compat/scripts/run-spike.sh` including
-the test-suite phase (codex R4-02/R3-5), and is citable for verdict claims.
-The **variance-mode** committed sample (`run-report.sample.json`,
+the test-suite phase (codex R4-02/R3-5), and is the cited evidence for the
+selection above. The **variance-mode** committed sample (`run-report.sample.json`,
 `final_suite_status=unknown`, route verdicts INCOMPLETE by construction)
 remains the full-equality reproducibility anchor for the fresh-run-equality
-test. No selection claim is made here yet; no rejection claim is made either.
+test. Route A is selected; no route is rejected (both are COMPATIBLE).
 
-### Maintainer route selection (recorded 2026-07-22)
+### Maintainer route selection (recorded 2026-07-22; promoted 2026-07-24)
 
-Recorded for provenance and **deliberately not reflected in the machine-readable
-`adr_lint` block above**, which stays `pending`: the maintainer has selected
-**Route A** (`CliCompilation` via `DafnyDriver`) as the intended in-process
-boundary. Rationale — fidelity to the `dafny` CLI's own verification path, and
-upgrade robustness: Route B's `DafnyPipeline` consumption (the OQ-004
+The maintainer selected **Route A** (`CliCompilation` via `DafnyDriver`) as the
+in-process boundary. Rationale — fidelity to the `dafny` CLI's own verification
+path, and upgrade robustness: Route B's `DafnyPipeline` consumption (the OQ-004
 standard-libraries `.doo` path) is load-bearing and would need re-validation on
 every Dafny bump. Accepted cost: `DafnyLanguageServer` becomes a permanent,
 un-trimmable part of the production closure (the driver's parser/resolver/
 verifier are LanguageServer types), and `DafnyPipeline` is not loaded on Route A.
 
-This records a direction of intent, **not** the formal promotion. Promotion —
-setting the machine-readable block to the in-process-selected / Route A /
-COMPATIBLE state, backed by a schema-valid terminal adjudication record, plus the
-DD-007 component-table propagation into DESIGN.md and ARCHITECTURE.md — remains
-the inherited obligation DF-002 of the final Phase 0.0 feature. Until then the
-ADR Status stays provisional and the machine-readable block stays `pending`, so
-INV-013's linter and the provisional-status check continue to hold.
+**Promotion (DF-002, 2026-07-24):** the selection above is now the formal
+decision. The machine-readable block was set to in-process-selected / Route A /
+COMPATIBLE, anchored to the canonical committed sample, and the DD-007
+component-table propagation into `.correctless/ARCHITECTURE.md` was applied (drop
+`DafnyPipeline`, add `DafnyDriver` + `DafnyLanguageServer` in the core-worker
+production closure). DESIGN.md's "Dafny publishes …" statements name the full
+published four-package set and describe the Phase 0.0 spike (which exercised
+`DafnyPipeline` on Route B); neither is a production-closure claim, so DESIGN.md
+is unchanged.
+
+### Linter contract correction (DF-002 / codex R4-01)
+
+Promotion required correcting one rule in the INV-013 ADR linter
+(`spikes/dafny-compat/contracts/SpikeContracts/Components.cs`, `AdrLinter.Lint`).
+The linter had required a `COMPATIBLE` route verdict to cite an
+`adjudication_record_id` resolving to a schema-valid terminal adjudication record
+(codex R4-01). But adjudication records are a **failure-path** artifact —
+`AdjudicationStateMachine` produces them only for INCOMPATIBLE / UPSTREAM_DEFECT
+terminal transitions — so an all-pass `COMPATIBLE` run produces none, and the
+frozen canonical sample legitimately carries `adjudication_records: null` (spike
+QA-006 catch-22: a COMPATIBLE-bearing sample cannot be committed with records
+without breaking fresh-run equality, and regenerating the frozen sample cannot
+reconverge). Requiring a record for `COMPATIBLE` therefore made the positive
+selection **unsatisfiable** against the committed evidence — the exact "spec
+decision" QA-006 flagged as needed.
+
+The correction: a `COMPATIBLE` claim is anchored by its committed **evidence
+path** (unchanged requirement); the `adjudication_record_id` is now **optional**
+for `COMPATIBLE` and validated only when cited. **Rejection** claims
+(INCOMPATIBLE / UPSTREAM_DEFECT) continue to require a schema-valid record. No
+evidence sample was regenerated and no commit at or before the frozen convergence
+point was rewritten.
 
 ### Capability observations (bullets 1–3; each backed by the committed pair)
 
@@ -182,12 +210,18 @@ a fresh run:
   fail-closed run-level stop is deliberate; attribution (not verdict
   computation under a broken restore) is the property preserved.
 
-## Propagation obligations (DD-007)
+## Propagation obligations (DD-007) — DISCHARGED 2026-07-24
 
-If the selected route's actually-loaded package set differs from what
-DESIGN.md/ARCHITECTURE.md name, the required DESIGN.md + ARCHITECTURE.md
-component-table updates are named here as explicit obligations. Already
-observable now: selecting Route A would mean DafnyPipeline is NOT loaded (the
-component table naming `DafnyCore, DafnyPipeline, …` would need amending) and
-that DafnyLanguageServer becomes a runtime dependency of the worker; selecting
-Route B would mean DafnyDriver is not part of the production closure.
+Route A's actually-loaded package set (see
+`spikes/dafny-compat/manifest/expected-loaded/route-a.json`) is `DafnyDriver` +
+`DafnyCore` + `DafnyLanguageServer`; `DafnyPipeline` is NOT loaded on Route A.
+The production-closure component table in `.correctless/ARCHITECTURE.md` (the
+"C# core worker" row, which had named `DafnyCore, DafnyPipeline, …`) was amended
+to drop `DafnyPipeline` and add `DafnyDriver` + `DafnyLanguageServer`, and the
+route-selection prose there was updated to reflect the accepted status. DESIGN.md
+names only what Dafny **publishes** (the full four-package set) and describes the
+Phase 0.0 spike (which exercised `DafnyPipeline` on Route B), neither of which is
+a production-closure claim, so DESIGN.md is unchanged. The mechanical
+component-table consistency gate that re-checks this partition against
+`route-a.json` is INV-003 enforcement-(b) in the phase-0.1-worker spec, homed with
+the readiness gate in the Phase 0.1 build-gate carrier (still to be built).

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-004 / EXT6-05: the ISOLATED, I/O-free pure kernel + its DTOs
+       (ReadinessBlock, ProbeResult). A project-graph meta-test (INV-004) asserts
+       this project declares NO ProjectReference and NO PackageReference — it
+       references only the framework BCL — so "scan the Kernel project only" for
+       I/O completeness does not rest on convention. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Corrected.Gate.Kernel</RootNamespace>
+  </PropertyGroup>
+  <!-- Intentionally NO ItemGroup: no PackageReference, no ProjectReference. -->
+</Project>

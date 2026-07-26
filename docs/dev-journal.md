@@ -59,3 +59,76 @@ system SDKs are named via an explicit `--dotnet-root` argument that survives the
 The route decision itself (Route A selected) lives in ADR-0001 and is intentionally *not*
 yet promoted — that promotion, with a schema-valid adjudication record and the DD-007
 component-table propagation, is the final Phase 0.0 feature's obligation (DF-002).
+
+## 2026-07-26 — Readiness-Gate Carrier (phase-0.1-worker enforcement home)
+
+**Why this exists.** The Phase-0.1 worker must not land production code until a
+machine-readable `implementation_readiness` block in `phase-0-1-worker.md` says its
+preconditions (P1 ADR-boundary, P2 validator, P3 determinism) are genuinely
+dischargeable. The hazard is *trusting that block*: it is committed markdown that anyone
+with write access can tamper with — flip a `satisfied` flag, forge an ADR route-claim,
+strip an evidence sample, or land a `src/` package early. This feature builds the
+fail-closed gate that **re-derives** the evidence instead of trusting the flags, and the
+production-surface ban that keeps `src/` empty while readiness is `BLOCKED`. It is the
+RS-002 unlock the parent worker's own invariants (INV-001/002/036) are homed against.
+Critically it lands as **Stage A**: the enforcement home is built and green, but the
+readiness flip itself (`P1.satisfied → true`) is deliberately *not* performed — that
+atomic Stage-B migration is a separate later step, and the gate exists precisely so the
+flip can never be a bare edit ahead of evidence.
+
+**What was built.** ~13k lines under `gate/`, plus DD-003 anchors in the parent spec, a
+repo-root `global.json`, `.gitattributes`, and a `.github/workflows/readiness-gate.yml`
+CI lane. The solution is four projects behind `gate/Corrected.Gate.slnx`: a pure,
+I/O-free `Corrected.Gate.Kernel` (`ReadinessGate.EvaluateReadiness` + closed DTOs); the
+impure `Corrected.Gate` edge (AST-hardened YAML/ADR parsers, the P1/P2/P3 evidence
+probes, `MigrationManifest.CheckConsistency` for DD-003, the `ClosureBuildRunner` +
+`ProductionSurfaceScanner` for INV-011, and the `StatusRenderer`); the `Corrected.Gate.Tests`
+xUnit suite with one `Inv0NN*Tests.cs` per invariant plus a SUPPLIED-fixture kernel corpus;
+and a Dafny-free `Corrected.Gate.Lint` (extracted so the gate build never pulls Dafny
+assemblies). The operator/CI surface is the single runnable script
+`gate/run-readiness-gate.sh` (restore-locked → `dotnet test … --logger trx` →
+out-of-suite TRX executed-count guard → always-render INV-012 banner → combined exit),
+with the combined-exit state machine single-sourced in `gate/tools/combined-exit.sh`.
+
+**How it works.** The gate never trusts the declared `satisfied` flags. The block and the
+ADR/evidence are strict-parsed into closed, validated domain types (tags/anchors/aliases,
+duplicate and oversize blocks rejected); the P1/P2/P3 probes re-derive each precondition
+from executable evidence; and the **pure kernel** renders the verdict — `status: READY` is
+legal iff every precondition is actually `satisfied` AND every reference is `Resolved`,
+else the verdict is `Fail`. At Stage A, ADR-0001 carries its decision fields but the
+machine `status:` keys are absent, so P1 short-circuits to `evidence-schema-incomplete →
+false`, giving a *consistent BLOCKED* — the intended green path. INV-011 is the sharpest
+edge: rather than a static path/text scan, `ClosureBuildRunner` shells out to a real
+out-of-process `dotnet build -t:Rebuild` on the pinned SDK, runs generators
+(`EmitCompilerGeneratedFiles`), extracts the resolved `-getItem:Compile`/`-getItem:Analyzer`
+item sets, and diffs an analyzer baseline — so a generated or linked source that lands
+inside a shipped project's built closure is caught, not just a bare `src/` directory. The
+DD-003 gate hashes the bytes between paired current-state anchors in the parent spec
+against real SHA-256 digests in `readiness-migration-manifest.json`, failing closed on a
+missing/duplicate anchor, a missing/invalid manifest, or an injected appendix marker. A
+`CORRECTED_GATE_INNER` recursion sentinel makes any gate-invoking helper inside the
+discovered suite a no-op, and the whole thing is proven green **from a clean checkout**
+(226/226, `GATE_EXIT=0`).
+
+**Patterns and non-obvious decisions.** The carrier registers **PAT-005** (readiness-gate
+block checked by test; the exempt carrier enforces itself) and **TB-006** (readiness/ADR/
+evidence intake as a tamperable boundary), and is a direct application of **PAT-004**
+(structural enforcement over prose) — every invariant is locked by a mechanism that runs.
+The single most important structural choice is *carrier exemption*: the gate lives under
+`gate/**`, outside the shipped compilation closure, so it can enforce its own
+production-code ban (INV-036) without tripping it. Three decisions came out of adversarial
+review and are worth remembering. (1) INV-011 had to be a *real build*, not a scan — the
+QA-002 finding was that a static scan can't see generated/linked closure members; the
+`IIncrementalGenerator` fixture is the centerpiece proving the build actually runs
+generators. (2) The kernel was isolated into its own I/O-free project (EXT6-05) specifically
+so its purity invariant (INV-004) is both satisfiable and checkable via a project-graph
+BCL-only bound plus a behavioral determinism check. (3) The DD-003 stale-literal scan is
+scoped to the spec's *normative body* (text before `## Notes for review`) so the changelog's
+historical `rm -rf out` literals don't falsify it. A mini-audit later caught a genuine
+kernel bug the corpus had masked — `EvaluateReadiness` accepted a `READY` block with a
+precondition declared `satisfied:false` (a forged-READY fail-open) because the
+`ready-with-all-true-all-resolved-pass` fixture was mis-built; the fix added a global READY
+check and a negative corpus row. Three accepted residuals were logged as drift-debt
+(DRIFT-001 token-scan purity control, DRIFT-002 `StartsWith("Dafny")` family detection,
+DRIFT-003 dict-parsed ADR block) — all fail-safe and dormant while readiness is BLOCKED,
+resolvable when the Stage-B flip lands.

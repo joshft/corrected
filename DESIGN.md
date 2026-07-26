@@ -506,9 +506,18 @@ review_mode = "not-required"
 
 source_file = "program.dfy"
 entrypoints = ["Sort"]
-target_profile = "verified"
+target_profile = "verified-nonvacuous"
 verification_plan = "dafny-4.11-proof-completion-0.1"
 ```
+
+The Phase 0.1 target profile is `verified-nonvacuous`, not the generic
+`verified` default: because the Phase 0.1 fragment (`bool`/`int`/`nat`/immutable
+`seq`, bounded quantification) makes non-vacuity witness construction reliable
+(§8.4), the slice requires a witnessed valid domain per exported entrypoint and
+never lets a `VACUITY_UNKNOWN` result pass as certified. The generic `verified`
+profile keeps its §11 meaning (it reports but permits unknown vacuity); it simply
+is not the Phase 0.1 target. This selects the stronger existing profile rather
+than redefining `verified`.
 
 Phase 0.1 exposes no manifest fields for verifier flags, linked inputs,
 assumption exceptions, semantic anchors, build targets, or repair budgets.

@@ -1029,16 +1029,25 @@ public static class AdrLinter
             }
             else if (verdict == "COMPATIBLE")
             {
-                // codex R4-01/R4-02: POSITIVE claims are validated too.
+                // codex R4-02: POSITIVE claims cite committed evidence.
                 if (string.IsNullOrEmpty(route.Evidence) || route.Evidence == "null")
                 {
                     findings.Add($"route {route.Route}: positive COMPATIBLE claim cites no committed evidence path (codex R4-02)");
                 }
-                if (string.IsNullOrEmpty(route.AdjudicationRecordId) || route.AdjudicationRecordId == "null")
-                {
-                    findings.Add($"route {route.Route}: positive COMPATIBLE claim lacks an adjudication_record_id anchoring it to run records (codex R4-01)");
-                }
-                else if (!recordById.ContainsKey(route.AdjudicationRecordId))
+                // DF-002 (P1) linter-contract correction — SUPERSEDES the codex R4-01
+                // COMPATIBLE→adjudication_record anchor. A COMPATIBLE route is an
+                // all-pass terminal state and produces NO adjudication record:
+                // adjudication is a failure-path terminal transition
+                // (AdjudicationStateMachine), so an all-pass canonical run legitimately
+                // carries adjudication_records=null. Requiring a record for COMPATIBLE
+                // was a category error that made the positive selection unsatisfiable
+                // against the frozen (record-less) canonical sample (spike QA-006
+                // catch-22). The committed-evidence PATH above remains the anchor. An
+                // adjudication_record_id is now OPTIONAL for COMPATIBLE; when one IS
+                // cited it must still resolve to a schema-valid record. Rejection claims
+                // (INCOMPATIBLE/UPSTREAM_DEFECT) continue to REQUIRE a record above.
+                if (!string.IsNullOrEmpty(route.AdjudicationRecordId) && route.AdjudicationRecordId != "null"
+                    && !recordById.ContainsKey(route.AdjudicationRecordId))
                 {
                     findings.Add($"route {route.Route}: adjudication_record_id '{route.AdjudicationRecordId}' matches no schema-valid adjudication record");
                 }
