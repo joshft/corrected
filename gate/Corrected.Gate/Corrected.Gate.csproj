@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Corrected.Gate: parser (ReadinessBlockParser, AdrLintBlockParser) + probe
+       orchestrator (IEvidenceProbe, ProbeOrchestrator, P1/P2/P3 probes) +
+       production-surface scanner (ProductionSurfaceScanner) + AdrLintBlock DTO
+       (INV-003 type home). One-way reference to Kernel (Gate -> Kernel, never
+       reverse; EXT7-04) and to the extracted Lint lib.
+
+       RED NOTE: the GREEN build adds YamlDotNet 18.1.0 (INV-002/015) and
+       Microsoft.CodeAnalysis.CSharp (INV-011/015) PackageReferences. They are
+       OMITTED here because (a) the stubs need no implementation deps and (b)
+       neither package is in the local NuGet cache, so adding them now would make
+       the RED restore require network. INV-015 tests assert those loaded
+       versions and therefore FAIL (RED) until GREEN adds the pinned refs. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Corrected.Gate</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- INV-002/015: the pinned + locked YAML parser (never < 5.0.0). -->
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <!-- INV-011/015: the pinned + locked in-process analysis toolchain (the ONLY
+         analysis package; no in-process build-engine PackageReference — the closure
+         scan runs out-of-process on the pinned SDK). Common is transitive. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Corrected.Gate.Kernel/Corrected.Gate.Kernel.csproj" />
+    <ProjectReference Include="../Corrected.Gate.Lint/Corrected.Gate.Lint.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture (QA-002) — the CENTERPIECE. The consumer's own source is
+       skeleton-only, but it references ../source-generator as an OutputItemType=Analyzer
+       source-generator (assembly identity "GenSourceGenerator"). A naive *.cs glob sees
+       only the skeleton and would PASS; the REAL build runs the generator, which emits a
+       .cs containing an executable member, and the scanner (parsing the emitted generated
+       source from EmitCompilerGeneratedFiles) REJECTS it => Fail. This fixture PROVES the
+       real-build path: it is impossible to reach Fail without actually building. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Consumed</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../source-generator/GenSourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

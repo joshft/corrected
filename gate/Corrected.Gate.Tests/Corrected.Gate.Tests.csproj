@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The xUnit test project (VSTest host pinned matching the spike: INV-015).
+       References the three gate projects. Fixture .cs files under fixtures/ and
+       manifests/ are DATA, never compiled into the test assembly. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Corrected.Gate.Tests</RootNamespace>
+    <!-- Deterministic test discovery for the TRX executed-count guard (INV-014). -->
+    <GenerateProgramFile>true</GenerateProgramFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Corrected.Gate/Corrected.Gate.csproj" />
+    <ProjectReference Include="../Corrected.Gate.Kernel/Corrected.Gate.Kernel.csproj" />
+    <ProjectReference Include="../Corrected.Gate.Lint/Corrected.Gate.Lint.csproj" />
+  </ItemGroup>
+
+  <!-- Fixtures + manifests are data, not test-assembly source. Exclude any .cs
+       under them from compilation so a fixture C# sample (a "one real method"
+       shipped-closure probe, a purity negative fixture, etc.) is never linked
+       into the test assembly. -->
+  <ItemGroup>
+    <Compile Remove="fixtures/**/*.cs" />
+    <Compile Remove="manifests/**/*.cs" />
+    <None Include="fixtures/**/*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="manifests/**/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

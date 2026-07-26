@@ -162,7 +162,7 @@ follow: (a) every own-product probe binds to the CURRENT run's `RunContext`,
 never to prior-run roots discovered on disk; (b) the operational fix — gitignore
 `spikes/dafny-compat/out/` and `git rm --cached` it — must be validated against
 the frozen-evidence constraint ([[dafny-spike-evidence-binding-fragile]]) before
-landing, since it touches spike state; until then the `rm -rf out` step is
+landing, since it touches spike state; until then the `rm -rf spikes/dafny-compat/out/` step is
 mandatory in every from-clean gate.
 
 **Enforcement carrier (prerequisite).** The readiness gate and every invariant
@@ -173,10 +173,13 @@ its absence is itself a blocker on implementation-readiness approval (spec-revie
 finding 7 / RS-008). `/carchitect` must also **pin the production-package path
 globs** (and the carrier/test glob) so INV-036's production-surface check is a
 deterministic path partition, not a content heuristic. Ordering constraint
-(RS-002): land the carrier **and INV-002's positive READY-rejection fixture
-table** before any real precondition discharges, so the reject branch is proven
-before it first guards a real BLOCKED→READY transition. Until then these
-mechanisms are specified but unhomed.
+(RS-002):
+<!-- correctless:readiness-current-state:start id="A2" -->
+land the carrier and INV-002's positive READY-rejection fixture table before any real precondition discharges
+<!-- correctless:readiness-current-state:end id="A2" -->
+so the reject branch is proven before it first guards a real BLOCKED→READY
+transition. These mechanisms are now homed in the `gate/` readiness-gate
+carrier (the test/build-gate carrier).
 
 ## Invariants
 
@@ -236,15 +239,21 @@ mechanisms are specified but unhomed.
   `satisfied:false` → Fail naming that precondition; (c) READY+one `evidence:null`
   → Fail; (d) READY+all-true but a probe REFUTES the evidence → Fail (proves
   re-derivation, not flag-trust); (e) READY+all-true+probes-confirm → Pass; plus
-  an absent-artifact fixture per probe asserting `satisfied=false` (not throw). A
-  SEPARATE test asserts the committed file currently parses to BLOCKED-all-false.
+  an absent-artifact fixture per probe asserting `satisfied=false` (not throw).
+<!-- correctless:readiness-current-state:start id="B5-currently-parses-blocked" -->
+A SEPARATE test asserts the committed file currently parses to BLOCKED-all-false.
+<!-- correctless:readiness-current-state:end id="B5-currently-parses-blocked" -->
 - **Guards against**: AP-002 (guard defined but its rejecting branch never
   exercised), AP-005 (frozen gate with no legitimate reconverge path / routine
   override), AP-010 (pass on leaked state), AP-021 (non-bootstrappable gate).
 - **Test approach**: integration
 - **Integration contract**:
-  Entry: the readiness-gate test invoked from a clean checkout (clone + `rm -rf
-  out`); no entrypoint YAML exists yet — see OQ-002 / `/carchitect` prerequisite.
+  Entry: the readiness-gate test invoked from a clean checkout (clone +
+  `rm -rf spikes/dafny-compat/out/`);
+<!-- correctless:readiness-current-state:start id="A6-no-entrypoint-yaml" -->
+the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24); the carrier is now homed
+<!-- correctless:readiness-current-state:end id="A6-no-entrypoint-yaml" -->
+  — see OQ-002 (built-carrier half closed) / `/carchitect`.
   Through: the actual P1/P2/P3 evidence probes (ADR linter + component-table gate,
   Phase-0.0 completion-manifest resolver, CI-determinism execution check) run on
   the real artifacts; none mocked.
@@ -468,7 +477,7 @@ mechanisms are specified but unhomed.
 - **Integration contract**:
   Entry: `corrected certify` on a fixture with (i) no lock, (ii) a stale lock
   (recorded ≠ recomputed digest), (iii) a tampered-digest lock, (iv) a
-  `certifiable:false` ephemeral lock; entrypoint YAML TBD (`/carchitect`).
+  `certifiable:false` ephemeral lock; entrypoint YAML exists (ARCHITECTURE.md:61, `/carchitect` 2026-07-24).
   Through: the real preflight validator + digest recomputation; no mock of the
   lock resolver.
   Exit: each case fails closed with a typed reason; only the fresh, recomputed,
@@ -1611,7 +1620,7 @@ mechanisms are specified but unhomed.
   (INV-001/002/036), the append-only schema-version HISTORY registry + meta-test
   (INV-044 — the runtime supported-version dispatch table ships in core, not here),
   and the from-clean gates — kept out of the shipped core/CLI so the gate can enforce itself
-  (INV-036). Flagged for the ARCHITECTURE.md component table (`/cupdate-arch`).
+  (INV-036). Homed in the ARCHITECTURE.md component table (`/cupdate-arch`, readiness-build-gate).
 - **TypeScript Pi adapter**: NOT affected by this slice (deferred with the protocol
   seam / MANAGED_PI).
 

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture (QA-002): a closure whose committed packages.lock.json resolves a
+       package that ships build-time MSBuild assets (Microsoft.CodeAnalysis.Analyzers ->
+       buildTransitive/*.props + *.targets). Such a package injects build logic exactly
+       like a custom <Target>, so its mere PRESENCE in the lock FAILS closed on the
+       presence policy (before any build), unless the identity is injected-allowlisted. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>BuildAssetPackage</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+  </ItemGroup>
+</Project>

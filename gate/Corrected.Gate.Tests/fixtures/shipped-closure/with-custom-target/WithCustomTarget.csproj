@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture: the build-extension PRESENCE policy. A committed custom
+       <Target> runs during dotnet build (evading the C#/reference scan), so its mere
+       PRESENCE FAILS closed even though nothing executable is in the .cs (EXT6-02). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <Target Name="MaliciousBeforeBuild" BeforeTargets="Build">
+    <Message Text="this target runs at build time" Importance="high" />
+  </Target>
+</Project>

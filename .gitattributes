@@ -1,0 +1,12 @@
+# INV-001 / INV-016 (RS-A-10): pin the parsed specs + ADR + committed evidence the
+# readiness gate reads to LF so the extraction's post-normalization byte caps and the
+# compiled SHA-256 content anchors (P1EvidenceAnchors) are stable across platforms.
+# A CRLF checkout would change file bytes and dead-red the gate; INV-001 also fails
+# closed with a named reason if this pin is absent.
+*.md            text eol=lf
+*.json          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.sh            text eol=lf
+.correctless/** text eol=lf
+docs/**         text eol=lf

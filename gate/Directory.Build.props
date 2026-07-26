@@ -1,0 +1,18 @@
+<Project>
+  <!-- INV-016 sealing file: terminates MSBuild's upward Directory.Build.props
+       inheritance at the gate root so no props above gate/ leaks into
+       resolution. Mirrors spikes/dafny-compat/Directory.Build.props discipline. -->
+  <PropertyGroup>
+    <!-- INV-015: committed lock file per project; locked-mode restore once the
+         lock exists. First restore (no lock yet) generates it; thereafter locked. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="Exists('$(MSBuildProjectDirectory)/packages.lock.json')">true</RestoreLockedMode>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- NuGet downgrade warnings are errors (supply-chain hygiene, INV-015). -->
+    <WarningsAsErrors>$(WarningsAsErrors);NU1605</WarningsAsErrors>
+  </PropertyGroup>
+</Project>

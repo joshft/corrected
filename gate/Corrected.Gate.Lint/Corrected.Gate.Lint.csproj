@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-018 / DD-001: the extracted, verifier-free, single-TFM linter library.
+       Carves AdrLinter + its transitive type closure out of the spike's Components.cs
+       so the gate references it WITHOUT importing the spike's CPM/<clear/>/lock
+       context or its older targeting pack. No package refs. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Corrected.Gate.Lint</RootNamespace>
+  </PropertyGroup>
+</Project>

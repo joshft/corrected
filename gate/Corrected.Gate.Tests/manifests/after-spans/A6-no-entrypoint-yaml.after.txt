@@ -1,0 +1,1 @@
+the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24); the carrier is now homed

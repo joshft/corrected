@@ -1,0 +1,7 @@
+# Gate build output + local restore artifacts (RS-254/UX-006). The spec also
+# wants a repo-root .gitignore rule for gate.trx/TestResults; that repo-root file
+# is added at GREEN (Stage-A scope forbids repo-root edits here).
+bin/
+obj/
+TestResults/
+*.trx

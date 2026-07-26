@@ -1,0 +1,8 @@
+{
+  "//": "INV-016 / TB-004: repo-root SDK pin so the muxer (cwd -> up) selects it for the root invocation. sdk.version is SEMANTICALLY synced with spikes/dafny-compat/global.json (10.0.302) — NOT byte-identical (the spike uses rollForward: disable; this repo-root pin uses latestPatch with allowPrerelease:false so a security patch is not blocked repo-wide, bounded to feature-band 3xx >= 10.0.302). OWNERSHIP: added by the readiness-gate carrier; it changes SDK resolution for the WHOLE repo (the repo now requires SDK 10.0.302 / feature-band 3, pinned repo-wide). Removing the carrier means re-homing or removing this pin; when src/ production later lands it inherits it.",
+  "sdk": {
+    "version": "10.0.302",
+    "rollForward": "latestPatch",
+    "allowPrerelease": false
+  }
+}

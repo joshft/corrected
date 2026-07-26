@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 (EXT8-05/EXT9-05): the committed baseline project from which the
+       SDK-default `Analyzer` set is computed DYNAMICALLY at gate time (built under the
+       SAME resolved SDK as the closure, with the same NETCoreSdkVersion), so a vanilla
+       skeleton project does NOT false-fail and `latestPatch` band drift never
+       false-fails. Its own <clear/>+locked restore discipline mirrors the shipped
+       closure fixtures. A vanilla skeleton, nothing more. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>AnalyzerBaseline</RootNamespace>
+  </PropertyGroup>
+</Project>

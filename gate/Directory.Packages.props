@@ -1,0 +1,13 @@
+<Project>
+  <!-- INV-016 CPM OPT-OUT + upward-inheritance seal. Setting
+       ManagePackageVersionsCentrally=false both (a) opts the gate out of Central
+       Package Management so PackageReference Version= is inline+locked, and (b)
+       terminates MSBuild's upward Directory.Packages.props walk at gate/ so a
+       future repo-root Directory.Packages.props cannot capture the gate's inline
+       versions (RS-UC-11). A regression test (INV-016) drops a dummy repo-root
+       Directory.Packages.props into a temp copy and asserts the gate still
+       restores its inline+locked versions. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture (QA-002): the parse-differential proof. <DefineConstants>SHIP is
+       active in the REAL build, so Program.cs's only executable member — inside
+       #if SHIP ... #endif — is LIVE. A static parse with no defines (the old scanner's
+       Array.Empty<string>()) misses it and PASSES; the scanner parses with the BUILD's
+       evaluated DefineConstants (which include SHIP) and REJECTS it => Fail. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>IfShipDifferential</RootNamespace>
+    <DefineConstants>$(DefineConstants);SHIP</DefineConstants>
+  </PropertyGroup>
+</Project>

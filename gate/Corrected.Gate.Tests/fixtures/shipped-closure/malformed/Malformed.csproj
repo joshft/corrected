@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture: a MALFORMED project so the closure resolves but cannot be
+       evaluated -> ClosureUncomputable (fail-closed, a DISTINCT state, never conflated
+       with the vacuous pass). The unterminated element below makes the XML invalid. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  <!-- intentionally unterminated: no </PropertyGroup>, no </Project> -->

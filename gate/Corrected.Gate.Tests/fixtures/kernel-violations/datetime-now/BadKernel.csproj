@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-004 negative fixture (B4): ambient-clock nondeterminism family. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>BadKernel.DateTimeNow</RootNamespace>
+  </PropertyGroup>
+</Project>

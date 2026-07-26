@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-011 fixture (QA-002): an MSBuild property function $([Type]::Member(...)) can
+       invoke arbitrary framework members at evaluation time. Presence policy => Fail. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Injected>$([System.DateTime]::Now.Ticks)</Injected>
+  </PropertyGroup>
+</Project>

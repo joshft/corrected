@@ -47,6 +47,22 @@ the test suite, and prints a per-route COMPATIBLE / INCOMPLETE verdict. The hard
 `env -i … bash -p` invocation is mandatory (the controller refuses an unhardened call). See
 the [feature doc](docs/features/dafny-compat-spike.md) for the full operator surface.
 
+## Running the readiness gate
+
+```bash
+bash gate/run-readiness-gate.sh
+```
+
+The canonical readiness-gate command (readiness-gate-carrier INV-014/INV-017). Run from a
+clean checkout (`git clone` + `rm -rf spikes/dafny-compat/out/`). It runs the gate test
+suite via the pinned SDK, validates the TRX executed-count guard, renders the INV-012
+status banner to stdout, and returns the final gate exit code. The readiness explanation
+lives in this gate output; `corrected explain` is deferred until BLOCKED clears (DD-004).
+
+> **Repo-wide SDK pin.** This repo now requires **SDK 10.0.302 / feature-band 3**, pinned
+> repo-wide by the repo-root [`global.json`](global.json) (`rollForward: latestPatch`,
+> `allowPrerelease: false`) — added by the readiness-gate carrier (INV-016 / TB-004).
+
 ## License
 
 Not yet added. The project is described as open-source; a `LICENSE` file will accompany the

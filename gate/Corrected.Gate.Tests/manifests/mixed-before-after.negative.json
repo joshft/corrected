@@ -1,0 +1,11 @@
+{
+  "note": "DD-003 mixed-set NEGATIVE fixture. Models a partially-migrated tree: P1.satisfied is already true (stage resolves to B) but one anchored span (A2) is still at its stage_before_sha256. The consistency gate MUST FAIL CLOSED, naming each disagreeing site (file:line, expected vs found; RS-UX-08/UX-005) — this is the partial-migration hazard.",
+  "p1_satisfied": true,
+  "spans": [
+    { "id": "A2", "at": "stage_before_sha256", "expected": "stage_after_sha256" },
+    { "id": "A6-no-entrypoint-yaml", "at": "stage_after_sha256", "expected": "stage_after_sha256" },
+    { "id": "B5-currently-parses-blocked", "at": "stage_after_sha256", "expected": "stage_after_sha256" }
+  ],
+  "expected_result": "FAIL_CLOSED",
+  "expected_disagreeing_sites": ["A2"]
+}
