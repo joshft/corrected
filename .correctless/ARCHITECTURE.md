@@ -80,8 +80,8 @@ dafny_family_absent:
     - "src/Corrected.DafnyAdapter/**"
 - name: "readiness-build-gate"
   type: cli
-  handler: "gate/Corrected.Gate/ReadinessGate.cs:EvaluateReadiness (pure kernel: (ReadinessBlock, probeResults) -> {Pass|Fail, offending}) + a separate probe orchestrator (IEvidenceProbe/ProbeResult) + a shipped-closure ProductionSurfaceScanner"
-  test_via: "from a CLEAN checkout (git clone + `rm -rf spikes/dafny-compat/out/` — the correct path; there is no top-level out/, and that tree is gitignored) run the DOCUMENTED command `dotnet test <AGGREGATOR> --logger \"trx;LogFileName=gate.trx\"` where <AGGREGATOR> is the single pinned constant `gate/Corrected.Gate.slnx` iff an INV-014 pre-flight proves `.slnx` on SDK 10.0.302, else the classic `.sln` fallback (a `.slnx`/`.sln` aggregator over gate/Corrected.Gate + gate/Corrected.Gate.Tests + gate/Corrected.Gate.Lint). Parse the TRX so zero-discovery / a below-floor executed count FAILS — the executed-count guard lives OUTSIDE the discovered suite, in an EXTRACTED RUNNABLE SCRIPT executed verbatim from clean (never a YAML/README grep — the PMB-001 trap). It drives the pure kernel over the committed SUPPLIED-(block, probeResults) fixture table (BLOCKED-all-false -> Pass; READY+satisfied:false/evidence:null/refuted-probe/unresolvable-reference -> Fail; indeterminate -> Fail) AND the real probe orchestrator (Stage A pre-migration: P1 evidence-schema-incomplete false; Stage B post-migration: P1 true; P2/P3 false-on-absent -> BLOCKED either way). It also homes the INV-036 production-surface SHIPPED-CLOSURE scan (out-of-process pinned-SDK build, not a path scan). NOTE: the INV-044 history-registry meta-test is a DEFERRED extension of this entrypoint (lands with Phase-0.1 certification runtime, readiness-gate-carrier DD-005) — NOT part of this carrier's required suite"
+  handler: "gate/Corrected.Gate.Kernel/ReadinessGate.cs:EvaluateReadiness (pure kernel + DTOs in the isolated I/O-free Corrected.Gate.Kernel project, EXT6-05: (ReadinessBlock, probeResults) -> {Pass|Fail, offending}) + a separate probe orchestrator (IEvidenceProbe/ProbeResult) and a shipped-closure ProductionSurfaceScanner in gate/Corrected.Gate/"
+  test_via: "from a CLEAN checkout (git clone + `rm -rf spikes/dafny-compat/out/` — the correct path; there is no top-level out/, and that tree is gitignored) run the DOCUMENTED command — the committed runnable gate script `gate/run-readiness-gate.sh` (<GATE-SCRIPT>, EXT6-01/EXT7-01; NOT bare `dotnet test`, which swallows the banner and runs no executed-count guard), which internally runs `dotnet test <AGGREGATOR> --logger \"trx;LogFileName=gate.trx\"`, then validates the TRX, renders the INV-012 status to stdout, and returns the final gate exit code — where <AGGREGATOR> is the single pinned constant `gate/Corrected.Gate.slnx` iff an INV-014 pre-flight proves `.slnx` on SDK 10.0.302, else the classic `.sln` fallback (a `.slnx`/`.sln` aggregator over gate/Corrected.Gate + gate/Corrected.Gate.Kernel + gate/Corrected.Gate.Tests + gate/Corrected.Gate.Lint). Parse the TRX so zero-discovery / a below-floor executed count FAILS — the executed-count guard lives OUTSIDE the discovered suite, in an EXTRACTED RUNNABLE SCRIPT executed verbatim from clean (never a YAML/README grep — the PMB-001 trap). It drives the pure kernel over the committed SUPPLIED-(block, probeResults) fixture table (BLOCKED-all-false -> Pass; READY+satisfied:false/evidence:null/refuted-probe/unresolvable-reference -> Fail; indeterminate -> Fail) AND the real probe orchestrator (Stage A pre-migration: P1 evidence-schema-incomplete false; Stage B post-migration: P1 true; P2/P3 false-on-absent -> BLOCKED either way). It also homes the INV-036 production-surface SHIPPED-CLOSURE scan (out-of-process pinned-SDK build, not a path scan). NOTE: the INV-044 history-registry meta-test is a DEFERRED extension of this entrypoint (lands with Phase-0.1 certification runtime, readiness-gate-carrier DD-005) — NOT part of this carrier's required suite"
   scope:
     - "gate/**"
     - "test/**"
@@ -265,7 +265,8 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
   **repo-root** `global.json` (exact SDK pin, `rollForward: latestPatch` per the
   documented exception above) to this boundary — the general "any dev-time
   third-party NuGet/toolchain artifact" case beyond the Dafny/Z3/SDK set above.
-  Exercised at: `gate/NuGet.Config` (`<clear/>` single-source), `gate/Corrected.Gate/packages.lock.json`,
+  Exercised at: `gate/NuGet.Config` (`<clear/>` single-source), a per-project `packages.lock.json`
+  (one per gate project — Gate/Kernel/Tests/Lint; INV-015),
   `gate/Directory.Build.props`, the repo-root `global.json` (its `sdk.version` kept
   **semantically synced** — NOT byte-identical — with `spikes/dafny-compat/global.json`
   by a version-field sync test; `rollForward`/comments legitimately differ). See
@@ -313,7 +314,8 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
   path is read from the ADR field or resolved by glob (a leaked `out/**` copy);
   the ADR block is parsed by the non-hardened spike scanner.
 - Exercised at (Phase 0.1, readiness-gate carrier): `gate/Corrected.Gate/**`
-  (parser + kernel + probes) + `gate/Corrected.Gate.Lint/**` and its `*.Tests` fixture corpus.
+  (parser + probes + scanner) + `gate/Corrected.Gate.Kernel/**` (the isolated pure kernel + DTOs, EXT6-05)
+  + `gate/Corrected.Gate.Lint/**` and its `*.Tests` fixture corpus.
 - Test: `.correctless/specs/readiness-gate-carrier.md` INV-001/002/003/005/008 +
   BND-001/BND-003 + the STRIDE-for-TB-006 section. Registered by that feature.
 

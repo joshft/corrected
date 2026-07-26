@@ -6,18 +6,21 @@
 - **Impacts**: `phase-0-1-worker` (this spec BUILDS the enforcement home for its
   INV-001/INV-002/INV-036/PRH-008, and — via the **stage-partitioned normative migration manifest** of
   DD-003 — flips `P1.satisfied` to `true` in its `implementation_readiness` block AND updates every parent
-  current-state site. **The DD-003 manifest is the single canonical site list**; this line and the
+  current-state site. **The DD-003 manifest is the canonical parent-anchor site list**; this line and the
   Packages-Affected bullet reference it and do NOT re-enumerate — a meta-test asserts each holds ONLY the
-  reference (no local list), not that "three lists agree" (R3-I4/EXT4-05).)
+  manifest reference (no local site list, EXT9-02/R3-I4/EXT4-05), not that "three lists agree". The separate
+  ADR obligation is described in DD-003 and the ADR Packages-Affected bullet, not here.)
 - **Branch**: feature/readiness-gate-carrier
 - **Research**: `.correctless/artifacts/research/readiness-gate-carrier-research.md`
-- **Review**: codex GPT-5.6-sol (xhigh) + `/creview-spec` 6-agent + self-assessment, **six rounds**
+- **Review**: codex GPT-5.6-sol (xhigh) + `/creview-spec` 6-agent + self-assessment, **nine rounds**
   (round 1: 12 codex + ~70 Claude; round 2 on v3: 13 codex + ~40 Claude; round 3 FOCUSED on the v4
   P1/DD-003/scanner core: codex 6 BLOCKING + P1-red-team/DD-003/scanner agents; round 4 codex gate on
   v5: 6 BLOCKING + 2 IMPORTANT confirmed, EXT4-01..10; round 5 codex gate on v6: 2 BLOCKING +
   2 IMPORTANT confirmed, EXT5-01..04; round 6 maintainer-relayed impl-contract review on v7: 5 bounded issues
-  EXT6-01..05) — all in
-  `.correctless/artifacts/review-spec-findings-readiness-gate-carrier.md`. **This is now v8.** Its v5 base incorporated the
+  EXT6-01..05; round 7 codex gate on v8: 4 BLOCKING + 2 IMPORTANT, EXT7-01..06; round 8 codex verification
+  gate on v9: 4 BLOCKING + 2 IMPORTANT + 1 MINOR, EXT8-01..07; round 9 codex verification gate on v10:
+  3 BLOCKING + 4 IMPORTANT + 1 MINOR confirmed, EXT9-01..08) — all in
+  `.correctless/artifacts/review-spec-findings-readiness-gate-carrier.md`. **This is now v11.** Its v5 base incorporated the
   round-3 findings (Stage-A DTO required-vs-optional split so the pre-migration ADR parses to
   `evidence-schema-incomplete`; compiled `canonical_sample_sha256`/manifest-file anchors closing the residual
   coherent-tamper forge; duplicate-JSON rejection; the ADR **registry set-equality** replacing v4's
@@ -52,6 +55,48 @@
   never stored per row, ADR B13 excluded from the anchor scan (verified by INV-008) (EXT6-04); and INV-004's
   purity check made satisfiable+complete by isolating the kernel+DTOs in a tiny I/O-free
   `gate/Corrected.Gate.Kernel/` project + a nondeterminism forbidden-set (EXT6-05).
+  **v9 (2026-07-25)** applied a round-7 FINAL codex xhigh gate on v8 (4 BLOCKING + 2 IMPORTANT, all
+  re-verified against the tree; the v8 core held): the EXT6-01 command unification was completed at the
+  sites that lagged — the ARCHITECTURE `test_via` and INV-006 Entry, which still named bare `dotnet test`
+  as the documented command, rebound to `<GATE-SCRIPT>` (EXT7-01); the wrapper's combined exit-code
+  contract (`final_rc == test_rc==0 && trx_rc==0 && render_rc==0`, renderer ALWAYS runs after `dotnet
+  test`) and the sentinel set/check process semantics were pinned + given wrapper-level fixtures (EXT7-02);
+  INV-011's presence policy was genuinely closed — `-noAutoResponse`, committed response-file / custom-`<Sdk>`
+  / MSBuild-property-function / NuGet-`buildTransitive`-asset rejection, an exact SDK-default `Analyzer`
+  allowlist, and the syntax scan bound to the build's actual `DefineConstants` + post-target items so an
+  active `#if` branch is not invisible (EXT7-03); INV-004's kernel isolation given a structural project-graph
+  assertion + an expanded nondeterminism/ambient-state forbidden set (EXT7-04); the new
+  `Corrected.Gate.Kernel` project rippled through Scope / Files / Packages / aggregator membership /
+  INV-015-16 restore-lock set / ARCHITECTURE handler + TB-006 paths (EXT7-05); and the "single canonical
+  site list" wording corrected to "canonical parent-anchor list" with the ADR B13 edit modelled as a
+  separately-named Stage-B obligation (EXT7-06).
+  **v10 (2026-07-25)** applied a round-8 codex xhigh VERIFICATION gate on v9 (did EXT7 introduce new
+  contradictions? — 4 BLOCKING + 2 IMPORTANT + 1 MINOR, all re-verified): a fifth wrapper fixture forcing the
+  `render_rc` term (EXT8-01); the INV-004 denylist reframed as defense-in-depth behind a behavioral
+  determinism check (mutated culture/clock/cwd) + reflection-load added + the static-field ban tightened to
+  reject `static readonly` mutable collections (EXT8-02); **INV-003's factory made a `public static`
+  validation-gated `TryCreate` so the `Corrected.Gate` parser can construct the Kernel-resident
+  `ReadinessBlock` across the assembly boundary (EXT8-03 — the split had made it a private-factory
+  contradiction)**; DD-003 gives every deterministic anchor a committed canonical after-span fixture (digest
+  derived from it, recoverable preimage) + an atomic Stage-B flip, with B1's evidence id validated
+  structurally (EXT8-04); the SDK-default `Analyzer` set computed dynamically from a baseline project instead
+  of a committed const so `latestPatch` drift never false-fails (EXT8-05); the round-7 Packages-Affected
+  A/B enumeration removed to honor DD-003's own "no local site list" meta-test (EXT8-06, a round-7 regression);
+  and the four-project shorthand reconciled in Context/TB-004/lock references (EXT8-07).
+  **v11 (2026-07-25)** applied a round-9 codex verification gate on v10 (6 of 8 findings traced to the
+  round-8 fixes — a non-convergence signal; maintainer chose to fix all 8 then HOLD): the migration manifest
+  schema became a closed **discriminated union** (digest rows vs one structural row for B1's GREEN-assigned
+  evidence id, EXT9-01); the Metadata `Impacts` B13 carve-out removed for symmetry with the Packages-Affected
+  "no local site list" meta-test (EXT9-02); INV-004's purity claim honestly SCOPED to accidental first-party
+  I/O (a `[DllImport]` bypass is out of scope — not a sandbox boundary — + `extern`/`[DllImport]` added to the
+  forbidden kernel-decl set, EXT9-03); "deeply immutable" made a RECURSIVE predicate (EXT9-04); the dynamic
+  Analyzer baseline pinned to a committed `gate/` fixture under locked restore + a same-`NETCoreSdkVersion`
+  assertion + skip-after-vacuous (EXT9-05); the migration atomicity guarantee redefined as **atomic accepted
+  TREE STATE** (the mixed-set guard already delivers it; per-commit history is out of scope, EXT9-06); the
+  vacuous `GetConstructors(Public)` reflection test corrected to `Instance | Public` (EXT9-07); and INV-003's
+  three protected types (`ReadinessBlock`/`ProbeResult` in Kernel, `AdrLintBlock` in Gate) + the single
+  `public static TryCreate` form pinned (EXT9-08). **HELD uncommitted at maintainer request — no advance, no
+  further gates.**
 - **Recommended-intensity**: high
 - **Intensity**: high
 - **Intensity reason**: fail-closed security gate parsing a tamper-checked trust boundary
@@ -65,7 +110,8 @@ The `phase-0-1-worker` spec is deliberately `implementation_readiness.status: BL
 P1/P2/P3, and defines a readiness gate (INV-001/002), a production-code ban (INV-036/PRH-008),
 and ~22 invariants whose enforcement reads "CI test assertion" / "gate precondition" with **no
 built test package** (OQ-002 built-carrier half, RS-002). This spec builds that home: the
-test/build-gate carrier at `gate/Corrected.Gate/` (+ `gate/Corrected.Gate.Tests/`, aggregated by
+test/build-gate carrier at `gate/Corrected.Gate/` (+ the isolated I/O-free `gate/Corrected.Gate.Kernel/`,
+`gate/Corrected.Gate.Tests/`, and the extracted `gate/Corrected.Gate.Lint/`, aggregated by
 `gate/Corrected.Gate.slnx`), realizing the parent's INV-001 (parse), INV-002 (fail-closed
 decision + fixtures + real probes), and INV-036/PRH-008 (production-surface scan + blocker). It
 is the RS-002 unlock. The gate cross-checks each probe's independent verdict against the declared
@@ -82,8 +128,10 @@ readiness/ADR/evidence intake boundary; TB-005 is reserved by the parent for `.d
 ## Scope
 
 **In scope.** A non-shipped .NET 10 project set under `gate/` (`gate/Corrected.Gate/` +
+the isolated I/O-free `gate/Corrected.Gate.Kernel/` (pure kernel + DTOs, INV-004/EXT6-05) +
 `gate/Corrected.Gate.Tests/` + the extracted Dafny-free linter lib `gate/Corrected.Gate.Lint/` +
-`gate/Corrected.Gate.slnx`), with its own `<clear/>` `NuGet.Config`, CPM opt-out, committed
+`gate/Corrected.Gate.slnx` aggregating **exactly** those four projects), with its own `<clear/>`
+`NuGet.Config`, CPM opt-out, committed
 `packages.lock.json`, and a **repo-root** `global.json`; readiness-block extraction + AST-hardened
 strict parse (INV-001/002/003); the fail-closed pure kernel + verdict table + real probe orchestration
 (INV-004..007); the three probes with a **hardened** P1 (INV-008) and fail-closed-on-absent P2/P3
@@ -104,7 +152,8 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
 ## Complexity Budget
 - **Estimated LOC**: ~1600–2100 gate/probe/parser/scanner + extracted-lint lib + ~1600 test LOC
   (fixtures, YAML-hardening, P1 evidence/tamper, closure/bypass, from-clean, guard-self-tests).
-- **Files touched**: `gate/Corrected.Gate/**`, `gate/Corrected.Gate.Tests/**`, `gate/Corrected.Gate.Lint/**`,
+- **Files touched**: `gate/Corrected.Gate/**`, `gate/Corrected.Gate.Kernel/**` (isolated pure kernel + DTOs,
+  EXT6-05), `gate/Corrected.Gate.Tests/**`, `gate/Corrected.Gate.Lint/**`,
   `gate/Corrected.Gate.slnx`, `gate/NuGet.Config`, `gate/Directory.Build.props` (+ CPM opt-out) +
   `packages.lock.json`, a **repo-root `global.json`**, a `.gitattributes` pinning the parsed
   specs/ADR to LF, a **`.gitignore`** rule for the gate's TRX/`TestResults`/local restore output, a gate
@@ -112,7 +161,8 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   changeset to `phase-0-1-worker.md` + `ADR-0001` (DD-003 migration manifest, applied at GREEN). No `src/` files.
 - **New abstractions**: `ReadinessBlock` (validated immutable) + a private parse DTO; a hardened
   `ReadinessBlockParser`; a **distinct** `AdrLintBlock` DTO + parser sharing the same hardening machinery
-  (INV-008a/RS-206); `ReadinessGate.EvaluateReadiness` (pure kernel); `IEvidenceProbe` +
+  (INV-008a/RS-206); `ReadinessGate.EvaluateReadiness` (pure kernel, homed in the isolated I/O-free
+  `Corrected.Gate.Kernel` project with its DTOs — INV-004/EXT6-05); `IEvidenceProbe` +
   `ProbeResult{satisfied, reason, referenceResolution}` + three probes + orchestrator;
   `ProductionSurfaceScanner` (out-of-process pinned-SDK build closure); the extracted `Corrected.Gate.Lint` API.
 - **Trust boundaries touched**: TB-006 (readiness-block + ADR/evidence intake/tamper — the carrier's
@@ -206,12 +256,21 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
 
 ### INV-003: Validated construction — private DTO → validate → immutable domain type
 - **Type**: must · **Category**: data-integrity
-- **Statement**: YAML materializes only into the private DTO; the public `ReadinessBlock` (and
-  `AdrLintBlock`) are built only through a private validation-gated factory yielding an immutable value
-  (**no public constructor / no `init`/`set`**, `enum status`, immutable collections) — a reflection test
-  asserts `GetConstructors(Public)` is empty and no property is publicly settable, so no `with` reaches an
-  invalid state (RS-T-17). `EvaluateReadiness`/probes accept `ReadinessBlock`/typed `ProbeResult`,
-  never raw text or the DTO.
+- **Statement**: YAML materializes only into the private DTO; `ReadinessBlock`, `ProbeResult`, and
+  `AdrLintBlock` are built only through a **`public static` validation-performing factory (`TryCreate`)**
+  yielding an immutable value (**no public constructor / no `init`/`set`**, `enum status`, immutable
+  collections). **Type homes are pinned (EXT9-08)**: `ReadinessBlock` + `ProbeResult` live in
+  `Corrected.Gate.Kernel` (kernel inputs, EXT6-05); `AdrLintBlock` lives in `Corrected.Gate` (parsed +
+  consumed by the P1 probe in the orchestrator, not a kernel input). Because the parser in `Corrected.Gate`
+  constructs the Kernel-resident `ReadinessBlock`/`ProbeResult` **across the assembly boundary** (one-way
+  Gate→Kernel, EXT7-04), the factory is `public static` — NOT a `private` factory a separate assembly cannot
+  call (EXT8-03) — and the **single chosen form is `public static TryCreate` for ALL THREE types** (no
+  `internal`+`InternalsVisibleTo` variant, so implementations cannot diverge; EXT9-08). A private
+  *constructor* is still required so validation cannot be bypassed: a reflection test asserts
+  **`GetConstructors(BindingFlags.Instance | BindingFlags.Public)` is empty** (NOT `Public` alone, which
+  omits instance constructors and vacuously passes — EXT9-07) and no property is publicly settable, so no
+  `with` reaches an invalid state (RS-T-17), while the SOLE public entry is the validating `TryCreate`.
+  `EvaluateReadiness`/probes accept `ReadinessBlock`/typed `ProbeResult`, never raw text or the DTO.
 - **Guards against**: AP-014. · **Enforcement**: CI test — invalid-input-cannot-construct + the
   reflection structural check. · **Test approach**: unit · **Risk**: medium
 
@@ -222,23 +281,62 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
 - **Statement**: `EvaluateReadiness(block: ReadinessBlock, probeResults: IReadOnlyDictionary<
   PreconditionId, ProbeResult>) → {Pass | Fail, offending_precondition}` takes **caller-supplied**
   inputs (not the live probes/file), so every branch is reachable with supplied results. It performs
-  **no I/O and is deterministic**. **The kernel + its DTOs live in a tiny, I/O-free project
-  `gate/Corrected.Gate.Kernel/` (EXT6-05)** that the parser/orchestrator reference but that itself references
-  nothing I/O-capable — so the no-I/O check is a **Roslyn symbol-usage scan over the KERNEL PROJECT's whole
+  **no I/O and is deterministic**. **The kernel + its DTOs live in a tiny project
+  `gate/Corrected.Gate.Kernel/` (EXT6-05)** that the parser/orchestrator reference **one-way** (Gate/Tests →
+  Kernel, NEVER the reverse). A **project-graph meta-test asserts the Kernel project declares NO
+  `ProjectReference` and NO `PackageReference`** (it references only the framework BCL) and that no gate
+  project introduces a Kernel→I/O edge — so the "scan the Kernel project only" completeness does NOT rest on
+  convention (EXT7-04: a symbol scan ALONE would miss a `ProjectReference` to the I/O-capable orchestrator
+  that is never symbolically used). "I/O-free" is a property of the Kernel's *own code*, not its references —
+  the BCL still exposes I/O and clock APIs (`System.IO.File` etc. live in `System.Private.CoreLib`), which is
+  exactly why the control is a **symbol-usage scan**, not a reference scan. So the no-I/O check is a
+  **Roslyn symbol-usage scan over the KERNEL PROJECT's whole
   compilation**, which is both **satisfiable** (the project holds ONLY the pure kernel + DTOs, so there is no
   legitimate I/O to false-positive on — a whole-`Corrected.Gate` scan would trip on the parser/orchestrator's
   real I/O) and **complete** (any private helper is in the same project, so I/O hidden behind a helper is
   still in scope — a scan of only the `EvaluateReadiness` method body would miss it; EXT6-05). It fails if any
-  symbol under `System.IO.{File,Directory,Path,Stream,FileStream,…}`, `System.Diagnostics.Process`, or the
-  **nondeterminism set** (`System.DateTime.Now`/`UtcNow`, `System.DateTimeOffset.Now`/`UtcNow`,
-  `System.Environment`, `System.Random`, `System.Guid.NewGuid`) is referenced (an assembly-reference scan is
-  INSUFFICIENT on .NET 10 — `System.IO.File` lives in `System.Private.CoreLib`/`System.Runtime`, not a
-  separately-referenced `System.IO` assembly, so a reference scan passes even for a kernel calling
-  `File.ReadAllText`; RS-260). A complementary behavioral check asserts the kernel touches no fixture file and
-  returns identical verdicts across repeated calls with identical inputs. Verdict defined by INV-005.
-- **Violated when**: the kernel reads the committed file / calls probes internally; it does I/O (caught by
-  the symbol scan); the failure omits the offending id. · **Enforcement**: gate precondition — INV-007
-  fixtures + the Roslyn no-I/O symbol scan + the no-file-touch behavioral check. · **Test approach**: unit · **Risk**: high
+  symbol under `System.IO.*` (`File`/`Directory`/`Path`/`Stream`/`FileStream`/…), `System.Console`,
+  `System.Net.*`, `System.Diagnostics.{Process,Stopwatch}`,
+  `System.Reflection.Assembly.{Location,Load,LoadFrom,LoadFile}`, `System.Runtime.Loader.AssemblyLoadContext`,
+  `System.Threading.Thread.Sleep`, `System.Threading.Tasks.Task.Delay`, `System.GC`, or the
+  **nondeterminism / ambient-state set** — `System.DateTime.{Now,UtcNow,Today}`,
+  `System.DateTimeOffset.{Now,UtcNow}`, `System.TimeProvider`, `System.Environment` (incl.
+  `TickCount`/`TickCount64`/`UserName`), `System.Random`,
+  `System.Security.Cryptography.RandomNumberGenerator`, `System.Guid.NewGuid`,
+  `System.Globalization.CultureInfo.{CurrentCulture,CurrentUICulture}` — is referenced, **or** if the Kernel
+  declares any **mutable static state**: a static field that is NOT `const` AND NOT a `readonly` reference to a
+  **deeply-immutable type**, where deeply-immutable is defined **RECURSIVELY (EXT9-04)** — a
+  primitive/string/enum, OR an immutable `record`/`ImmutableArray<T>`/`FrozenDictionary<K,V>` **every one of
+  whose generic arguments AND record fields/properties itself satisfies this predicate**. So `static readonly
+  List<T>`/`Dictionary<K,V>` is BANNED (mutable contents), AND so are the nested-wrapper cases
+  `ImmutableArray<List<int>>` (mutable element) and a `record` holding a `List<T>` (mutable field) — the
+  readonly reference is immutable but the reachable state is not (EXT8-02/EXT9-04); EXT7-04. Kernel methods
+  declared `extern`/`[DllImport]` are ALSO rejected (P/Invoke, EXT9-03 — mirroring INV-011's EXT4-01
+  rejection). (An assembly-reference scan is INSUFFICIENT on .NET 10 — `System.IO.File`
+  lives in `System.Private.CoreLib`/`System.Runtime`, so a reference scan passes even for a kernel calling
+  `File.ReadAllText`; RS-260.) **The denylist is defense-in-depth, and the check's SCOPE is honestly bounded
+  (EXT9-03)**: it catches ACCIDENTAL I/O/nondeterminism in first-party kernel code the maintainer authors —
+  it does NOT claim to PROVE no-I/O against a determined bypass (a `[DllImport]` P/Invoke to libc reads a
+  file with no `System.IO` symbol and could pass the symbol scan absent the extern rejection above); the
+  kernel is first-party code, NOT an adversarial-input sandbox boundary, so syscall-level purity is out of
+  scope. Backstopping the denylist: (i) the project-graph bound (BCL-only, no packages, no I/O-capable
+  project refs — a small reachable surface) and (ii) a **behavioral determinism check** asserting the kernel
+  touches no fixture file and returns byte-identical verdicts across repeated calls with identical inputs,
+  **run under a mutated ambient culture and clock** (so an ambient-state read the denylist missed still fails
+  determinism). A **meta-test enumerates the forbidden-symbol set** so a newly-relevant API is added
+  deliberately. Verdict defined by INV-005.
+- **Violated when**: the kernel reads the committed file / calls probes internally; it does I/O, reads the
+  clock/culture/RNG, LOADS an assembly (`Assembly.LoadFrom`/`AssemblyLoadContext`), or holds mutable static
+  state incl. a `static readonly` MUTABLE COLLECTION (caught by the expanded symbol scan / tightened
+  static-field ban / behavioral determinism check); the Kernel declares a `ProjectReference`/`PackageReference`
+  (caught by the project-graph meta-test); the failure omits the offending id. · **Enforcement**: gate
+  precondition — INV-007 fixtures + the Roslyn no-I/O/nondeterminism symbol scan (incl. `extern`/`[DllImport]`
+  rejection, EXT9-03) + the **behavioral determinism check** (mutated culture/clock) + the **project-graph
+  meta-test** (Kernel has no `ProjectReference`/`PackageReference`; one-way Gate/Tests→Kernel) + the
+  **recursively-checked static-field ban** (only `const`/deeply-immutable-readonly per the EXT9-04 recursive
+  predicate) + one negative fixture per ambient-state/I/O family (clock, culture, RNG, console, process,
+  reflection-load, `extern`/`[DllImport]`, `static readonly` mutable collection, AND the nested cases
+  `ImmutableArray<List<int>>` + a record-containing-collection, EXT9-04). · **Test approach**: unit · **Risk**: high
 
 ### INV-005: The total verdict table — reference resolution + declared-vs-actual cross-check
 - **Type**: must · **Category**: security
@@ -295,9 +393,12 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   the stage-current-form current-state orchestration test; the from-clean gate (INV-013); a test asserting
   no check resolves its subject from `out/`.
 - **Test approach**: integration
-- **Integration contract**: Entry: `dotnet test <AGGREGATOR> --logger trx` from a clean checkout
-  (clone + `rm -rf spikes/dafny-compat/out/`, INV-013/EXT2-11) — the `readiness-build-gate` entrypoint,
-  where `<AGGREGATOR>` is the single pinned constant of INV-014. Through: the real kernel + real
+- **Integration contract**: Entry: the documented operator/CI command is the committed script
+  `<GATE-SCRIPT>` (INV-014/EXT7-01), which runs `dotnet test <AGGREGATOR> --logger trx` from a clean checkout
+  (clone + `rm -rf spikes/dafny-compat/out/`, INV-013/EXT2-11) — the `readiness-build-gate` entrypoint, where
+  `<AGGREGATOR>` is the single pinned constant of INV-014; this INV-006 orchestration assertion runs INSIDE
+  that `dotnet test <AGGREGATOR>` suite (it is a test in the discovered suite, NOT a separate shell-out to the
+  script — that would recurse, INV-017/EXT7-02). Through: the real kernel + real
   orchestrator over the real committed spec/ADR/evidence; nothing mocked. Exit: post-migration result
   `P1=true, P2/P3=false` → migrated block `Pass`, `status: BLOCKED`.
 - **Risk**: high
@@ -529,15 +630,29 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   real out-of-process build, maintainer decision 2026-07-25)**, in two phases:
   - **Build phase** — an **out-of-process `dotnet build` bound to the pinned SDK** (INV-016's repo-root
     `global.json`; NOT an in-process `MSBuildLocator` resolving ambient machine MSBuild + inherited props,
-    which TB-004 forbids). The build **does execute** the closure's source generators/analyzers (that is how
+    which TB-004 forbids). **The build is invoked with `--noAutoResponse` (EXT7-03)** so a committed
+    `Directory.Build.rsp`/`MSBuild.rsp` cannot silently inject switches into the build; any such committed
+    response file in the closure also FAILS closed under the presence policy (below). The build **does execute** the closure's source generators/analyzers (that is how
     generated sources come to exist) and emits them to disk via `EmitCompilerGeneratedFiles=true` →
     `CompilerGeneratedFilesOutputPath` (R3-B6 — v4's "do not execute generators" was incoherent with a real
     build; the ban never needed to *inspect a generator's body*, only its *emitted output* + *its reference*).
-    The committed `Compile` items are extracted via `dotnet build -getItem:Compile`, and the committed
-    **`Analyzer` items** via `dotnet build -getItem:Analyzer` — analyzers/source-generators ship as MSBuild
-    `Analyzer` items, NOT necessarily ordinary assembly `Reference`s, so both feed the analysis-phase
-    allowlist below (EXT6-02) (SDK ≥ 8, present on 10.0.302 — a manifest that no `Microsoft.Build.*`
-    in-process reference exists; R3-I1/EXT2-10). **RT-L1
+    The `Compile` and `Analyzer` item sets are extracted **after the build's evaluation+target run (a
+    `-getItem:Compile,Analyzer` query bound to the SAME build so it captures target-added items — NOT an
+    evaluation-only `-getItem` that misses target-injected analyzers/generated `Compile` items; EXT7-03)** —
+    analyzers/source-generators ship as MSBuild `Analyzer` items, NOT necessarily ordinary assembly
+    `Reference`s, so both feed the analysis-phase allowlist below (EXT6-02). **The .NET SDK enables built-in
+    analyzers by default, so the SDK-default `Analyzer` set is computed DYNAMICALLY at gate time from a
+    **committed baseline fixture project under `gate/Corrected.Gate.Tests/fixtures/analyzer-baseline/`** (its
+    own `<clear/>` `gate/NuGet.Config` scope + committed `packages.lock.json` + locked restore — same
+    discipline as the shipped-closure fixtures; EXT8-05/EXT9-05), built under the SAME resolved SDK: the
+    closure's `Analyzer` set MINUS the baseline project's `Analyzer` set is the non-default set that must be
+    empty/allowlisted. **The gate asserts the baseline build and the closure build report the SAME captured
+    `NETCoreSdkVersion`** (so two `dotnet build` invocations in one run cannot straddle two `latestPatch`
+    patches; EXT9-05), and **skips baseline construction entirely after the zero-project vacuous
+    short-circuit** (no closure → no analyzer diff needed). This sidesteps `latestPatch` band drift (baseline
+    resolves the same patch as the closure) and covers all permitted SDK identities uniformly (the baseline
+    uses the closure project's own `<Sdk>` identity)**; anything outside that computed default set is non-allowlisted and rejected. (SDK ≥ 8, present on
+    10.0.302 — a manifest that no `Microsoft.Build.*` in-process reference exists; R3-I1/EXT2-10). **RT-L1
     build-time-code-execution risk** is stated and SCOPED AS AN ACCEPTED RESIDUAL (EXT5-02): the build runs
     under the pinned SDK + the `<clear/>`-isolated locked restore, and while BLOCKED `src/` is empty/skeleton
     (nothing real to execute). The real out-of-process build **does execute** any committed source
@@ -548,10 +663,18 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
     events — all of which run during `dotnet build` and evade the C#/reference scan) is an **accepted
     CI-runner-scoped residual**, with containment delegated to the CI runner's own sandbox and NOT claimed by
     this gate (the earlier "bounded/sandboxed" framing was dropped as an unbacked overclaim, EXT5-02). **But
-    committed build extensions do NOT get a free pass on PRESENCE (EXT6-02, closed policy)**: the shipped
-    closure's `.csproj`/`.targets`/`.props` must declare NONE of the above (only the closed SDK-default set is
-    permitted — empty while BLOCKED); a committed custom target/task/`Exec`/non-SDK import/build-event FAILS
-    closed, and non-allowlisted `Analyzer` items are rejected by the analysis-phase allowlist alongside
+    committed build extensions do NOT get a free pass on PRESENCE (EXT6-02/EXT7-03, closed policy)**: the
+    shipped closure's `.csproj`/`.targets`/`.props`/`.rsp` must declare NONE of — a custom
+    `<Target>`/`BeforeBuild`/`AfterBuild`/`<PreBuildEvent>`/`<PostBuildEvent>`, `<UsingTask>`, `<Exec>`, a
+    non-SDK `<Import>`, a **non-default `<Sdk>`/`Sdk=` identity** (only `Microsoft.NET.Sdk`/`.Web`/`.Razor`
+    permitted), a committed **response file** (`Directory.Build.rsp`/`MSBuild.rsp`), or an **MSBuild property
+    function** (`$([Type]::Member(...))`) anywhere in a `PropertyGroup`/`ItemGroup` (property functions run at
+    evaluation and can read time/env/culture/files) — only the closed SDK-default set is permitted (empty
+    while BLOCKED); any present FAILS closed. **NuGet build assets are covered too (EXT7-03)**: the locked
+    `packages.lock.json` is inspected and any restored package contributing `build`/`buildMultiTargeting`/
+    `buildTransitive` MSBuild logic — which executes via restore-generated `obj/*.nuget.g.props/targets`
+    WITHOUT emitting a `Reference`/`Analyzer` item or a literal `<Import>` — is rejected unless on the closed
+    allowlist. Non-allowlisted `Analyzer` items are rejected by the analysis-phase allowlist alongside
     references. The named control is
     the **analysis-phase reference-rejection** (below): a shipped generator/analyzer is caught by its
     non-allowlisted *reference* AFTER it has already run (EXT4-06: the real build *does* run generators; the
@@ -560,9 +683,13 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
     of what its body did at build time, but the gate does NOT prevent that body from executing.
   - **Analysis phase** — the **gate parses syntax-only** (its own in-process `Microsoft.CodeAnalysis.CSharp`,
     pinned+locked in INV-015; `CSharpSyntaxTree.ParseText`, no Workspaces/MSBuild, and **never re-hosts or
-    re-executes** any generator/analyzer in its own compilation; R3-I1) over: committed `Compile` items +
-    the emitted generated sources (read from `CompilerGeneratedFilesOutputPath`) + linked `<Compile
-    Include>`. It asserts (i) **no executable content** via a **CLOSED-ALLOWLIST Roslyn predicate**
+    re-executes** any generator/analyzer in its own compilation; R3-I1) over: the **post-target** `Compile`
+    items + the emitted generated sources (read from `CompilerGeneratedFilesOutputPath`) + linked `<Compile
+    Include>`. **The parse is bound to the build's ACTUAL preprocessor symbols (EXT7-03)**: `ParseText` uses a
+    `CSharpParseOptions` seeded with the `DefineConstants` the real build passed to `Csc` (extracted from the
+    same build), so an active `#if SYMBOL` branch the real build compiles is NOT dropped as inactive
+    disabled-text trivia and thereby made invisible to the allowlist predicate — a default-symbol parse would
+    leave executable content inside a live `#if` unscanned (the EXT7-03 parse-differential). It asserts (i) **no executable content** via a **CLOSED-ALLOWLIST Roslyn predicate**
     (default-deny by construction, EXT4-01): the ONLY permitted syntax nodes are namespace/type/member
     **declarations that carry no body, no initializer, and synthesize no members** — **any** other node fails
     closed. This rejects, non-exhaustively (the allowlist is the contract, not this list): `BlockSyntax`,
@@ -610,10 +737,14 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   statement**, **`extern`/`[DllImport]` method (EXT4-01)**, **primary constructor `class C(int x)` (EXT4-01)**,
   **positional `record R(int X)` (EXT4-01)**, nested `src/**/*.Tests` policy, linked `gate/**` source,
   field/property initializer, generated source (via the committed generator fixture's emitted output),
-  binary first-party reference, **non-allowlisted `Analyzer` item (via `-getItem:Analyzer`; EXT6-02)**,
+  binary first-party reference, **non-allowlisted `Analyzer` item (via the post-target `-getItem` query; EXT6-02/EXT7-03)**,
   **committed custom `<Target>` / `BeforeBuild` / `<Exec>` (EXT6-02)**, **committed `<UsingTask>` or non-SDK
-  `<Import>` (EXT6-02)**}
-  FAILS; the allow-branch fixture (non-empty injected allowlist: allowed ref → pass, one-identity-char-off →
+  `<Import>` (EXT6-02)**, **committed response file `Directory.Build.rsp`/`MSBuild.rsp` (EXT7-03)**,
+  **non-default `<Sdk>`/`Sdk=` identity (EXT7-03)**, **an MSBuild property function in a project file (EXT7-03)**,
+  **a `build`/`buildTransitive` package asset in the locked `packages.lock.json` (EXT7-03)**, **executable
+  content inside a live `#if` branch active under the build's `DefineConstants` (EXT7-03 parse-differential)**}
+  FAILS; the **SDK-default `Analyzer` allowlist PASS fixture** (a vanilla skeleton project does NOT false-fail, EXT7-03);
+  the allow-branch fixture (non-empty injected allowlist: allowed ref → pass, one-identity-char-off →
   fail); a vacuous-scan-visibility test (zero project files → pass + notice); a **closure-uncomputable →
   fail-closed** test (a fixture target whose locked restore is forced to fail / a malformed `.csproj`); a
   loaded-version assertion for the pinned in-process `Microsoft.CodeAnalysis.CSharp`, and a `dotnet msbuild
@@ -684,7 +815,14 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   runs `dotnet test <AGGREGATOR> --logger "trx;LogFileName=gate.trx"` from the repo root on a clean checkout
   (the logger is **baked in** so the counted-execution assertion sees the same argv the script runs), THEN
   validates the TRX (executed-count floor + named-fixture outcomes), renders the INV-012 status
-  banner/notice/reasons to stdout, and **returns the final gate exit code**. The doc homes (README +
+  banner/notice/reasons to stdout, and **returns the final gate exit code**. **The exit-code contract is a
+  defined state machine (EXT7-02)**: the script captures `test_rc` from `dotnet test` WITHOUT `set -e`
+  short-circuiting (so a nonzero `dotnet test` does NOT skip the renderer), then computes `trx_rc` from the
+  executed-count/named-fixture guard, **ALWAYS renders the INV-012 status** (the PASS-BLOCKED banner on green,
+  the FAIL-violation text on any failure — INV-012's both-paths visibility depends on the renderer running
+  regardless of `test_rc`), captures `render_rc`, and exits **`0` iff `test_rc==0 && trx_rc==0 &&
+  render_rc==0`, else non-zero** — so a green `dotnet test` with a failed TRX guard (or a swallowed nonzero
+  test) can NEVER produce a zero exit. The doc homes (README +
   AGENT_CONTEXT) document `<GATE-SCRIPT>` as the command to run, and the AP-020 verbatim test executes THAT
   script (not bare `dotnet test`, which swallows the banner); ARCHITECTURE's `test_via` is reconciled to
   `<GATE-SCRIPT>` (the v3 `--logger trx` mismatch, RS-251, corrected). This puts INV-012 (banner on the
@@ -695,7 +833,16 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   partition/bypass, the committed-state test) each `Passed` — so dropping `Corrected.Gate.Tests` from the
   aggregator cannot silently green the run (RS-UX-02/RS-RT-10). **The guard's own fail-closed branch is
   tested (RS-252)**: committed synthetic TRX fixtures {zero-discovery → guard exits non-zero; below-floor →
-  non-zero; happy → zero} plus a run of the guard against this run's real `gate.trx`; and a **meta-test**
+  non-zero; happy → zero} plus a run of the guard against this run's real `gate.trx`. **Beyond the guard, the
+  WRAPPER's combined-exit + always-render contract is tested at the script level (EXT7-02)** with **five**
+  fixtures driving the outer script over a stubbed `dotnet test` + TRX: {nonzero-test + valid-TRX → script
+  exits non-zero AND renders the FAIL text; zero-test + bad-TRX (zero-discovery/below-floor) → non-zero AND
+  renders FAIL; missing-TRX → non-zero AND renders FAIL; **renderer-nonzero (zero-test + valid-TRX but the
+  renderer step exits non-zero) → script exits non-zero AND a shell-owned fallback FAIL line is emitted even
+  though the renderer could not (EXT8-01 — this forces the `render_rc` term, which the prior four fixtures
+  left unenforced)**; happy (zero-test + valid-TRX + renderer zero) → zero AND renders the
+  PASS-BLOCKED banner} — the self-tests exercise the enclosing script's combined result across ALL THREE of
+  `test_rc`/`trx_rc`/`render_rc`, not only the guard in isolation. And a **meta-test**
   reconciles the expected-fixture-name `const` set against the enumerated INV-005 rows / INV-008 cases
   (count + names) so dropping a fixture from both silently is caught. The doc home is a **dedicated fenced
   `## Running the readiness gate` section** (mirroring the spike; a markdown table cell cannot hold a fenced
@@ -728,7 +875,11 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   gate's **test-host / xUnit / runner** are pinned + locked (VSTest — `Microsoft.NET.Test.Sdk` + `xunit` +
   `xunit.runner.visualstudio`, matching the spike; RS-A-06). All under `RestorePackagesWithLockFile` /
   `RestoreLockedMode` with a committed `packages.lock.json` (the gate's AND every shipped-closure fixture
-  project's own lock; R3-I2); CI asserts the restored versions. A documented **bump affordance**: any
+  project's own lock; R3-I2); CI asserts the restored versions. **The `<AGGREGATOR>` restore/lock set is
+  EXACTLY the four gate projects — `Corrected.Gate`, `Corrected.Gate.Kernel`, `Corrected.Gate.Tests`,
+  `Corrected.Gate.Lint` (EXT7-05)**: a meta-test asserts solution membership equals that four-element set
+  (so the isolated Kernel project is not accidentally omitted and depended on only transitively), and each
+  has a committed lock restored in locked mode. A documented **bump affordance**: any
   YamlDotNet/Roslyn/SDK/test-host bump re-runs the AST-hardening + INV-011 + INV-014 fixtures under the
   spike's DD-006 procedure (RS-UC-05).
 - **Guards against**: AP-015. · **Enforcement**: hash/lock verification — committed lockfile(s) +
@@ -789,11 +940,16 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   returns the final gate exit code. **CI executes `<GATE-SCRIPT>` DIRECTLY** — the primary from-clean
   execution and the real evidence, NOT merely `Assert.Contains(command, workflow.yml)` (a doc-grep, AP-011 /
   the exact PMB-001 trap; INV-017/RS-253/RT-H6/DC-MED). The **verbatim-behavior assertion** lives in the
-  **out-of-suite reference-CI lane** (NOT inside `<AGGREGATOR>`'s discovered suite) and runs `<GATE-SCRIPT>`
-  in a subprocess under a **re-entry sentinel** (e.g. `CORRECTED_GATE_INNER=1`) so the script's inner `dotnet
-  test <AGGREGATOR>` never re-triggers the wrapper — an in-suite xUnit test invoking its own enclosing script
-  would recurse (EXT6-01), which is why it is deliberately NOT in the suite. A built-but-grep-asserted gate is
-  the PMB-001/PMB-002 deferred-net class. EA-005 notes this job assumes a
+  **out-of-suite reference-CI lane** (NOT inside `<AGGREGATOR>`'s discovered suite). **The re-entry sentinel
+  `CORRECTED_GATE_INNER` has a defined set/check owner (EXT7-02)**: the OUTER script starts with the sentinel
+  **unset** and **the script itself EXPORTS `CORRECTED_GATE_INNER=1` only for its child `dotnet test`
+  invocation**; any gate-invoking helper that could run *inside* the discovered suite **checks** the sentinel
+  and no-ops when it is set — so the inner `dotnet test <AGGREGATOR>` can never re-trigger the wrapper. The
+  reference-CI lane runs the outer `<GATE-SCRIPT>` with the sentinel **unset** (so the outer script executes
+  fully — the lane is NOT itself run under the sentinel, which would make the verbatim assertion a no-op);
+  **no in-suite xUnit test ever executes `<GATE-SCRIPT>`** (an in-suite test invoking its own enclosing script
+  would recurse, EXT6-01), and the doc-home AP-020 tests **compare bytes only**, never execute it. A
+  built-but-grep-asserted gate is the PMB-001/PMB-002 deferred-net class. EA-005 notes this job assumes a
   network-connected CI (nuget.org restore); an air-gapped lane needs a committed/cached package store.
 - **Guards against**: AP-002, AP-021, AP-011, AP-020. · **Enforcement**: a committed `.github/workflows` gate
   job + its extracted from-clean script, whose **execution** (not just presence) is asserted verbatim from a
@@ -915,15 +1071,32 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
   P3 `test/attestations/inv010-determinism.json` (durable + provenance-bound, INV-010).
 - **DD-003 (the atomic P1 flip — a STAGE-PARTITIONED normative migration manifest)**: a machine-readable
   **migration manifest** committed in the carrier lists **every exact parent-spec anchor by `{id, file}`**;
-  per EXT5-01 each row stores `stage_before_sha256` + `stage_after_sha256` where the **after-digest IS the
+  per EXT5-01 each **digest row** stores `stage_before_sha256` + `stage_after_sha256` (B1's evidence is a
+  **structural row** instead — no after-digest, EXT9-01) where the **after-digest IS the
   replacement** (its content hash — no replacement string is stored) and the **stage is NEVER stored per row**
-  (it is derived globally from committed `P1.satisfied`; EXT5-01/EXT6-04). A gate enforces **set-equality**
+  (it is derived globally from committed `P1.satisfied`; EXT5-01/EXT6-04). **The manifest is a VALIDATOR /
+  guard, and the exact after-bytes are made RECOVERABLE (EXT8-04)**: for every DETERMINISTIC parent-spec
+  anchor, the exact post-migration span is committed AT STAGE A as a **canonical after-span fixture** under
+  `gate/Corrected.Gate.Tests/manifests/after-spans/` (a Stage-A artifact, site A5), and `stage_after_sha256`
+  is derived FROM that committed fixture — so a fresh Stage-A checkout carries the real preimage (recoverable),
+  and the digest is NOT self-authored circularly at Stage B (a round-7 gap, EXT8-04: prose alone was not a
+  byte-exact preimage). **The gate's guarantee is atomic accepted TREE STATE (EXT9-06)** — the P1-derived
+  stage selector + the mixed-set fail-closed guard prove any GATED tree is all-before (Stage A) or all-after
+  (Stage B), never mixed, so the `P1.satisfied` flip + every anchored edit + the ADR B13 edit are consistent
+  in any tree the gate accepts. The gate checks TREE state, not commit history, so it does NOT claim the flip
+  occupied literally one commit (a red-partial-then-green-complete PR is indistinguishable at HEAD; per-commit
+  history-aware enforcement is out of scope, EXT9-06) — the honest guarantee is that an accepted tree is never
+  partially-migrated. **B1's `P1.evidence` field is the sole exception to digest-pinning**: its value is the
+  gate's OWN registered test id, assigned at GREEN and not knowable at Stage A, so B1 is validated STRUCTURALLY
+  (`satisfied:true` AND `evidence` equals the id the gate registers — INV-005 cross-check) via a **structural
+  manifest row** (`kind:"structural"`, EXT9-01), NOT a digest row. A gate enforces **set-equality**
   between the manifest and the current-state anchors it discovers **in `phase-0-1-worker.md`** (an omitted or
   stale site fails; RS-222/RS-223/EXT2-03/R3-I4). **The `docs/adr/ADR-0001` `adr_lint` change (B13) is
   EXPLICITLY OUT of this anchor scan (EXT6-04)** — it is not a current-state anchor; its Stage-B edit (adding
   `status`/`supersedes`/`superseded_by`) is verified separately by INV-008's own ADR parse (the terminal rule
-  + compiled-registry set-equality), so the manifest's discovery scope is parent-spec anchors ONLY. **The manifest is the single canonical
-  site list** — the Metadata `Impacts` line and the "Packages Affected → parent spec" bullet reference it
+  + compiled-registry set-equality), so the manifest's discovery scope is parent-spec anchors ONLY. **The manifest is the canonical
+  parent-anchor site list** (the B13 ADR edit is a separately-named Stage-B obligation, NOT a manifest row
+  — EXT7-06) — the Metadata `Impacts` line and the "Packages Affected → parent spec" bullet reference it
   and do NOT re-enumerate; a **meta-test asserts Metadata `Impacts` and Packages-Affected each contain the
   manifest REFERENCE and maintain NO local site list** (EXT4-05: there is ONE list — the manifest — not three
   to compare; v4's failure mode was Metadata + Packages-Affected listing INV-043 while the manifest omitted
@@ -951,8 +1124,9 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
     since `/carchitect` 2026-07-24; the carrier is now homed). These are current-state truths **already true
     today, independent of the P1 flip**, so they are Stage A, NOT Stage B (EXT5-03); all three are also in the
     finite literal scan below.
-  - **Stage-B sites (the atomic P1 discharge)**: (B1) the readiness block `P1.satisfied:false→true` +
-    `P1.evidence:null→<registered id>`; (B2) the INV-002 kernel **signature** (single-arg `blockText` →
+  - **Stage-B sites (the P1 discharge — consistent in any gated tree; atomic TREE STATE, not per-commit, EXT9-06)**: (B1) the readiness block
+    `P1.satisfied:false→true` + `P1.evidence:null→<registered id>` (the evidence field validated STRUCTURALLY,
+    not digest-pinned — the id is assigned at GREEN; EXT8-04); (B2) the INV-002 kernel **signature** (single-arg `blockText` →
     two-arg `(ReadinessBlock, probeResults)`); (B3) the INV-002 **semantic** prose "the pure decision
     function re-derives the discharge / every probe runs" (carrier INV-004 forbids — kernel pure, orchestrator
     probes); (B4) **MOVED to Stage A (site A6, EXT5-03)** — the stale INV-002 "no entrypoint YAML exists yet" line is a current-state correction already true today (entrypoint YAML exists), NOT a P1-flip truth, so it is no longer a Stage-B site;
@@ -991,8 +1165,10 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
     a **mixed-before/after negative fixture** — naming each disagreeing site (`file:line`, expected vs found;
     RS-UX-08/UX-005). The **exact anchor-ID set, the manifest path
     `gate/Corrected.Gate.Tests/manifests/readiness-migration-manifest.json`, and its closed JSON schema**
-    (`{id, file, stage_before_sha256, stage_after_sha256}` per anchor — the manifest is the sole hash
-    authority) are pinned in that manifest — a Stage-A committed artifact with its own schema test — so the
+    (a **discriminated union on `kind`**, EXT9-01: a **digest row** `{id, file, kind:"digest",
+    stage_before_sha256, stage_after_sha256}` naming a canonical after-span fixture, OR a **structural row**
+    `{id, file, kind:"structural", stage_predicate}` for B1's evidence field, which has no static after-digest
+    since the id is GREEN-assigned — the manifest is the sole hash authority for digest rows) are pinned in that manifest — a Stage-A committed artifact with its own schema test — so the
     RED tests bind a concrete grammar, not a forward reference; and (ii) runs a **file-wide scan for the
     finite set of known stale literals/signatures** (`EvaluateReadiness(blockText)`, `BLOCKED-all-false`,
     "specified but unhomed", "pending DF-002", the wrong `rm -rf out`, and the three already-stale literals
@@ -1000,8 +1176,8 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
     component table"** — EXT5-03) so an un-anchored occurrence is still caught. Coverage = "every
     enumerated/anchored site + every known stale literal", NOT "any semantic drift" (R3-I5 downgrade). Placing
     the anchors is Stage-A site A5; the anchors are themselves migration targets (B14).
-  - **Staging invariant**: every commit — the Stage-A commit and the Stage-B commit — is independently
-    **green-from-clean**. Stage A keeps `P1.satisfied:false` so PRH-006 is never tripped and the real probe
+  - **Staging invariant**: each accepted TREE STATE — the Stage-A tree and the Stage-B tree — is independently
+    **green-from-clean** (the guarantee is tree-state, not per-commit history; EXT9-06). Stage A keeps `P1.satisfied:false` so PRH-006 is never tripped and the real probe
     returns `evidence-schema-incomplete` false → `(null,false,false)` consistent-BLOCKED. Whether Stage A + B
     are one PR or two is OQ-A#4 (the partition holds either way). The inverse-partial hazard is guarded by PRH-006.
 - **DD-004**: the parent INV-043 self-explaining-BLOCKED need is met **gate-side by INV-012** (now visible
@@ -1031,20 +1207,22 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
   other in-flight spec already claimed TB-006.
 
 ## Packages Affected (monorepo)
-- **Test/build-gate carrier** (NEW, NOT shipped): `gate/Corrected.Gate/` + `gate/Corrected.Gate.Tests/`
+- **Test/build-gate carrier** (NEW, NOT shipped): `gate/Corrected.Gate/` + `gate/Corrected.Gate.Kernel/`
+  (isolated pure kernel + DTOs, INV-004/EXT6-05) + `gate/Corrected.Gate.Tests/`
   + `gate/Corrected.Gate.Lint/` (extracted Dafny-free linter, INV-018) + `gate/Corrected.Gate.slnx`
-  + `gate/NuGet.Config` + CPM opt-out + lockfile + `gate/Corrected.Gate/lint-source-registry.json`
+  (aggregating **exactly** those four projects)
+  + `gate/NuGet.Config` + CPM opt-out + a per-project `packages.lock.json` (one per gate project, INV-015) + `gate/Corrected.Gate/lint-source-registry.json`
   (INV-008c). Exempt surface (`gate/**`). INV-044's history registry is homed here but built later (DD-005).
 - **Repo root**: new `global.json` (INV-016) + `.gitattributes` (INV-001) + a `.gitignore` rule for
   `gate.trx`/`TestResults`/local restore output (RS-254/UX-006) + a gate CI workflow + its extracted
   from-clean script under `.github/workflows/` (INV-017).
 - **`src/Corrected.*`**: UNCHANGED — skeleton while BLOCKED (INV-011 verifies via the shipped closure).
-- **`phase-0-1-worker` (parent spec)** — the **DD-003 stage-partitioned migration manifest is the canonical
-  site list** (Stage-A carrier-existence sites A1–A6 when the carrier lands; Stage-B P1-discharge sites
-  B1–B14, with B4 moved to A6 per EXT5-03); this bullet does NOT re-enumerate — the meta-test asserts Metadata
-  `Impacts` and this Packages-Affected bullet each hold ONLY the DD-003 manifest REFERENCE and maintain NO
-  local site list (R3-I4/EXT4-05).
-  P2/P3 stay false → BLOCKED.
+- **`phase-0-1-worker` (parent spec)** — impacted via the **DD-003 stage-partitioned migration manifest**,
+  which is the canonical parent-anchor site list. This bullet holds **ONLY that manifest reference and NO
+  local site list** — the per-site A/B enumeration lives SOLELY in DD-003 (EXT8-06: the round-7 A/B listing
+  here violated DD-003's own "no local site list" meta-test, which asserts Metadata `Impacts` and this bullet
+  each contain only the manifest REFERENCE — R3-I4/EXT4-05). The ADR-0001 edit is described in the ADR bullet
+  below (a separately-named Stage-B obligation verified by INV-008), not here. P2/P3 stay false → BLOCKED.
 - **`docs/adr/ADR-0001-*.md`** — at Stage B (site B13): a machine-readable `status:` line + **optional**
   `supersedes` / `superseded_by` fields added inside the `adr_lint` block (INV-008a‴; parsed with presence
   bits, absent-allowed so the pre-migration block still parses to `evidence-schema-incomplete`, R3-B1), and
