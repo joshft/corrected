@@ -11,11 +11,12 @@
   reference (no local list), not that "three lists agree" (R3-I4/EXT4-05).)
 - **Branch**: feature/readiness-gate-carrier
 - **Research**: `.correctless/artifacts/research/readiness-gate-carrier-research.md`
-- **Review**: codex GPT-5.6-sol (xhigh) + `/creview-spec` 6-agent + self-assessment, **four rounds**
+- **Review**: codex GPT-5.6-sol (xhigh) + `/creview-spec` 6-agent + self-assessment, **five rounds**
   (round 1: 12 codex + ~70 Claude; round 2 on v3: 13 codex + ~40 Claude; round 3 FOCUSED on the v4
-  P1/DD-003/scanner core: codex 6 BLOCKING + P1-red-team/DD-003/scanner agents; round 4 FINAL codex gate on
-  v5: 6 BLOCKING + 2 IMPORTANT confirmed, EXT4-01..10) — all in
-  `.correctless/artifacts/review-spec-findings-readiness-gate-carrier.md`. **This is now v6.** Its v5 base incorporated the
+  P1/DD-003/scanner core: codex 6 BLOCKING + P1-red-team/DD-003/scanner agents; round 4 codex gate on
+  v5: 6 BLOCKING + 2 IMPORTANT confirmed, EXT4-01..10; round 5 FINAL codex gate on v6: 2 BLOCKING +
+  2 IMPORTANT confirmed, EXT5-01..04) — all in
+  `.correctless/artifacts/review-spec-findings-readiness-gate-carrier.md`. **This is now v7.** Its v5 base incorporated the
   round-3 findings (Stage-A DTO required-vs-optional split so the pre-migration ADR parses to
   `evidence-schema-incomplete`; compiled `canonical_sample_sha256`/manifest-file anchors closing the residual
   coherent-tamper forge; duplicate-JSON rejection; the ADR **registry set-equality** replacing v4's
@@ -28,7 +29,15 @@
   registry set-equality (EXT4-04); paired-marker anchor grammar + pinned manifest schema + reference-not-
   triple-equality meta-test (EXT4-05); the "does execute / caught by reference-rejection" wording correction
   (EXT4-06); the OQ-002 built-carrier-half split (EXT4-08); the exact `evidence-schema.json` path constant
-  (EXT4-10). EXT4-09 downgraded (the parent path-scoped INV-036 already catches a standalone `src/` package).
+  (EXT4-10). EXT4-09 downgraded (the parent path-scoped INV-036 already catches a standalone `src/` package). **v7
+  (2026-07-25)** then applied the round-5 FINAL codex gate on v6: DD-003 manifest = SOLE digest authority
+  (ID-only markers) + a `P1.satisfied`-derived single-stage selector applied uniformly + a mixed-stage
+  negative fixture (EXT5-01); INV-011's "bounded/sandboxed" build-execution claim dropped — arbitrary
+  build-time execution of committed generators recorded as an accepted CI-runner-scoped residual, the
+  analysis-phase reference-rejection the named control (EXT5-02); the entrypoint current-state correction
+  re-staged Stage-B→Stage-A + three stale literals enumerated in the finite scan (EXT5-03); the exact-
+  `10.0.302` runtime assertions in INV-011/015/016 replaced with the `latestPatch` band-membership predicate
+  (EXT5-04). The round-4 rewrite clusters (EXT4-01/02/03/04/07/09/10) were codex-verified sound — no regression.
 - **Recommended-intensity**: high
 - **Intensity**: high
 - **Intensity reason**: fail-closed security gate parsing a tamper-checked trust boundary
@@ -504,13 +513,19 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
     build; the ban never needed to *inspect a generator's body*, only its *emitted output* + *its reference*).
     The committed `Compile` items are extracted via `dotnet build -getItem:Compile` (SDK ≥ 8, present on
     10.0.302 — a manifest that no `Microsoft.Build.*` in-process reference exists; R3-I1/EXT2-10). **RT-L1
-    build-time-code-execution risk** is bounded and stated: the build runs under the pinned SDK + the
-    `<clear/>`-isolated locked restore, while BLOCKED `src/` is empty/skeleton (nothing real to execute),
-    and a shipped generator/analyzer is **caught by the analysis-phase reference-rejection** (below) —
-    AFTER a bounded build-time execution inside that sandboxed pinned-SDK build, NOT before it (EXT4-06:
-    the real build *does* run generators; the ban never needs to trust or pre-empt a generator's body, only
-    to reject its non-allowlisted *reference* and inspect its emitted *output*) — so a malicious generator
-    fails on its *reference* regardless of what its body did at build time.
+    build-time-code-execution risk** is stated and SCOPED AS AN ACCEPTED RESIDUAL (EXT5-02): the build runs
+    under the pinned SDK + the `<clear/>`-isolated locked restore, and while BLOCKED `src/` is empty/skeleton
+    (nothing real to execute). The real out-of-process build **does execute** any committed source
+    generator/analyzer BEFORE the analysis phase rejects its non-allowlisted reference; this gate specifies
+    **no** build-time containment boundary (no scrubbed env / network restriction / timeout / process-tree
+    kill) — arbitrary build-time execution of committed generators is an **accepted CI-runner-scoped
+    residual**, with containment delegated to the CI runner's own sandbox and NOT claimed by this gate (the
+    earlier "bounded/sandboxed" framing was dropped as an unbacked overclaim, EXT5-02). The named control is
+    the **analysis-phase reference-rejection** (below): a shipped generator/analyzer is caught by its
+    non-allowlisted *reference* AFTER it has already run (EXT4-06: the real build *does* run generators; the
+    ban never needs to trust or pre-empt a generator's body, only to reject its non-allowlisted *reference*
+    and inspect its emitted *output*) — so a malicious generator fails the gate on its *reference* regardless
+    of what its body did at build time, but the gate does NOT prevent that body from executing.
   - **Analysis phase** — the **gate parses syntax-only** (its own in-process `Microsoft.CodeAnalysis.CSharp`,
     pinned+locked in INV-015; `CSharpSyntaxTree.ParseText`, no Workspaces/MSBuild, and **never re-hosts or
     re-executes** any generator/analyzer in its own compilation; R3-I1) over: committed `Compile` items +
@@ -553,7 +568,9 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   + HintPath to a **first-party DLL that is BUILT from committed C# source by the same pinned out-of-process
   build** (or, if checked in, under a **SHA-256 pin + regeneration procedure + digest test** — a committed
   opaque binary is otherwise the very TB-004 hazard the scanner catches; R3-M-scanner); the generated-source
-  case = a committed `IIncrementalGenerator` fixture project that sets `EmitCompilerGeneratedFiles=true`.
+  case = a committed `IIncrementalGenerator` fixture project that sets `EmitCompilerGeneratedFiles=true`; the
+  fixture asserts the generator's *reference is rejected* and its *emitted output is scanned* — NOT that its
+  build-time execution was prevented (EXT5-02, accepted CI-runner-scoped residual).
 - **Boundary**: production/carrier partition (ARCHITECTURE §Production-surface partition, amended).
 - **Guards against**: AP-005, AP-004, AP-002, AP-015.
 - **Enforcement**: gate precondition — skeleton-only passes; each of {one-real-method, **constructor body**,
@@ -566,7 +583,9 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   fail); a vacuous-scan-visibility test (zero project files → pass + notice); a **closure-uncomputable →
   fail-closed** test (a fixture target whose locked restore is forced to fail / a malformed `.csproj`); a
   loaded-version assertion for the pinned in-process `Microsoft.CodeAnalysis.CSharp`, and a `dotnet msbuild
-  -version` assertion binding the out-of-process SDK MSBuild to 10.0.302 (NOT a loaded-assembly check).
+  -version` assertion binding the out-of-process SDK MSBuild to the pinned `10.0.302` feature-band — band-membership of the
+  resolved version per INV-016's `latestPatch` predicate, NOT exact-only equality (`10.0.302` is the
+  floor/requested; EXT5-04) — NOT a loaded-assembly check.
 - **Test approach**: integration · **Risk**: high
 
 ### INV-012: Actionable, host-clean, valence-correct blocker/status message — visible on the GREEN path
@@ -656,8 +675,9 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   closure build runs **out-of-process** on the pinned SDK's own MSBuild (a `Microsoft.Build.*` package is
   the in-process MSBuild API INV-011 forbids, and nothing from it would ever load into the gate process, so
   a "loaded-version assertion" for it is meaningless). The out-of-process MSBuild/SDK identity is asserted
-  via a **process invocation** (`dotnet msbuild -version` / `dotnet --version` == `10.0.302`), NOT a
-  loaded-assembly reflection check. **Version-skew guard (R3-I2)**: the gate's own pinned Roslyn parses
+  via a **process invocation** (`dotnet msbuild -version` / `dotnet --version` resolving to a member of the
+  pinned `10.0.302` feature-band — band-membership per INV-016's `latestPatch` predicate, not exact-only
+  equality; `10.0.302` is the floor/requested, EXT5-04), NOT a loaded-assembly reflection check. **Version-skew guard (R3-I2)**: the gate's own pinned Roslyn parses
   sources compiled by the SDK's (possibly newer) Roslyn; the pinned `Microsoft.CodeAnalysis.CSharp` feature
   level must be **≥ the SDK's bundled Roslyn** (bump-coupled to the SDK pin under DD-006), or the gate
   parses with `LanguageVersion.Latest` — with a fixture asserting a source using the SDK's newest supported
@@ -687,7 +707,8 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   opt-out** (`gate/Directory.Packages.props` or `ManagePackageVersionsCentrally=false`, with a regression
   test that drops a dummy repo-root `Directory.Packages.props` into a temp copy and asserts the gate still
   restores its inline+locked versions; RS-UC-11) prevents a future repo-root `Directory.Packages.props`
-  from capturing the gate's inline `Version=`. A build-time `NETCoreSdkVersion == 10.0.302` assertion + a
+  from capturing the gate's inline `Version=`. A build-time `NETCoreSdkVersion` patch-band-membership assertion (per the roll-forward clause below — NOT
+  exact `== 10.0.302`; `10.0.302` is the floor, EXT5-04) + a
   from-repo-root `dotnet --version` check cover both the pin and the muxer-resolution clause.
 - **Boundary**: TB-004.
 - **Statement (roll-forward)**: `rollForward` is set to **`latestPatch`** at the repo root (maintainer
@@ -848,7 +869,7 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
     closed); its **contract half** was already DISCHARGED 2026-07-24 (parent:~1633) and its **production-test-
     project / entrypoints / reference-provenance (P3) residual** (parent:~170) stays OPEN — A1 must NOT close
     OQ-002 wholesale (EXT4-08); the stale parent "no entrypoint YAML exists yet — see OQ-002" (parent:~247)
-    is added to the finite literal scan below; (A2) parent **RS-002** ordering (phrased
+    is corrected in Stage A (site A6) and is in the finite literal scan below (EXT4-08/EXT5-03); (A2) parent **RS-002** ordering (phrased
     commit-level: "carrier + reject corpus proven green at/before the discharge commit", NOT "in a prior PR"
     — so the one-PR option OQ-A#4 keeps open is not retroactively forbidden; R3-M/DD-003-R3-6); (A3) the
     parent **enforcement-carrier prose** "these mechanisms are specified but unhomed / that carrier must
@@ -856,13 +877,21 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
     the parent **clean-checkout RS-004 block** stating "the repository currently commits
     `spikes/dafny-compat/out/`" (parent:~155-166) → corrected to "gitignored / not committed" and the
     integration `rm -rf out` wording → `rm -rf spikes/dafny-compat/out/` (R3-I4/EXT2-11); (A5) placement of
-    the **machine-readable current-state anchors** (below) — anchors carry the *pre-flip* expected values so
-    Stage A is self-consistent.
+    the **machine-readable current-state anchors** (below) — ID-only markers plus the committed manifest
+    (whose per-anchor `stage_before_sha256` is the pre-flip digest); with `P1.satisfied` still `false` the
+    gate resolves to **Stage A** and verifies every span against its `stage_before_sha256`, so Stage A is
+    self-consistent (EXT5-01); (A6) the parent's **already-stale current-state literals** — the INV-002
+    integration-contract line "no entrypoint YAML exists yet — see OQ-002" (parent:~247), the sibling
+    "entrypoint YAML TBD (`/carchitect`)" (parent:~471), and "Flagged for the ARCHITECTURE.md component
+    table" (parent:~1610) — corrected to match today's tree (entrypoint YAML exists at ARCHITECTURE.md:61
+    since `/carchitect` 2026-07-24; the carrier is now homed). These are current-state truths **already true
+    today, independent of the P1 flip**, so they are Stage A, NOT Stage B (EXT5-03); all three are also in the
+    finite literal scan below.
   - **Stage-B sites (the atomic P1 discharge)**: (B1) the readiness block `P1.satisfied:false→true` +
     `P1.evidence:null→<registered id>`; (B2) the INV-002 kernel **signature** (single-arg `blockText` →
     two-arg `(ReadinessBlock, probeResults)`); (B3) the INV-002 **semantic** prose "the pure decision
     function re-derives the discharge / every probe runs" (carrier INV-004 forbids — kernel pure, orchestrator
-    probes); (B4) the stale INV-002 integration-contract line "no entrypoint YAML exists yet — see OQ-002";
+    probes); (B4) **MOVED to Stage A (site A6, EXT5-03)** — the stale INV-002 "no entrypoint YAML exists yet" line is a current-state correction already true today (entrypoint YAML exists), NOT a P1-flip truth, so it is no longer a Stage-B site;
     (B5) the INV-002 enforcement **"a separate test asserts the committed file currently parses to
     BLOCKED-all-false"** (parent:~240) → post-flip P1=true (R3-I4 — distinct from B2/B3/B4); (B6) parent
     **INV-003** BOTH the Statement and Enforcement-(b) DESIGN/ARCHITECTURE-table clauses → "ARCHITECTURE
@@ -876,24 +905,37 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
     the post-flip `P1=true, P2/P3=false` checklist (R3-I4/codex#7); (B11) parent **EA-016**
     full-history-required → reconciled to the carrier's file-digest model; (B12) parent **OQ-004**
     (supersession format) → closed to the INV-008(a‴) terminal rule; (B13) the **ADR-0001** `adr_lint`
-    block gains `status:` + `supersedes`/`superseded_by` (optional keys, INV-002/a‴); (B14) the current-state
-    anchors flip to their *post-flip* expected values.
-  - **Consistency gate — anchors + finite literal scan (R3-I5/EXT2-08b)**: the gate does NOT claim to detect
-    arbitrary unmarked paraphrase. It (i) reads **machine-readable anchors** placed in `phase-0-1-worker.md`
-    as **PAIRED start/end markers** (EXT4-05 — a self-closing marker wraps nothing, so the hashed span was
-    undefined): `<!-- correctless:readiness-current-state:start id="…" stage-before="<sha256>" stage-after="<sha256>" -->`
-    … wrapped parent prose … `<!-- correctless:readiness-current-state:end id="…" -->`; the gate hashes the
-    **UTF-8 / LF-normalized bytes strictly BETWEEN the paired markers, excluding the two marker lines**, and
-    asserts that digest equals the **stage-selected** pin (`stage-before` at Stage A, `stage-after` at Stage B),
-    naming each disagreeing site (`file:line`, expected vs found; RS-UX-08/UX-005). The **exact anchor-ID set,
-    the manifest path `gate/Corrected.Gate.Tests/manifests/readiness-migration-manifest.json`, and its closed
-    JSON schema** (`{id, file, stage_before_sha256, stage_after_sha256}` per anchor) are pinned in that manifest
-    — a Stage-A committed artifact with its own schema test — so the RED tests bind a concrete grammar, not a
-    forward reference; and (ii) runs a **file-wide scan for the finite set of known stale literals/signatures**
-    (`EvaluateReadiness(blockText)`, `BLOCKED-all-false`, "specified but unhomed", "pending DF-002", the wrong
-    `rm -rf out`) so an un-anchored occurrence is still caught. Coverage = "every enumerated/anchored site +
-    every known stale literal", NOT "any semantic drift" (R3-I5 downgrade). Placing the anchors is Stage-A
-    site A5; the anchors are themselves migration targets (B14).
+    block gains `status:` + `supersedes`/`superseded_by` (optional keys, INV-002/a‴); (B14) with `P1.satisfied`
+    now `true` the consistency gate resolves to **Stage B** and verifies every anchored span against its
+    manifest `stage_after_sha256` (EXT5-01 — no inline anchor hashes exist to flip; the manifest is the sole
+    digest authority and the stage is P1-derived).
+  - **Consistency gate — anchors + finite literal scan (R3-I5/EXT2-08b; EXT5-01/EXT5-03)**: the gate does NOT
+    claim to detect arbitrary unmarked paraphrase. It (i) reads **machine-readable anchors** placed in
+    `phase-0-1-worker.md` as **PAIRED start/end markers** (EXT4-05 — a self-closing marker wraps nothing, so
+    the hashed span was undefined) carrying **only an `id`** — **no inline hashes** (EXT5-01: the committed
+    manifest is the SOLE digest authority, so a marker and the manifest can never drift out of sync):
+    `<!-- correctless:readiness-current-state:start id="…" -->` … wrapped parent prose …
+    `<!-- correctless:readiness-current-state:end id="…" -->`; the gate hashes the **UTF-8 / LF-normalized
+    bytes strictly BETWEEN the paired markers, excluding the two marker lines**, and asserts that digest
+    equals the manifest pin for that `id` under a **single repo-wide stage**. **The stage is derived
+    mechanically from committed state (EXT5-01)** — **Stage A** iff the readiness block's `P1.satisfied` is
+    `false` (evidence `null`); **Stage B** iff `P1.satisfied` is `true` (evidence = a registered id, the
+    post-flip state) — and the SAME stage is applied to EVERY anchor: at Stage A every span must equal its
+    `stage_before_sha256`, at Stage B every span must equal its `stage_after_sha256`. A **mixed set** (any
+    span still at its before-digest while `P1.satisfied` is already `true`, or any span at its after-digest
+    while `P1.satisfied` is still `false`) **FAILS CLOSED** — this is the partial-migration hazard, caught by
+    a **mixed-before/after negative fixture** — naming each disagreeing site (`file:line`, expected vs found;
+    RS-UX-08/UX-005). The **exact anchor-ID set, the manifest path
+    `gate/Corrected.Gate.Tests/manifests/readiness-migration-manifest.json`, and its closed JSON schema**
+    (`{id, file, stage_before_sha256, stage_after_sha256}` per anchor — the manifest is the sole hash
+    authority) are pinned in that manifest — a Stage-A committed artifact with its own schema test — so the
+    RED tests bind a concrete grammar, not a forward reference; and (ii) runs a **file-wide scan for the
+    finite set of known stale literals/signatures** (`EvaluateReadiness(blockText)`, `BLOCKED-all-false`,
+    "specified but unhomed", "pending DF-002", the wrong `rm -rf out`, and the three already-stale literals
+    **"no entrypoint YAML exists yet"**, **"entrypoint YAML TBD"**, **"Flagged for the ARCHITECTURE.md
+    component table"** — EXT5-03) so an un-anchored occurrence is still caught. Coverage = "every
+    enumerated/anchored site + every known stale literal", NOT "any semantic drift" (R3-I5 downgrade). Placing
+    the anchors is Stage-A site A5; the anchors are themselves migration targets (B14).
   - **Staging invariant**: every commit — the Stage-A commit and the Stage-B commit — is independently
     **green-from-clean**. Stage A keeps `P1.satisfied:false` so PRH-006 is never tripped and the real probe
     returns `evidence-schema-incomplete` false → `(null,false,false)` consistent-BLOCKED. Whether Stage A + B
@@ -934,8 +976,10 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
   from-clean script under `.github/workflows/` (INV-017).
 - **`src/Corrected.*`**: UNCHANGED — skeleton while BLOCKED (INV-011 verifies via the shipped closure).
 - **`phase-0-1-worker` (parent spec)** — the **DD-003 stage-partitioned migration manifest is the canonical
-  site list** (Stage-A carrier-existence sites A1–A5 when the carrier lands; Stage-B P1-discharge sites
-  B1–B14); this bullet does NOT re-enumerate (the meta-test asserts Metadata/this-bullet/DD-003 agree, R3-I4).
+  site list** (Stage-A carrier-existence sites A1–A6 when the carrier lands; Stage-B P1-discharge sites
+  B1–B14, with B4 moved to A6 per EXT5-03); this bullet does NOT re-enumerate — the meta-test asserts Metadata
+  `Impacts` and this Packages-Affected bullet each hold ONLY the DD-003 manifest REFERENCE and maintain NO
+  local site list (R3-I4/EXT4-05).
   P2/P3 stay false → BLOCKED.
 - **`docs/adr/ADR-0001-*.md`** — at Stage B (site B13): a machine-readable `status:` line + **optional**
   `supersedes` / `superseded_by` fields added inside the `adr_lint` block (INV-008a‴; parsed with presence
