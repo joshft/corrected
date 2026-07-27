@@ -961,10 +961,24 @@ public static class AdjudicationStateMachine
                 // A failure exit with an all-pass report is never COMPATIBLE (codex R2-5/R3-4).
                 return new RouteOutcome(RouteState.Incomplete, null,
                     new VerdictReason.ExitReportMismatch(exitCode.Value, "failure exit code with an all-pass report"));
-            default:
+            case ExitCodes.Incomplete when !anyFailed:
+                // DF-003 / AP-022: an INCOMPLETE exit with an all-pass report is
+                // inconsistent — the child signalled non-completion while reporting
+                // every probe passing. It must be an aggregator-override-admitted
+                // mismatch, never a dropped PrerequisiteFailure that reads COMPATIBLE
+                // from the report alone (symmetric to the exit-10 all-pass cell above).
+                return new RouteOutcome(RouteState.Incomplete, null,
+                    new VerdictReason.ExitReportMismatch(exitCode.Value, "incomplete exit code with an all-pass report"));
+            case ExitCodes.Incomplete:
+                // A matching failing/incomplete report is a consistent typed cause.
                 return new RouteOutcome(RouteState.Incomplete, null,
                     new VerdictReason.PrerequisiteFailure(IncompleteCause.PrerequisiteFailure,
                         "child exited INCOMPLETE with a typed cause in its report"));
+            default:
+                // Unreachable: exitCode is guarded to {0,10,20} above. Fail CLOSED on
+                // any unenumerated cell — never a content-blind fallthrough to an
+                // accept-side verdict (AP-001/AP-022).
+                return new RouteOutcome(RouteState.Incomplete, null, new VerdictReason.Crash(exitCode, null));
         }
     }
 }

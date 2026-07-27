@@ -52,7 +52,10 @@ public class Inv013AdjudicationTests
         }
 
         Assert.True(algebra.GetProperty("transition_table").GetArrayLength() >= 7);
-        Assert.True(algebra.GetProperty("exit_report_matrix").GetArrayLength() >= 9);
+        // exit_report_matrix completeness is NOT a row-count proxy (DF-003/AP-022 — a
+        // count cannot detect an absent cell). It is verified by the cross-product
+        // MapExit enumeration in
+        // ExitReportMatrix_CrossProduct_EveryCellDefined_FailureExitAllPassNeverDropped.
         Assert.NotEmpty(algebra.GetProperty("precedence_order_for_multi_match").EnumerateArray().ToList());
         Assert.Contains("non-boundary-rejection", algebra.GetProperty("upstream_defect_semantics").GetString());
         // OFFICIAL_API_CAPABILITY_GAP reachable ONLY via the source-verified
@@ -203,6 +206,86 @@ public class Inv013AdjudicationTests
         var outcome = AdjudicationStateMachine.MapExit(exitCode: ExitCodes.RouteProbesPassed, signal: null, report: null);
         Assert.NotNull(outcome); // MA-VI-4: only CONSISTENT cells are null
         Assert.IsType<VerdictReason.MissingReport>(outcome!.Reason);
+    }
+
+    // ---- DF-003 / AP-022: the exit/report matrix, verified by CROSS-PRODUCT ----
+    private static RouteReport AllPassReport(string route) => new(
+        "run-df003", route,
+        new List<ProbeResult> { new(new ProbeKey("P06", route), ProbeStatus.Pass) },
+        ExitCodes.Incomplete, null, "<run-root>/route-a.json");
+
+    private static RouteReport OneNonPassReport(string route) => new(
+        "run-df003", route,
+        new List<ProbeResult> { new(new ProbeKey("P06", route), ProbeStatus.Fail) },
+        ExitCodes.Incomplete, null, "<run-root>/route-a.json");
+
+    // Tests INV-013 [unit] (DF-003 / AP-022 CLASS fix): the exit/report matrix is
+    // verified by CROSS-PRODUCT enumeration over {exit code} × {report shape}, not a
+    // row-count proxy. Every cell has a defined outcome (only a clean-pass exit + an
+    // all-pass present report is a "consistent" non-verdict / null). The safety
+    // direction the table exists to guarantee: NO failure-signalling exit code paired
+    // with an all-pass report may resolve to a reason the aggregator override filter
+    // drops (only Crash | ExitReportMismatch | MalformedReport override) — else it is
+    // read COMPATIBLE from the report alone. The exit-20 + all-pass cell was the DF-003
+    // fail-open (default branch returned an un-admitted PrerequisiteFailure).
+    [Fact]
+    public void ExitReportMatrix_CrossProduct_EveryCellDefined_FailureExitAllPassNeverDropped()
+    {
+        var exits = new (string label, int? code, string? signal)[]
+        {
+            ("route-probes-passed(0)", ExitCodes.RouteProbesPassed, null),
+            ("probe-failure(10)", ExitCodes.ProbeFailure, null),
+            ("incomplete(20)", ExitCodes.Incomplete, null),
+            ("unknown-code(137)", 137, null),
+            ("signal-death", null, "SIGKILL"),
+        };
+        var reports = new (string label, RouteReport? report, bool allPass)[]
+        {
+            ("all-pass", AllPassReport("A"), true),
+            ("one-fail", OneNonPassReport("A"), false),
+            ("missing", null, false),
+        };
+
+        foreach (var (elabel, code, signal) in exits)
+        foreach (var (rlabel, report, allPass) in reports)
+        {
+            var outcome = AdjudicationStateMachine.MapExit(code, signal, report);
+            bool cleanPass = code == ExitCodes.RouteProbesPassed && signal is null && report is not null && allPass;
+            if (cleanPass)
+            {
+                Assert.Null(outcome); // consistent — a non-verdict; the probe-set verdict applies
+                continue;
+            }
+            Assert.NotNull(outcome); // every non-consistent cell is defined [{elabel} × {rlabel}]
+            Assert.NotEqual(RouteState.Compatible, outcome!.State);
+
+            bool failureExit = !(code == ExitCodes.RouteProbesPassed && signal is null);
+            if (failureExit && report is not null && allPass)
+            {
+                Assert.True(
+                    outcome.Reason is VerdictReason.Crash or VerdictReason.ExitReportMismatch or VerdictReason.MalformedReport,
+                    $"cell [{elabel} × {rlabel}] resolved to {outcome.Reason.GetType().Name}, which the aggregator "
+                    + "override filter does not admit — it would be dropped and the route read COMPATIBLE from the "
+                    + "report alone (DF-003 fail-open).");
+            }
+        }
+    }
+
+    // Tests INV-013 [unit] (DF-003 instance): an INCOMPLETE (exit 20) child with an
+    // all-pass report is an EXIT_REPORT_MISMATCH — the child signalled non-completion
+    // while reporting every probe passing, symmetric to the exit-10 all-pass cell. A
+    // matching failing/incomplete report stays a consistent prerequisite-failure.
+    [Fact]
+    public void MapExit_Incomplete_WithAllPassReport_IsExitReportMismatch_NotDroppedPrereq()
+    {
+        var mismatch = AdjudicationStateMachine.MapExit(ExitCodes.Incomplete, signal: null, report: AllPassReport("A"));
+        Assert.NotNull(mismatch);
+        Assert.NotEqual(RouteState.Compatible, mismatch!.State);
+        Assert.IsType<VerdictReason.ExitReportMismatch>(mismatch.Reason);
+
+        var prereq = AdjudicationStateMachine.MapExit(ExitCodes.Incomplete, signal: null, report: OneNonPassReport("A"));
+        Assert.NotNull(prereq);
+        Assert.IsType<VerdictReason.PrerequisiteFailure>(prereq!.Reason);
     }
 
     // Tests INV-013 [integration]: induced-failure test — every
