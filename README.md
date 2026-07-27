@@ -16,7 +16,7 @@ proof patch, rejects unapproved proof shortcuts, and emits reproducible evidence
 |------|-------|
 | [`DESIGN.md`](DESIGN.md) | Authoritative design (v1.13): architecture, delivery model, phased plan. |
 | [`spikes/dafny-compat/`](spikes/dafny-compat/) | **Phase 0.0 package-compatibility spike** — permanent, non-production conformance harness proving Dafny 4.11.0 runs in-process on .NET 10. Both integration routes **COMPATIBLE**. See its [README](spikes/dafny-compat/README.md) and [feature doc](docs/features/dafny-compat-spike.md). |
-| [`docs/adr/ADR-0001`](docs/adr/ADR-0001-dafny-integration-boundary.md) | The Dafny integration-boundary decision (provisional; Route A selected, promotion pending). |
+| [`docs/adr/ADR-0001`](docs/adr/ADR-0001-dafny-integration-boundary.md) | The Dafny integration-boundary decision — **accepted** (Route A selected; promoted 2026-07-24 via DF-002). |
 | `src/` | Empty — the production worker begins in Phase 0.1, informed by ADR-0001. |
 
 ## Intended architecture (design-stage)

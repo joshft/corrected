@@ -277,10 +277,33 @@ public class Dd003MigrationManifestTests
             "EvaluateReadiness(blockText)", "BLOCKED-all-false", "specified but unhomed",
             "pending DF-002", "rm -rf out", "no entrypoint YAML exists yet",
             "entrypoint YAML TBD", "Flagged for the ARCHITECTURE.md component table",
+            // Stage-B parent-contract migration sites bound after the P1 flip (B6/B7/A1).
+            "backed by a schema-valid terminal adjudication",
+            "reads the DESIGN.md and ARCHITECTURE.md component tables",
+            "Built-carrier half (still open",
         })
         {
             Assert.Contains(lit, MigrationManifest.KnownStaleLiterals);
         }
+    }
+
+    // Tests DD-003 [integration]: the Stage-B INV-003 (B6/B7) + OQ-002 (A1) parent
+    // migration is DONE — the stale clauses the carrier's Stage-B/A obligations require
+    // removed are ABSENT from the real committed normative body. Belt over the literal
+    // scan: this checks the parent DIRECTLY, so gutting the removed-literal list still
+    // fails here. B7: DF-002 made adjudication_record_id optional; B6: the probe reads
+    // the ARCHITECTURE machine block + route-a.json, not DESIGN.md; A1: gate/ carrier landed.
+    // Source: .correctless/specs/phase-0-1-worker.md (INV-003, OQ-002)
+    [Fact]
+    public void StageB_parent_INV003_and_OQ002_stale_clauses_are_migrated()
+    {
+        string parent = File.ReadAllText(TestPaths.RepoFile(".correctless", "specs", "phase-0-1-worker.md"))
+            .Replace("\r\n", "\n");
+        int appendix = parent.IndexOf("## Notes for review", StringComparison.Ordinal);
+        string body = appendix >= 0 ? parent.Substring(0, appendix) : parent;
+        Assert.DoesNotContain("backed by a schema-valid terminal adjudication", body); // B7 (DF-002)
+        Assert.DoesNotContain("reads the DESIGN.md and ARCHITECTURE.md component tables", body); // B6 (probe source)
+        Assert.DoesNotContain("Built-carrier half (still open", body); // A1 (carrier landed)
     }
 
     // Tests DD-003 [integration]: the NO-LOCAL-SITE-LIST meta-test — the parent-anchor

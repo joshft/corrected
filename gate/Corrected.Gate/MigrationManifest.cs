@@ -108,6 +108,10 @@ public static class MigrationManifest
         "no entrypoint YAML exists yet",
         "entrypoint YAML TBD",
         "Flagged for the ARCHITECTURE.md component table",
+        // Site A1 (OQ-002 built-carrier half): the gate/ carrier LANDED with PR #6, so
+        // OQ-002 asserting the built carrier is still open is a carrier-existence lie —
+        // an A-site (true independent of the P1 flip), absent required at BOTH stages.
+        "Built-carrier half (still open",
     };
 
     /// <summary>Literals corrected only at the Stage-B P1 flip (present at Stage A is OK).</summary>
@@ -116,6 +120,15 @@ public static class MigrationManifest
         "EvaluateReadiness(blockText)",
         "BLOCKED-all-false",
         "pending DF-002",
+        // Site B7 (INV-003): DF-002 made the ADR block's adjudication_record_id
+        // OPTIONAL/nullable — requiring evidence "backed by a schema-valid terminal
+        // adjudication record" contradicts the accepted contract the flip stands on.
+        "backed by a schema-valid terminal adjudication",
+        // Site B6 (INV-003): the real component-table probe (Probes.cs) reads the
+        // ARCHITECTURE machine-readable production-assembly block + route-a.json, NOT
+        // DESIGN.md — the "reads the DESIGN.md and ARCHITECTURE.md component tables"
+        // clause misdescribes the implemented evidence source.
+        "reads the DESIGN.md and ARCHITECTURE.md component tables",
     };
 
     /// <summary>The full enumerated stale-literal set (union of both stage partitions).</summary>

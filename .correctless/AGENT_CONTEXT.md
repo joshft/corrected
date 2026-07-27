@@ -1,6 +1,6 @@
 # Agent Context — Corrected
 
-> Last updated: 2026-07-20
+> Last updated: 2026-07-27
 
 ## What This Project Does
 
@@ -19,9 +19,10 @@ integration routes COMPATIBLE). See `docs/features/dafny-compat-spike.md` and
 
 A second non-production build has since landed: the **readiness-gate carrier**
 under `gate/` — an isolated .NET 10 solution that homes the Phase-0.1 worker's
-readiness gate (INV-001/002/036) and enforces the **Stage-A boundary** (no
-production `src/` code while `implementation_readiness` is BLOCKED; the parent's
-`P1.satisfied` stays `false` — the atomic flip is a separate Stage-B step). See
+readiness gate (INV-001/002/036) and enforces the production-code ban (no
+production `src/` code while `implementation_readiness` is BLOCKED). The **Stage-B
+P1 flip has landed** (`P1.satisfied: true`, ADR-0001 accepted); P2 and P3 remain
+`false`, so `implementation_readiness` stays **BLOCKED**. See
 `docs/features/readiness-gate-carrier.md`.
 
 ## Detected Tooling
