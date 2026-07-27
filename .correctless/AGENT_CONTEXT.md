@@ -9,7 +9,7 @@ certification toolchain for Dafny. Given a versioned Dafny program, frozen
 formal obligations, and an explicit edit policy, it searches for an allowed
 implementation or proof patch, rejects unapproved proof shortcuts, and emits
 reproducible evidence (an assurance receipt). **Design-stage: no production
-code yet** (`src/` is empty) — `DESIGN.md` (v1.13) at the repo root is the
+code yet** (`src/` is empty) — `DESIGN.md` (v1.14) at the repo root is the
 authoritative design document; read it before speccing any feature. The first
 build to land is the **Phase 0.0 package-compatibility spike** under
 `spikes/dafny-compat/`: permanent, non-production conformance infrastructure
