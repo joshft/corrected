@@ -46,6 +46,11 @@ TRX_PATH="${REPO_ROOT}/gate/Corrected.Gate.Tests/TestResults/${TRX_NAME}"
 # to `dotnet test` (which passes unknown switches to MSBuild).
 dotnet restore "${AGGREGATOR}" --configfile gate/NuGet.Config -noAutoResponse --locked-mode
 
+# Clean-current-run evidence: remove any prior gate.trx BEFORE the run so a dotnet
+# failure-to-launch (e.g. the SDK absent) can never leave a STALE TRX for the guard
+# to read as THIS run's evidence — the guard binds to the current run only (AP-021).
+rm -f "${TRX_PATH}"
+
 # Step 1 — run the discovered suite; sentinel exported ONLY for this child.
 CORRECTED_GATE_INNER=1 dotnet test "${AGGREGATOR}" \
   --logger "trx;LogFileName=${TRX_NAME}"

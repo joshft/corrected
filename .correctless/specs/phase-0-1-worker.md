@@ -267,17 +267,21 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
 - **Statement**: P1 is dischargeable only when EITHER ADR-0001 reads
   `Status: accepted` with its `adr_lint` block at
   `boundary_decision: in-process-selected` / `selected_route: A` /
-  route-A `verdict: COMPATIBLE` backed by a schema-valid terminal adjudication
-  record (the spike's `AdrLinter.Lint` returns zero findings for that positive
-  selection) OR a later `accepted` ADR explicitly supersedes ADR-0001's boundary
+  route-A `verdict: COMPATIBLE` as re-derived by the spike's `AdrLinter.Lint`
+  returning zero findings for that positive selection (per DF-002, the ADR block's
+  `adjudication_record_id` is OPTIONAL/nullable — a schema-valid `adr_lint` block
+  that lints clean IS the evidence; no separate adjudication record is required)
+  OR a later `accepted` ADR explicitly supersedes ADR-0001's boundary
   decision **AND** the superseding boundary is compatible with this spec's Route-A
   assumptions (INV-034's `DafnyDriver`/`CliCompilation` loaded set, the
   `DafnyLanguageServer` runtime dependency, and the DD-007 component-table shape).
   Because the ADR linter validates ONLY the `adr_lint` YAML block and cannot
   decide the loaded-set/component-table clause (spec-review RS-006), P1 has a
   SECOND, separate evidence probe: a mechanical component-table consistency gate
-  that reads the DESIGN.md and ARCHITECTURE.md component tables and the committed
-  `spikes/dafny-compat/manifest/expected-loaded/route-a.json` loaded-identity set,
+  that reads the ARCHITECTURE.md machine-readable production-assembly block (the
+  authoritative machine source) and the committed
+  `spikes/dafny-compat/manifest/expected-loaded/route-a.json` loaded-identity set
+  — DESIGN.md's component table is publication-scoped and is NOT read by the probe —
   and asserts `DafnyLanguageServer` is present and `DafnyPipeline` is absent for
   the selected route (matching INV-034). Both probes must pass. A supersession
   that selects Route B, a subprocess/export boundary, or any other incompatible
@@ -293,9 +297,11 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
   (INV-034/INV-035).
 - **Enforcement**: (a) hash/record verification — reuse the spike's INV-013 ADR
   linter against the committed evidence, assert zero findings for the positive
-  selection (this is exactly DF-002); (b) a component-table consistency gate over
-  DESIGN.md/ARCHITECTURE.md + the route-A loaded-identity manifest. P1 fails
-  closed until both are green.
+  selection (this is exactly DF-002; `adjudication_record_id` is optional); (b) a
+  component-table consistency gate over the ARCHITECTURE.md machine-readable
+  production-assembly block + the route-A loaded-identity manifest (DESIGN.md's
+  table is publication-scoped, not a probe input). P1 fails closed until both are
+  green.
 - **Guards against**: AP-004, AP-016.
 - **Test approach**: integration
 - **Risk**: high
@@ -1640,7 +1646,8 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
   whose stamped inputs don't match the current frozen state (spec-review RS-015).
   Rationale: one change of this size is un-reviewable and re-invites AP-018.
 - **OQ-002 [APPROVAL-GATING — contract half DISCHARGED 2026-07-24; built-carrier
-  half OPEN]**: Where do the production test harness and the readiness-gate test
+  half PARTIALLY LANDED 2026-07-26 — gate/ carrier homed; `test/` project +
+  reference-CI provenance lane pending P2/P3]**: Where do the production test harness and the readiness-gate test
   live? **Contract half (done):** `/carchitect` (2026-07-24) defined the
   `## Entrypoints` block in ARCHITECTURE.md — 5 entrypoints (`corrected-cli`,
   `corrected-core`, `dafny-adapter`, `readiness-build-gate`,
@@ -1648,13 +1655,15 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
   `test/`), the planned `src/Corrected.*` layout, and the INV-036 deny-by-default
   production-surface partition — so every `[integration]` contract now has a
   concrete Entry/Through/Exit and INV-036 has a deterministic path partition.
-  **Built-carrier half (still open, gates approval):** the `gate/`+`test/` projects
-  and the reference-CI lane do not yet EXIST as code; ~22 invariants say "CI test
-  assertion" / "gate precondition" with no built test package. Until the carrier is
-  built, the readiness gate itself (INV-002/INV-036) is specified-but-unhomed. Land
-  the built carrier + INV-002's positive reject-fixture table before any real
-  precondition discharges (RS-002 ordering). Note the built carrier is test
-  scaffolding (INV-036-exempt), so it MAY be built while `status = BLOCKED`.
+  **Built-carrier half (gate/ carrier LANDED 2026-07-26, PR #6):** the `gate/`
+  readiness carrier now EXISTS as code (`Corrected.Gate` + `.Kernel` + `.Tests` +
+  `.Lint`, aggregated by `gate/Corrected.Gate.slnx`), homing the readiness gate
+  (INV-002/INV-036) and INV-002's positive reject-fixture table, enforced by the
+  from-clean CI job. RESIDUAL (still gating full approval): the production `test/`
+  project (Phase-0.1 worker tests) and the reference-CI provenance lane (P3 /
+  EA-001 built-RID attestation) do not yet exist — tied to P2/P3. The built carrier
+  is test scaffolding (INV-036-exempt), so it was built while `status = BLOCKED`
+  (RS-002 ordering: carrier green at/before the discharge commit).
 - **OQ-003**: Is any runtime-evidence / `SEAM_TEST` obligation in scope for this
   slice? The Phase 0.1 fragment forbids externs and has minimal executable-contract
   seams, so runtime evidence may be vacuous here and belongs to an artifact-bearing
