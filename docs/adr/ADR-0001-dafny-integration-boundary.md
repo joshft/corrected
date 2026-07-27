@@ -28,6 +28,9 @@ mandatory P03 anchor can never be overridden by ADR prose (OQ-004 gate).
 adr_lint:
   boundary_decision: in-process-selected   # pending | in-process-selected | rejected
   selected_route: A            # A | B | null
+  status: accepted             # OPTIONAL acceptance tier (DD-003 Stage B): pending | accepted | superseded
+  supersedes: null             # nullable canonical ADR id | null | absent
+  superseded_by: null          # explicit null == "no edge" == terminal (EXT4-02)
   routes:
     - route: A
       verdict: COMPATIBLE      # COMPATIBLE | INCOMPLETE | INCOMPATIBLE(...) | UPSTREAM_DEFECT | pending

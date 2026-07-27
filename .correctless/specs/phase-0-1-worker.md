@@ -137,8 +137,8 @@ implementation_readiness:
   preconditions:
     - id: P1
       name: adr-0001-promoted-or-superseded
-      satisfied: false
-      evidence: null          # test-id / gate that verifies the discharge; never prose
+      satisfied: true
+      evidence: Corrected.Gate.Tests.Inv008P1ProbeTests.Committed_tree_is_migrated_P1_satisfied   # registered gate test that re-derives P1's ADR-boundary discharge over the real tree; never prose
       discharges: [DF-002]
     - id: P2
       name: phase-0.0-gates-4-12-plus-open-medium-df-have-executable-evidence
@@ -175,7 +175,7 @@ globs** (and the carrier/test glob) so INV-036's production-surface check is a
 deterministic path partition, not a content heuristic. Ordering constraint
 (RS-002):
 <!-- correctless:readiness-current-state:start id="A2" -->
-land the carrier and INV-002's positive READY-rejection fixture table before any real precondition discharges
+carrier + reject corpus proven green at/before the discharge commit
 <!-- correctless:readiness-current-state:end id="A2" -->
 so the reject branch is proven before it first guards a real BLOCKED→READY
 transition. These mechanisms are now homed in the `gate/` readiness-gate
@@ -213,7 +213,7 @@ carrier (the test/build-gate carrier).
 - **Type**: must
 - **Category**: security
 - **Statement**: the readiness gate is a pure decision function
-  `EvaluateReadiness(blockText) → {Pass | Fail, offending_precondition}` over a
+  `EvaluateReadiness(block, probeResults) → {Pass | Fail, offending_precondition}` over a
   SUPPLIED block string (not only the committed file — spec-review RS-002), so
   its rejecting branch is reachable in test. It FAILS the build if
   `status: READY` while any precondition has `satisfied: false` or
@@ -241,7 +241,7 @@ carrier (the test/build-gate carrier).
   re-derivation, not flag-trust); (e) READY+all-true+probes-confirm → Pass; plus
   an absent-artifact fixture per probe asserting `satisfied=false` (not throw).
 <!-- correctless:readiness-current-state:start id="B5-currently-parses-blocked" -->
-A SEPARATE test asserts the committed file currently parses to BLOCKED-all-false.
+a separate test asserts the committed file currently parses to P1=true, P2/P3 false -> BLOCKED (post-flip)
 <!-- correctless:readiness-current-state:end id="B5-currently-parses-blocked" -->
 - **Guards against**: AP-002 (guard defined but its rejecting branch never
   exercised), AP-005 (frozen gate with no legitimate reconverge path / routine
@@ -1019,8 +1019,8 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
 - **Category**: security
 - **Statement**: all Dafny SDK calls sit behind one production `DafnyAdapter` and
   one exact package lock — the P1-promoted route lock (Route A per ADR-0001,
-  **pending DF-002**; this spec conditions the Route-A assertion on P1 discharge
-  rather than asserting it as settled fact — spec-review RS-014) as the single
+  **DF-002 discharged**; P1 is now satisfied so the Route-A assertion is settled
+  rather than conditioned on a pending discharge — spec-review RS-014) as the single
   production lock (PAT-001). Neither source nor binary compatibility is assumed
   across Dafny versions.
 - **Violated when**: Dafny packages are imported outside the adapter, a second
@@ -1268,7 +1268,7 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
   test with no rendered why-blocked/what-discharges summary.
 - **Enforcement**: CI/CLI test assertion — the reporter renders all three
   preconditions with their discharge ids and satisfied/evidence state for the
-  committed BLOCKED-all-false block.
+  committed BLOCKED block (P1 satisfied, P2/P3 pending) at Stage B.
 - **Guards against**: AP-018 (self-enforcing but not self-explaining).
 - **Test approach**: unit
 - **Risk**: low

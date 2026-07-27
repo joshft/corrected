@@ -25,6 +25,13 @@ public enum P1Mutation
     /// <summary>Clean migrated tree — GREEN P1 resolves TRUE (Stage-B positive).</summary>
     None,
 
+    /// <summary>Pre-migration Stage-A ADR — the optional acceptance schema
+    /// (status/supersedes/superseded_by) is ABSENT, so the P1 probe short-circuits
+    /// to evidence-schema-incomplete (the benign Stage-A false). Re-homes the former
+    /// live-repo Stage-A probe coverage onto a synthesized tree now that the real
+    /// committed tree has migrated to Stage B.</summary>
+    PreMigrationStatusAbsent,
+
     // ---- (a′)/(a″) evidence-sample tampers: caught at the probe level by the (a′)
     //      compiled canonical_sample_sha256 / probe_manifest_sha256 pins (any content
     //      change flips the file SHA) -> evidence-malformed. The (a″) recompute is
@@ -125,9 +132,16 @@ internal sealed class P1Tree : IDisposable
         string routeAVerdict = "COMPATIBLE";
         string supersededBy = "null";
         string? supersedes = null;
+        bool hasAcceptanceSchema = true;
 
         switch (mutation)
         {
+            case P1Mutation.PreMigrationStatusAbsent:
+                // Omit the whole optional acceptance schema (status/supersedes/
+                // superseded_by) -> the parser reports the status key absent ->
+                // evidence-schema-incomplete short-circuit (the Stage-A benign false).
+                hasAcceptanceSchema = false;
+                break;
             case P1Mutation.RouteBOnlyPerProbe:
                 sample = MutateSampleJson(sample, det =>
                 {
@@ -237,7 +251,8 @@ internal sealed class P1Tree : IDisposable
         tree.Write(RouteARel, routeA);
         tree.Write(AdrRelPath,
             SynthAdr("ADR-0001: Dafny integration boundary (accepted)",
-                proseToken, machineStatus, supersedes, supersededBy, selectedRoute, routeAVerdict, boundaryDecision));
+                proseToken, machineStatus, supersedes, supersededBy, selectedRoute, routeAVerdict, boundaryDecision,
+                hasAcceptanceSchema));
         return tree;
     }
 
@@ -298,7 +313,7 @@ internal sealed class P1Tree : IDisposable
 
     private static string SynthAdr(string title, string proseToken, string machineStatus,
         string? supersedes, string supersededBy, string route, string verdict,
-        string boundaryDecision = "in-process-selected")
+        string boundaryDecision = "in-process-selected", bool hasAcceptanceSchema = true)
     {
         var sb = new StringBuilder();
         sb.Append("# ").Append(title).Append('\n');
@@ -314,9 +329,14 @@ internal sealed class P1Tree : IDisposable
         sb.Append("adr_lint:\n");
         sb.Append("  boundary_decision: ").Append(boundaryDecision).Append('\n');
         sb.Append("  selected_route: ").Append(route).Append('\n');
-        sb.Append("  status: ").Append(machineStatus).Append('\n');
-        if (supersedes is not null) sb.Append("  supersedes: ").Append(supersedes).Append('\n');
-        sb.Append("  superseded_by: ").Append(supersededBy).Append('\n');
+        // The optional acceptance schema (DD-003 Stage B). Absent == pre-migration
+        // Stage A -> the parser reports status-key-absent -> evidence-schema-incomplete.
+        if (hasAcceptanceSchema)
+        {
+            sb.Append("  status: ").Append(machineStatus).Append('\n');
+            if (supersedes is not null) sb.Append("  supersedes: ").Append(supersedes).Append('\n');
+            sb.Append("  superseded_by: ").Append(supersededBy).Append('\n');
+        }
         sb.Append("  routes:\n");
         sb.Append("    - route: A\n");
         sb.Append("      verdict: ").Append(verdict).Append('\n');

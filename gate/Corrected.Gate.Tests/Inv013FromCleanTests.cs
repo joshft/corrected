@@ -56,8 +56,10 @@ public class Inv013FromCleanTests
             var ctx = GateContext.ForRepoRoot(TestPaths.RepoRoot());
             ProbeResult r = new P1Probe().Evaluate(ctx);
             // Result must be the same as when cwd == repo root: it does not read cwd.
-            Assert.False(r.Satisfied);
-            Assert.Equal(ProbeReasons.EvidenceSchemaIncomplete, r.Reason);
+            // Post-flip the real tree is Stage B, so the cwd-independent result is the
+            // migrated P1 positive (this test proves cwd-independence, not the stage).
+            Assert.True(r.Satisfied);
+            Assert.Equal("resolved-compatible", r.Reason);
         }
         finally
         {
