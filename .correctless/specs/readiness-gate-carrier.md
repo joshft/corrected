@@ -597,11 +597,14 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
 ### INV-009: P2 probe — fail-closed for absent AND present, until the validator lands
 - **Type**: must · **Category**: functional
 - **Statement**: the P2 probe resolves the Phase-0.0 completion manifest at the pinned constant
-  `test/manifests/phase-0.0-completion.json` (DD-002). Until the full validator lands (out of scope),
-  it returns `{satisfied:false, reason:"validator-deferred"}` **unconditionally for any input —
-  absent, malformed, OR present-well-formed** — so a committed stub can never flip P2 (RS-RT-03). Its
-  rendered reason (INV-012) carries a **discharge pointer** to where the P2 validator work is specified
-  (the DF-003 remediation lane + the DD-002 manifest schema; RS-UX-09/UX-011).
+  `test/manifests/phase-0.0-completion.json` (DD-002) — keyed, per parent INV-004, by the STABLE
+  Phase-0.1-entry capability ids (`P0-*`) plus open MEDIUM findings, NOT by v1.13 bullet numbers.
+  Until the full validator lands (out of scope), it returns `{satisfied:false, reason:"validator-deferred"}`
+  **unconditionally for any input — absent, malformed, OR present-well-formed** — so a committed stub
+  can never flip P2 (RS-RT-03). Its rendered reason (INV-012) carries a **discharge pointer** to where
+  the P2 validator work is specified (the `P0-*` Phase-0.1-entry capability gates + the DF-003
+  remediation lane per parent INV-004, keyed by capability id in the DD-002 manifest schema;
+  RS-UX-09/UX-011).
 - **Enforcement**: integration — absent, malformed, AND **present-well-formed** fixtures each assert
   `false` with the `validator-deferred` reason. · **Test approach**: integration · **Risk**: medium
   · **Cross-ref**: DF-003, parent INV-004, DD-002.

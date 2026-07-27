@@ -18,10 +18,10 @@ implementation_readiness:
       evidence: Corrected.Gate.Tests.Inv008P1ProbeTests.Committed_tree_is_migrated_P1_satisfied   # registered gate test that re-derives P1's ADR-boundary discharge over the real tree; never prose
       discharges: [DF-002]
     - id: P2
-      name: phase-0.0-gates-4-12-plus-open-medium-df-have-executable-evidence
+      name: phase-0.1-entry-capability-gates-and-df-003-remediated
       satisfied: false
       evidence: null          # path to a committed Phase-0.0 completion manifest whose every named gate is green-from-clean
-      discharges: [DF-003]     # plus DESIGN.md §13 bullets 4–12
+      discharges: [DF-003]     # plus the P0-* Phase-0.1-entry capability gates (DESIGN §13 v1.14)
     - id: P3
       name: inv010-ci-determinism-exercised-not-silently-skipped
       satisfied: false
