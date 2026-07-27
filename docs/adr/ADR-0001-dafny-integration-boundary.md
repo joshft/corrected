@@ -5,9 +5,15 @@
   COMPATIBLE decision, anchored to the canonical committed sample and validated by
   the INV-013 ADR linter [zero findings]; the DD-007 component-table propagation
   into ARCHITECTURE.md is done)
-- **Scope**: DESIGN.md Phase 0.0 **bullets 1–3 only**, pinned to DESIGN.md
-  v1.13 (bullet numbering is not stable across design revisions). Deferred
-  Phase 0.0 gates: bullets 4–12.
+- **Scope**: DESIGN.md Phase 0.0 **bullets 1–3 only** (the foundational
+  boundary-establishment obligations), decided against DESIGN.md v1.13 bullet
+  numbering — which, as flagged here, is not stable across design revisions. The
+  remaining Phase-0.1-entry gates are now carried by DESIGN §13 (v1.14) under
+  STABLE capability ids — `P0-ERASURE-BOUNDARY`, `P0-FINGERPRINT-DETERMINISM`,
+  `P0-CLI-DIFFERENTIAL`, `P0-RESOURCE-SEMANTICS`, `P0-EDIT-CLASS-BOUNDARY`, plus
+  `DF-003`; the former bullets 8–11 and the exhaustive conformance corpus are
+  re-homed to Phase-1 / Phase-0.1-exit. These are the P2 precondition in
+  `phase-0-1-worker.md` INV-004.
 - **Spec**: `.correctless/specs/dafny-compat-spike.md`
 - **Evidence**: committed sample PAIR (QA-006 amendment) —
   `spikes/dafny-compat/evidence/samples/run-report.sample.json` (variance-mode,

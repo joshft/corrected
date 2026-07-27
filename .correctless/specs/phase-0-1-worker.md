@@ -141,10 +141,10 @@ implementation_readiness:
       evidence: Corrected.Gate.Tests.Inv008P1ProbeTests.Committed_tree_is_migrated_P1_satisfied   # registered gate test that re-derives P1's ADR-boundary discharge over the real tree; never prose
       discharges: [DF-002]
     - id: P2
-      name: phase-0.0-gates-4-12-plus-open-medium-df-have-executable-evidence
+      name: phase-0.1-entry-capability-gates-and-df-003-remediated
       satisfied: false
       evidence: null          # path to a committed Phase-0.0 completion manifest whose every named gate is green-from-clean
-      discharges: [DF-003]     # plus DESIGN.md §13 bullets 4–12
+      discharges: [DF-003]     # plus the P0-* Phase-0.1-entry capability gates (DESIGN §13 v1.14)
     - id: P3
       name: inv010-ci-determinism-exercised-not-silently-skipped
       satisfied: false
@@ -311,27 +311,41 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
   a *checked* part of the P1 gate, not a prose obligation. OQ-004 must be resolved
   so a superseding ADR is machine-recognizable.
 
-### INV-004: P2 evidence — remaining Phase 0.0 gates have executable evidence; DF-003 is remediated, not just gated
+### INV-004: P2 evidence — the Phase-0.1-entry capability gates have executable evidence; DF-003 is remediated
 - **Type**: must
 - **Category**: functional
 - **Statement**: P2 is dischargeable only when a committed **Phase-0.0
   completion manifest** — at a pinned committed path, with a versioned schema
-  `{ bullet_id | finding_id → gate_id → gate_kind{test|ci-job} → green_run_id }`
-  (spec-review RS-032) — enumerates DESIGN.md §13 bullets 4–12 and every open
-  MEDIUM deferred finding (the set is derived from the deferred-findings ledger at
-  run time, NOT hard-coded, so a future MEDIUM without a gate fails). Each entry
-  maps to a NAMED executable gate green **from a single clean-checkout run** (per
-  the operational definition). A prose checkmark, a keyword-presence check, or a
-  gate that passes only on leaked/committed prior-run state does NOT count.
-  Specifically for **DF-003** (child-exit-20 + all-pass report → COMPATIBLE/
-  exit-0): P2 requires DF-003 **remediated** — a gate proving the offending
-  exit/report matrix cell now maps to a fail-closed non-COMPATIBLE state — not
-  merely "a named gate exists," because DF-003 is a live false-COMPATIBLE the
-  spike currently carries and Phase 0.1 inherits via INV-006 composition. The
-  DF-003 gate is FORWARD and additive (a new negative test in the exit/report
-  totality suite) and does NOT regenerate the spike's ancestry-bound committed
-  evidence samples (see OQ-005 [RESOLVED] for the sanctioned affordance).
-- **Violated when**: any listed bullet/finding lacks a named gate; a named gate
+  `{ capability_id | finding_id → gate_id → gate_kind{test|ci-job} → green_run_id }`
+  (spec-review RS-032) — enumerates the **stable Phase-0.1-entry capability-gate
+  ids** fixed in DESIGN §13 (v1.14) — `P0-ERASURE-BOUNDARY`,
+  `P0-FINGERPRINT-DETERMINISM`, `P0-CLI-DIFFERENTIAL`, `P0-RESOURCE-SEMANTICS`,
+  `P0-EDIT-CLASS-BOUNDARY` — and every open MEDIUM deferred finding (that set is
+  derived from the deferred-findings ledger at run time, NOT hard-coded, so a
+  future MEDIUM without a gate fails). Capability ids — not v1.13 bullet numbers —
+  are the manifest keys precisely so a later DESIGN prose edit that renumbers or
+  inserts a bullet cannot silently change what P2 means (ADR-0001 already flagged
+  the numbering as unstable across design revisions). Each entry maps to a NAMED
+  executable gate green **from a single clean-checkout run** (per the operational
+  definition). A prose checkmark, a keyword-presence check, or a gate that passes
+  only on leaked/committed prior-run state does NOT count. **`P0-EDIT-CLASS-
+  BOUNDARY` is the BOUNDED boundary-capability corpus** — every permitted Phase-0.1
+  edit form structurally recognizable, plus representative protected-node, option,
+  attribute, and proof-bypass negatives — which proves the selected Dafny boundary
+  exposes enough to build the acceptance oracle WITHOUT making the spike implement
+  the product; the EXHAUSTIVE production conformance corpus, and the persistent-
+  verifier (former bullet 8), JSONL-protocol (9), Pi/Pi-RPC (10), and self-
+  contained-distribution (11) prototypes, are re-homed to Phase-1 / Phase-0.1-exit
+  (DESIGN §13) and are explicitly NOT P2 gates. Specifically for **DF-003**
+  (child-exit-20 + all-pass report → COMPATIBLE/exit-0): P2 requires DF-003
+  **remediated** — a gate proving the offending exit/report matrix cell now maps
+  to a fail-closed non-COMPATIBLE state — not merely "a named gate exists," because
+  DF-003 is a live false-COMPATIBLE the spike currently carries and Phase 0.1
+  inherits via INV-006 composition. The DF-003 gate is FORWARD and additive (a new
+  negative test in the exit/report totality suite) and does NOT regenerate the
+  spike's ancestry-bound committed evidence samples (see OQ-005 [RESOLVED] for the
+  sanctioned affordance).
+- **Violated when**: any listed capability-gate/finding lacks a named gate; a named gate
   is a doc-grep rather than an execution; the manifest is satisfied by
   accumulated/committed `out/` state; the MEDIUM set is a stale hard-coded list;
   or DF-003's cell still resolves COMPATIBLE.
@@ -343,7 +357,7 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
   AP-018 (success without completeness), AP-021 (green-from-clean).
 - **Test approach**: integration
 - **Risk**: high
-- **Cross-ref**: DF-003; OQ-005 [RESOLVED].
+- **Cross-ref**: DF-003; OQ-005 [RESOLVED]; DESIGN §13 (v1.14) Phase-0.1-entry capability gates.
 
 ### INV-005: P3 evidence — the spike's INV-010 determinism check is actually EXECUTED in CI on a floor-capable, RID-matching runner
 - **Type**: must

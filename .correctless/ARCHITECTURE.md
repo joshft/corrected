@@ -338,5 +338,6 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
   Recorded in `docs/adr/ADR-0001-dafny-integration-boundary.md`, promoted to
   **accepted** on 2026-07-24 (DF-002). Route **A** is the selected boundary; the
   DD-007 component-table propagation (drop `DafnyPipeline`, add `DafnyDriver` +
-  `DafnyLanguageServer` in the core-worker row above) is applied. Later Phase 0.0
-  gates (bullets 4–12) are still unstarted.
+  `DafnyLanguageServer` in the core-worker row above) is applied. The later
+  Phase-0.1-entry gates (the `P0-*` capability set + `DF-003`, DESIGN §13 v1.14;
+  former bullets 8–11 re-homed to Phase-1 / Phase-0.1-exit) are still unstarted.

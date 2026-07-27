@@ -7,7 +7,7 @@
 > reproducible evidence stating exactly what was proved, built, tested, assumed,
 > and still trusted.
 
-Status: founding design doc (v1.13), revised 2026-07-20. Nothing here is built
+Status: founding design doc (v1.14), revised 2026-07-27. Nothing here is built
 yet. The intended implementation is open source.
 
 ---
@@ -2102,40 +2102,87 @@ certification stack before testing the economic hypothesis.
 ### Phase 0.0 — Pinned Dafny integration spike
 
 Before production implementation, run a time-boxed spike against the exact
-Dafny 4.11.0 distribution. The spike must:
+Dafny 4.11.0 distribution. The spike's obligations are **partitioned by the phase
+they gate** (v1.14). A small set are **Phase-0.1-entry gates** that must pass
+before any production `src/` code is written — together they establish the
+deterministic structural boundary. The remainder are **prototypes re-homed to
+later phases** (Phase-0.1 exit or Phase 1), proven when the capability they
+support is actually built rather than up front. This partition corrects a v1.13
+inconsistency: the earlier flat "the spike must …" list read as though all of it
+gated production, which contradicts this section's own "smallest boundary needed
+for the economic experiment," the Phase 0.1 `execution_mode = CORE` scope, and
+the explicit assignment of Pi and release construction to later phases.
 
-- create a .NET 10/C# harness with exact package locks for the relevant
-  `net8.0` Dafny assemblies, beginning with `DafnyCore` and `DafnyPipeline`,
-  and demonstrate their actual `net10.0` compatibility;
-- load or invoke the pinned parser, resolver, and verification pipeline through
-  one documented Dafny-adapter boundary;
-- recover resolved symbols, declaration kinds, proof versus executable nodes,
-  resolver-inferred ghostness, effective options, and the complete source set
-  for the Phase 0.1 fixtures;
-- demonstrate that every Phase 0.1 `editable_proof` form is compiler-erased and
-  that each planted erased-but-assumption-producing construct is still rejected;
-- demonstrate deterministic protected-surface fingerprints across repeated
-  parses;
-- compare the Dafny adapter's resolved closure and diagnostics with the pinned
-  Dafny CLI on the same fixtures;
-- measure repeated Z3 resource counts under an exact build/platform identity,
-  verify enforcement of `--resource-limit`, disable solver time limits, and
-  prove that a wall-clock or memory watchdog abort cannot be normalized as a
-  verification result;
-- demonstrate that a persistent development verifier can reuse state without
-  changing the result of a fresh, cache-free complete certification run;
-- prototype the strict-LF JSONL C#-worker/TypeScript-adapter protocol,
-  generated types and runtime validators, stdout/stderr separation, record-size
-  limits, cancellation, shutdown, concurrency, and stale-response rejection;
-- launch the same pinned adapter in ordinary interactive Pi and Pi RPC modes
-  without an SDK-embedded application host, and prove the effective discovered
-  resources and active tools match the lock;
-- publish a self-contained RID-specific test distribution and confirm its
-  runtime, Dafny, and Z3 identities are recoverable from the release manifest;
-- accept every allowed edit class and reject every planted protected-node,
-  option, attribute, and proof-bypass mutation in the spike corpus; and
-- record the selected integration boundary, pinned API/tool identities,
-  unsupported constructs, and failure behavior in an implementation ADR.
+**Phase-0.1-entry gates** — the deterministic structural boundary. Production does
+not begin until these pass. `.correctless/specs/phase-0-1-worker.md` INV-004 (the
+P2 precondition) enumerates them by STABLE capability id, mapped here to the
+v1.13 bullet numbers, so future prose insertion cannot silently change what
+"ready" means:
+
+- **[foundational — done]** create a .NET 10/C# harness with exact package locks
+  for the relevant `net8.0` Dafny assemblies (`DafnyCore`, `DafnyPipeline`) and
+  demonstrate their `net10.0` compatibility; load or invoke the pinned parser,
+  resolver, and verification pipeline through one documented Dafny-adapter
+  boundary; recover resolved symbols, declaration kinds, proof-versus-executable
+  nodes, resolver-inferred ghostness, effective options, and the complete source
+  set for the Phase 0.1 fixtures. *(bullets 1–3; established by the committed
+  spike + ADR-0001.)*
+- **P0-ERASURE-BOUNDARY** — demonstrate that every Phase 0.1 `editable_proof`
+  form is compiler-erased and that each planted erased-but-assumption-producing
+  construct is still rejected. *(bullet 4)*
+- **P0-FINGERPRINT-DETERMINISM** — demonstrate deterministic protected-surface
+  fingerprints across repeated parses. *(bullet 5)*
+- **P0-CLI-DIFFERENTIAL** — compare the Dafny adapter's resolved closure and
+  diagnostics with the pinned Dafny CLI on the same fixtures. The CLI is invoked
+  ONLY as a spike-time differential oracle; the production path stays in-process
+  (Route A) and never shells out to a Dafny CLI. *(bullet 6)*
+- **P0-RESOURCE-SEMANTICS** — measure repeated Z3 resource counts under an exact
+  build/platform identity, verify enforcement of `--resource-limit`, disable
+  solver time limits, and prove that a wall-clock or memory watchdog abort cannot
+  be normalized as a verification result. *(bullet 7)*
+- **P0-EDIT-CLASS-BOUNDARY** — a BOUNDED boundary-capability corpus: every
+  permitted Phase-0.1 edit form is structurally recognizable, plus representative
+  protected-node, option, attribute, and proof-bypass negatives. This proves the
+  selected Dafny boundary exposes enough information to build the acceptance
+  oracle WITHOUT making the spike implement the product; the exhaustive
+  production conformance corpus is a Phase-0.1 *exit* obligation, not an entry
+  gate. *(the entry half of bullet 12)*
+- **DF-003** — the child-exit-20 + all-pass-report aggregation cell must map to a
+  fail-closed non-COMPATIBLE state. This is a known false-COMPATIBLE the spike
+  currently carries and Phase 0.1 inherits through INV-006 composition; remediate
+  it forward-additively (a new negative test in the exit/report totality suite,
+  no regeneration of ancestry-bound evidence — OQ-005).
+- **[foundational — done]** record the selected integration boundary, pinned
+  API/tool identities, unsupported constructs, and failure behavior in an
+  implementation ADR. *(bullet 13 = ADR-0001.)*
+
+**Prototypes re-homed to later phases** — NOT Phase-0.1-entry gates. Each is proven
+when the capability it supports is built (its downstream home is stated so it
+cannot silently disappear):
+
+- a persistent development verifier that reuses state without changing the result
+  of a fresh, cache-free complete certification run → **Phase 1 entry gate**
+  (prove the equivalence before enabling reuse; Phase 0.1 runs cache-free).
+  *(bullet 8)*
+- the strict-LF JSONL C#-worker/TypeScript-adapter protocol, generated types and
+  runtime validators, stdout/stderr separation, record-size limits, cancellation,
+  shutdown, concurrency, and stale-response rejection → **Phase 1 entry/
+  integration gate** (the worker↔adapter seam is `MANAGED_PI`, introduced in
+  Phase 1). *(bullet 9)*
+- launching the same pinned adapter in interactive Pi and Pi RPC modes without an
+  SDK-embedded application host, with discovered resources and active tools
+  matching the lock → **Phase 1 entry/integration gate** (`MANAGED_PI`).
+  *(bullet 10)*
+- a self-contained RID-specific test distribution whose runtime, Dafny, and Z3
+  identities are recoverable from the release manifest → **Phase-0.1 exit
+  obligation** (Phase 0.1 already builds content-addressed release artifacts with
+  in-toto provenance; folded into its exit criterion, not duplicated up front).
+  *(bullet 11)*
+- the EXHAUSTIVE production conformance corpus — accept every allowed edit class
+  and reject every planted protected-node, option, attribute, and proof-bypass
+  mutation against the actual ownership/honesty implementation → **Phase-0.1 exit
+  obligation** (already stated in the Phase 0.1 exit criterion). *(the exit half
+  of bullet 12)*
 
 The preferred outcome is direct use of Dafny's pinned official packages behind
 the Dafny adapter. If that surface is not usable, the ADR may select a pinned C#
@@ -2143,7 +2190,8 @@ semantic sidecar or upstream subprocess export. A purpose-built parser is a
 last resort only for the strict Phase 0.1 grammar and requires an explicit
 counterexample showing why the official semantic surfaces failed. No path may
 silently fall back to regex or text matching. Phase 0.1 does not begin until the
-ADR and fixtures establish a deterministic structural boundary.
+ADR and fixtures establish a deterministic structural boundary — i.e. until the
+Phase-0.1-entry gates above pass.
 
 ### Phase 0.1 — Narrow deterministic vertical slice
 
@@ -2227,11 +2275,30 @@ no verification disposition. Unsigned local and authenticated CI statements
 must project to the same receipt core when their normative inputs and
 environment identities match.
 
+Re-homed here from the Phase 0.0 spike list (proven at Phase 0.1 exit, not as
+entry gates): the shipped test distribution must be self-contained for the target
+RID with runtime, Dafny, and Z3 identities recoverable from the release manifest
+(former bullet 11); and the exhaustive production conformance corpus — every
+registered bypass and protected-surface mutation rejected against the actual
+ownership/honesty implementation — is the exit form of former bullet 12 (its
+bounded boundary-capability precursor, `P0-EDIT-CLASS-BOUNDARY`, is a
+Phase-0.1-entry gate).
+
 ### Phase 1 — Pi methodology and narrow bounded repair
 
 Use the Phase 0.1 fragment to test proof completion: existing executable bodies,
 definitions, and contracts are frozen, and the agent may add or repair only the
 four explicitly classified proof-annotation forms.
+
+Phase 1 entry obligations re-homed from the Phase 0.0 spike list (proven as
+persistent verification and `MANAGED_PI` are actually introduced): a persistent
+development verifier must reuse state without changing the result of a fresh,
+cache-free complete certification run — prove this equivalence before enabling
+reuse (former bullet 8); the strict-LF JSONL C#-worker/TypeScript-adapter protocol
+with generated types, runtime validators, stream separation, size limits,
+cancellation, shutdown, concurrency, and stale-response rejection (former bullet
+9); and launching the pinned adapter in interactive Pi and Pi RPC modes with
+discovered resources and tools matching the lock (former bullet 10).
 
 Begin with the smallest credible Pi baseline: ownership-aware read/patch tools,
 the pinned verifier with complete diagnostics, access to relevant Dafny
