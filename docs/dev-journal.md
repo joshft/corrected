@@ -132,3 +132,48 @@ check and a negative corpus row. Three accepted residuals were logged as drift-d
 (DRIFT-001 token-scan purity control, DRIFT-002 `StartsWith("Dafny")` family detection,
 DRIFT-003 dict-parsed ADR block) — all fail-safe and dormant while readiness is BLOCKED,
 resolvable when the Stage-B flip lands.
+
+## 2026-07-26 — Stage-B P1 flip (readiness gate crosses its own boundary)
+
+**Why this exists.** The readiness-gate carrier landed as Stage A: the enforcement home
+was built and green, but the readiness flip itself was deliberately withheld so it could
+never be a bare edit ahead of evidence. Stage B is that sanctioned flip — promoting
+`P1.satisfied` to `true` by arming ADR-0001's machine acceptance schema and migrating the
+DD-003 manifest to its after-digests, atomically, under a passing gate. P2/P3 remain
+false, so overall readiness stays consistently `BLOCKED`; this crosses the P1 boundary
+only, not the whole gate.
+
+**What changed.** Two live artifacts. (1) `docs/adr/ADR-0001…` gained the optional
+acceptance schema in its `adr_lint` block — `status: accepted`, plus explicit
+`supersedes: null` / `superseded_by: null` marking the terminal node (the prose
+`**Status**: accepted` had been present since DF-002, so the probe's prose↔machine
+consistency check now passes). (2) `.correctless/specs/phase-0-1-worker.md` flipped the
+P1 precondition to `satisfied: true` with a non-null `evidence` pointer, swapped the
+A2/B5 current-state anchor spans to their committed after-content, and corrected three
+now-stale normative-body literals that the DD-003 Stage-B stale-literal scan requires
+absent (`EvaluateReadiness(blockText)` → `(block, probeResults)`, `pending DF-002` →
+`DF-002 discharged`, `BLOCKED-all-false` → the post-flip phrasing).
+
+**How it was verified — test-first.** The gate was built to verify exactly this flip, so
+the change was driven test-first against the existing gate rather than through a fresh TDD
+cycle. Several gate self-tests were hard-pinned to the live repo's Stage-A state and had
+to be inverted or re-homed: `Inv008.PreMigration_adr_is_schema_incomplete` and
+`Inv006.StageA_real_probe_…` became a live-repo Stage-B positive plus a re-homed
+synthesized-tree copy — a new `P1Mutation.PreMigrationStatusAbsent` keeps the Stage-A
+schema-incomplete branch covered stage-independently; `Dd003.Stage_…_StageA_today` and the
+`Inv002`/`Inv013` live-repo assertions flipped to Stage-B expectations. All four
+Stage-B-asserting tests were confirmed RED against the still-Stage-A artifacts, then green
+after the flip. Renaming `StageA_committed_block_is_Pass_BLOCKED` → `StageB_…` also
+required updating the INV-014 trx-guard's required-fixture list and the committed
+`happy.trx` fixture (the real test name, the guard list, and the fixture must stay
+consistent). `gate/run-readiness-gate.sh` is green-from-clean at 227/227, `GATE_EXIT=0`,
+banner `PASS … BLOCKED`; the spike's ADR consumers (INV-013 linter + `Contains`
+assertions, 24/24) stay green because the linter ignores unknown keys and the prose was
+preserved.
+
+**Notes.** The three drift-debt residuals (DRIFT-001/002/003) were dormant at Stage A
+because P1 short-circuited; they now execute but remain fail-safe accepted debt (a
+residual can only produce a false-FAIL, never a forged READY). `P1.evidence` is not
+mechanically pinned to a specific string (the kernel checks non-null + probe agreement,
+not the string content), so it names the registered gate test that re-derives P1's
+discharge, per INV-002 ("test-id / gate / manifest path; never prose").

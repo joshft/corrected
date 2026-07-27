@@ -25,23 +25,24 @@ namespace Corrected.Gate.Tests;
 /// </summary>
 public class Inv006OrchestrationTests
 {
-    // Tests INV-006 [integration]: Stage-A current-state — real orchestrator over
-    // the real committed tree yields P1=false with reason evidence-schema-incomplete
-    // (a typed false via the status-key-absent short-circuit, NEVER a throw).
+    // Tests INV-006 [integration]: Stage-B current-state — the real orchestrator over
+    // the real committed (migrated) tree yields P1=true with reason resolved-compatible
+    // (the acceptance schema is present, so the probe re-derives COMPATIBLE, never a throw).
     [Fact]
-    public void StageA_real_probe_P1_is_schema_incomplete_false()
+    public void StageB_real_probe_P1_is_satisfied()
     {
         var ctx = GateContext.ForRepoRoot(TestPaths.RepoRoot());
         IReadOnlyDictionary<PreconditionId, ProbeResult> results = ProbeOrchestrator.RunAll(ctx);
-        Assert.False(results[PreconditionId.P1].Satisfied);
-        Assert.Equal(ProbeReasons.EvidenceSchemaIncomplete, results[PreconditionId.P1].Reason);
+        Assert.True(results[PreconditionId.P1].Satisfied);
+        Assert.Equal("resolved-compatible", results[PreconditionId.P1].Reason);
     }
 
-    // Tests INV-006 [integration]: Stage-A committed block -> Pass, status BLOCKED
-    // (through the REAL kernel + REAL orchestrator; the (null,false,false) cell is
-    // consistent because the real P1 is schema-incomplete false).
+    // Tests INV-006 [integration]: Stage-B committed block -> Pass, status BLOCKED
+    // (through the REAL kernel + REAL orchestrator). Post-flip the P1 cell is consistent
+    // because declared P1.satisfied:true + non-null evidence matches the real probe's
+    // satisfied:true/Resolved; P2/P3 stay (null,false,false) consistent -> overall BLOCKED.
     [Fact]
-    public void StageA_committed_block_is_Pass_BLOCKED()
+    public void StageB_committed_block_is_Pass_BLOCKED()
     {
         var ctx = GateContext.ForRepoRoot(TestPaths.RepoRoot());
         var results = ProbeOrchestrator.RunAll(ctx);

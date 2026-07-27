@@ -32,7 +32,7 @@ named=(
   "Inv005VerdictTableTests.Null_false_true_is_Fail"
   "Inv005VerdictTableTests.Null_false_false_is_consistent"
   "Inv008P1ProbeTests.PreMigration_adr_is_schema_incomplete"
-  "Inv006OrchestrationTests.StageA_committed_block_is_Pass_BLOCKED"
+  "Inv006OrchestrationTests.StageB_committed_block_is_Pass_BLOCKED"
 )
 for name in "${named[@]}"; do
   if ! grep -q "${name}" "${TRX_PATH}"; then

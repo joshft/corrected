@@ -1,10 +1,10 @@
-# AP-031 real-producer fixture — the COMMITTED parent readiness block (Stage A).
+# AP-031 real-producer fixture — the COMMITTED parent readiness block (Stage B).
 # Source: .correctless/specs/phase-0-1-worker.md (lines 132-153), verbatim.
 # INV-001-D: exactly ONE `implementation_readiness:` key at column 0 inside the one
 # ```yaml fence. INV-001 asserts the current real parent parses to exactly one
 # block; INV-002 asserts the values (schema_version 1, status BLOCKED, exactly
-# {P1,P2,P3}, each satisfied:false + evidence:null). This is the Stage-A committed
-# state that must stay green (P1.satisfied:false).
+# {P1,P2,P3}; P1 satisfied:true + non-null evidence, P2/P3 satisfied:false +
+# evidence:null). This is the Stage-B committed state (post P1 flip).
 
 ```yaml
 implementation_readiness:
@@ -14,8 +14,8 @@ implementation_readiness:
   preconditions:
     - id: P1
       name: adr-0001-promoted-or-superseded
-      satisfied: false
-      evidence: null          # test-id / gate that verifies the discharge; never prose
+      satisfied: true
+      evidence: Corrected.Gate.Tests.Inv008P1ProbeTests.Committed_tree_is_migrated_P1_satisfied   # registered gate test that re-derives P1's ADR-boundary discharge over the real tree; never prose
       discharges: [DF-002]
     - id: P2
       name: phase-0.0-gates-4-12-plus-open-medium-df-have-executable-evidence

@@ -87,21 +87,24 @@ A recursion sentinel (`CORRECTED_GATE_INNER`) makes any gate-invoking helper
 running *inside* the discovered suite a no-op. CI wires the from-clean run via
 `.github/workflows/readiness-gate.yml` → `gate/ci/from-clean-gate.sh`.
 
-Current green-from-clean state: **226/226, `GATE_EXIT=0`**, banner on stdout.
+Current green-from-clean state: **227/227, `GATE_EXIT=0`**, banner on stdout.
 
 ## Stage A vs Stage B
 
-This carrier is **Stage A**: it *lands the enforcement home* but does **not**
-flip readiness.
+The carrier landed as **Stage A** (enforcement home, readiness *not* flipped).
+**Stage B has since landed** — the sanctioned P1 flip.
 
-- The parent readiness block still declares `P1/P2/P3 satisfied: false` — **P1 is
-  not flipped**. ADR-0001 carries its decision fields (Route A / COMPATIBLE, set
-  earlier by DF-002) but the machine `status:`/`supersedes` keys are absent, so
-  the P1 probe short-circuits to `evidence-schema-incomplete` → a consistent
-  `BLOCKED` verdict. That is the intended Stage-A green path.
-- **Stage B** — the atomic flip of `P1.satisfied` to `true`, bound to a passing
-  gate and accompanied by the DD-003 manifest migration — is a separate later
-  step. The gate exists so that flip can never be a bare edit ahead of evidence.
+- **Stage A** (carrier): the parent readiness block declared `P1/P2/P3
+  satisfied: false`; ADR-0001's machine `status:`/`supersedes` keys were absent, so
+  the P1 probe short-circuited to `evidence-schema-incomplete` → a consistent
+  `BLOCKED` verdict.
+- **Stage B** (landed): ADR-0001 now carries `status: accepted` (+ explicit
+  `supersedes: null` / `superseded_by: null` terminal), so the P1 probe re-derives
+  COMPATIBLE and `P1.satisfied` is `true`. The DD-003 manifest migrated to its
+  after-digests (the A2/B5 anchor spans swapped) atomically with the flip. **P2/P3
+  stay `false`, so readiness remains consistently `BLOCKED`** — the flip crossed the
+  boundary the carrier exists to gate without ever being a bare edit ahead of
+  evidence (a bare flip fails the gate: after-digest mismatch or forged-READY).
 
 ## Configuration
 
@@ -116,8 +119,11 @@ flip readiness.
 
 ## Known limitations
 
-Stage A ships three **accepted drift-debt residuals**, all dormant while the
-gate is BLOCKED (tracked in `.correctless/meta/drift-debt.json`):
+The carrier ships three **accepted drift-debt residuals** (tracked in
+`.correctless/meta/drift-debt.json`). At Stage A they were dormant; **since the
+Stage-B P1 flip landed the P1 probe runs in full**, so these paths now execute —
+all three remain fail-safe accepted debt (a residual can only produce a
+false-FAIL, never a forged READY):
 
 - **DRIFT-001 (INV-004):** kernel purity is a token-text substring scan, not a
   Roslyn semantic-symbol scan — blind to short-name/implicit-using I/O. Kernel is
@@ -125,8 +131,9 @@ gate is BLOCKED (tracked in `.correctless/meta/drift-debt.json`):
   determinism check.
 - **DRIFT-002 (INV-008b):** the Dafny-family check uses `StartsWith("Dafny")`
   prefix discovery rather than exact-set membership. Fail-safe (a rogue `Dafny*`
-  name yields a false-FAIL, never a forged READY); dormant because P1
-  short-circuits before clause (b) runs.
+  name yields a false-FAIL, never a forged READY). Now **active** at Stage B (P1
+  no longer short-circuits before clause (b)); it passes because route-a.json's
+  loaded-identity set matches.
 - **DRIFT-003 (INV-002):** the ADR `adr_lint` block deserializes into
   `Dictionary<string,object?>` rather than a closed DTO. Bounded by Stage-1 AST
   pre-validation (tags/anchors/aliases rejected; only known keys read).

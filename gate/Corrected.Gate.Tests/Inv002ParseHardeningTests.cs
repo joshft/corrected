@@ -34,10 +34,10 @@ public class Inv002ParseHardeningTests
         Assert.Equal(ReadinessStatus.Indeterminate, block.Status);
     }
 
-    // Tests INV-002 [unit]: the VALID real parent block parses to exact pinned
-    // values (schema_version 1, BLOCKED, exactly {P1,P2,P3}, satisfied:false,
-    // evidence:null). AP-031 verbatim fixture.
-    // Source: .correctless/specs/phase-0-1-worker.md lines 132-153.
+    // Tests INV-002 [unit]: the VALID real parent block parses to exact pinned Stage-B
+    // values (schema_version 1, BLOCKED, exactly {P1,P2,P3}; P1 satisfied:true with
+    // non-null evidence, P2/P3 satisfied:false with evidence:null). AP-031 verbatim fixture.
+    // Source: .correctless/specs/phase-0-1-worker.md lines 132-153 (post-flip).
     [Fact]
     public void Valid_block_parses_to_exact_values()
     {
@@ -49,8 +49,16 @@ public class Inv002ParseHardeningTests
         Assert.Equal(3, block.Preconditions.Count);
         foreach (var p in block.Preconditions)
         {
-            Assert.False(p.Satisfied);
-            Assert.Null(p.Evidence);
+            if (p.Id == PreconditionId.P1)
+            {
+                Assert.True(p.Satisfied);
+                Assert.NotNull(p.Evidence);
+            }
+            else
+            {
+                Assert.False(p.Satisfied);
+                Assert.Null(p.Evidence);
+            }
         }
     }
 

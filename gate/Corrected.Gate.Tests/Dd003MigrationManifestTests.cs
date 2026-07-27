@@ -76,14 +76,15 @@ public class Dd003MigrationManifestTests
     }
 
     // Tests DD-003 [integration]: the stage is derived MECHANICALLY from committed
-    // P1.satisfied — Stage A today (P1.satisfied:false). RED against the stub gate.
+    // P1.satisfied — Stage B post-flip (P1.satisfied:true). The DD-003 flip swaps the
+    // A2/B5 spans to their after-content so the after-digests match.
     [Fact]
-    public void Stage_is_derived_from_committed_p1_satisfied_StageA_today()
+    public void Stage_is_derived_from_committed_p1_satisfied_StageB()
     {
         ConsistencyResult r = MigrationManifest.CheckConsistency(TestPaths.RepoRoot());
-        Assert.Equal(MigrationStage.StageA, r.ResolvedStage);
-        // Stage-A tree is self-consistent AND non-vacuous (real anchors + real digests +
-        // no Stage-A-removed literal). If this fails, the named sites explain why.
+        Assert.Equal(MigrationStage.StageB, r.ResolvedStage);
+        // Stage-B tree is self-consistent AND non-vacuous (real anchors + real after-digests
+        // + no Stage-B-removed literal). If this fails, the named sites explain why.
         Assert.True(r.Passed, string.Join(" | ", r.DisagreeingSites));
     }
 

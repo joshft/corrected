@@ -28,17 +28,31 @@ public class Inv008P1ProbeTests
         return Convert.ToHexString(sha.ComputeHash(File.ReadAllBytes(path))).ToLowerInvariant();
     }
 
-    // Tests INV-008(a) [integration]: the pre-migration ADR (status key absent)
+    // Tests INV-008(a) [integration]: a pre-migration ADR (status key absent)
     // short-circuits to evidence-schema-incomplete BEFORE any evidence/recompute/
     // supersession check — so a future stale sha const cannot dead-red the Stage-A
-    // path (R3-B1). RED against the stub probe.
+    // path (R3-B1). RE-HOMED onto a SYNTHESIZED pre-migration tree now that the real
+    // committed tree has migrated to Stage B; the branch stays covered stage-independently.
     [Fact]
     public void PreMigration_adr_is_schema_incomplete()
     {
-        var ctx = GateContext.ForRepoRoot(TestPaths.RepoRoot());
-        ProbeResult r = new P1Probe().Evaluate(ctx);
+        using var tree = P1Tree.Build(P1Mutation.PreMigrationStatusAbsent);
+        ProbeResult r = new P1Probe().Evaluate(GateContext.ForRepoRoot(tree.Root));
         Assert.False(r.Satisfied);
         Assert.Equal(ProbeReasons.EvidenceSchemaIncomplete, r.Reason);
+    }
+
+    // Tests INV-008(a‴) [integration]: post-migration the REAL committed tree is Stage B —
+    // the live ADR-0001 carries the acceptance schema (status: accepted, terminal), so the
+    // real P1 probe re-derives COMPATIBLE and resolves TRUE over the repo root. This is the
+    // live-repo Stage-B positive the DD-003 flip makes green (RED until the flip lands).
+    [Fact]
+    public void Committed_tree_is_migrated_P1_satisfied()
+    {
+        var ctx = GateContext.ForRepoRoot(TestPaths.RepoRoot());
+        ProbeResult r = new P1Probe().Evaluate(ctx);
+        Assert.True(r.Satisfied);
+        Assert.Equal("resolved-compatible", r.Reason);
     }
 
     // Tests INV-008(a′) [integration]: the Stage-A positive fixture — SHA256(the
