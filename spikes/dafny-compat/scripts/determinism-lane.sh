@@ -67,6 +67,18 @@ fi
 run_cmd mkdir -p -- "$RUN_ROOT"
 RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
 
+# BLOCKING-1 (cverify 2026-07-29): the run root MUST live within the spike tree.
+# An out-of-tree root makes the nested run-spike.sh pass an ABSOLUTE SpikeRunRootRel
+# to MSBuild — build outputs land in-tree while the DD-008 completeness check
+# resolves the true absolute root (spurious INCOMPLETE) — and leaks an absolute host
+# path into the recorded build argv (PRH-005). Refuse it fail-closed HERE, before any
+# SDK/build work, so the CI lane (INV-024/RS-028) can never mis-drive it.
+case "$RUN_ROOT" in
+  "$SPIKE_ROOT"/*) : ;;
+  *) echo "determinism-lane: refusing an out-of-tree --run-root '$RUN_ROOT' — it must be within the spike tree ($SPIKE_ROOT) so the nested SpikeRunRootRel stays SPIKE-relative (DD-008 build/output divergence, PRH-005 argv leak). Use an in-tree root, e.g. --run-root out/determinism-lane." >&2
+     exit 20 ;;
+esac
+
 # --- .NET SDK resolution (mirrors run-spike.sh): --dotnet-root / DOTNET_ROOT,
 # --- then the HOME-local install, then the pointer a controller run cached.
 resolve_sdk_bin() {

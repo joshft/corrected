@@ -129,6 +129,22 @@ SPIKE_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd -- "$SPIKE_ROOT/../.." && pwd)"
 CACHE_DIR="$SPIKE_ROOT/out/cache"
 
+# BLOCKING-1 (cverify 2026-07-29): the run root MUST live within the spike tree.
+# SpikeRunRootRel is contractually SPIKE-relative (Directory.Build.props:
+# SpikeRunRoot = $(MSBuildThisFileDirectory)$(SpikeRunRootRel)); an out-of-tree
+# root would make MSBuild write build outputs IN-TREE ($SPIKE_ROOT/<abs-minus-
+# slash>/build/…) while the DD-008 completeness check resolves the TRUE absolute
+# run root — a silent divergence that fails the run INCOMPLETE — and would leak an
+# absolute host path into the recorded restore/build argv (PRH-005). Refuse it
+# fail-closed, before any provision/restore/build work.
+require_in_tree_run_root() { # absolute-canonical-run-root
+  case "$1" in
+    "$SPIKE_ROOT"/*) return 0 ;;
+  esac
+  echo "run-spike: refusing an out-of-tree --run-root '$1' — it must be within the spike tree ($SPIKE_ROOT) so SpikeRunRootRel stays SPIKE-relative (DD-008 build/output divergence, PRH-005 argv leak). Use an in-tree root, e.g. --run-root out/<name>." >&2
+  exit 20
+}
+
 # MA-UX-3: an EXPLICIT `--dotnet-root <path>` argument re-establishes DOTNET_ROOT
 # for SDK resolution. The clean-environment contract (MA-HI-1) strips an AMBIENT
 # DOTNET_ROOT env var to close the toolchain-hijack vector, so a user whose SDK
@@ -822,10 +838,8 @@ if [ "$INNER" = 0 ]; then
   fi
   run_cmd mkdir -p -- "$RUN_ROOT"
   RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
-  case "$RUN_ROOT" in
-    "$SPIKE_ROOT"/*) RUN_DIR_REL="${RUN_ROOT#"$SPIKE_ROOT"/}" ;;
-    *) RUN_DIR_REL="$RUN_ROOT" ;;
-  esac
+  require_in_tree_run_root "$RUN_ROOT"
+  RUN_DIR_REL="${RUN_ROOT#"$SPIKE_ROOT"/}"
   if [ -z "$OUT_PATH" ]; then
     OUT_PATH="$RUN_ROOT/reports/run-report.json"
   fi
@@ -997,10 +1011,8 @@ phase_guard() { # phase-name exit-code
     fail_run WallClockExpiry "$1 phase exceeded the ${WALL_BOUND}s wall-clock bound on the /proc/uptime monotonic deadline; per-phase supervisor delivered ${SPIKE_PHASE_SIGNALS:-SIGKILL} (QA-007/RS-015/MA-XC-5)"
   fi
 }
-case "$RUN_ROOT" in
-  "$SPIKE_ROOT"/*) RUN_DIR_REL="${RUN_ROOT#"$SPIKE_ROOT"/}" ;;
-  *) RUN_DIR_REL="$RUN_ROOT" ;;
-esac
+require_in_tree_run_root "$RUN_ROOT"
+RUN_DIR_REL="${RUN_ROOT#"$SPIKE_ROOT"/}"
 run_cmd mkdir -p -- "$RUN_ROOT/reports" "$RUN_ROOT/receipts" "$RUN_ROOT/sentinel" "$RUN_ROOT/decoys" "$RUN_ROOT/tmp" "$RUN_ROOT/dotnet-cli-home" "$RUN_ROOT/packages"
 
 # Run-mint artifacts: git state + the pre-created zero-count sentinel ledger.

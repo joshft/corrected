@@ -91,9 +91,15 @@ jobs:
           # Invoke the committed extracted lane script VERBATIM (INV-024/RS-028).
           # It drives the two nested runs and emits the receipt; it exits non-zero
           # on comparison_status=different (INV-003). No rerun, no error-swallowing.
+          # BLOCKING-1: the run root MUST be IN-TREE (under the spike root) so the
+          # nested SpikeRunRootRel stays SPIKE-relative — an out-of-tree root (e.g.
+          # $RUNNER_TEMP) diverges MSBuild output from the DD-008 check and would leak
+          # an absolute host path into the recorded build argv (PRH-005). cwd is the
+          # spike root here, so out/determinism-lane resolves in-tree; `rm -rf …/out`
+          # above keeps it strictly from-clean.
           ( cd spikes/dafny-compat \
             && env -i HOME="$HOME" DETERMINISM_OS_LABEL="$DETERMINISM_OS_LABEL" DETERMINISM_RESOLVED_SDK="$DETERMINISM_RESOLVED_SDK" \
-               bash -p scripts/determinism-lane.sh --run-root "$RUNNER_TEMP/determinism-lane" --dotnet-root "$HOME/.dotnet" )
+               bash -p scripts/determinism-lane.sh --run-root out/determinism-lane --dotnet-root "$HOME/.dotnet" )
 
       - name: Determinism-lane xUnit tests for real (>=8-core home — Category=determinism-lane)
         run: |
@@ -115,5 +121,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: determinism-receipt
-          path: ${{ runner.temp }}/determinism-lane/receipts/determinism-receipt.json
+          # In-tree run root (BLOCKING-1): the lane writes the receipt beneath the
+          # spike tree, not $RUNNER_TEMP.
+          path: spikes/dafny-compat/out/determinism-lane/receipts/determinism-receipt.json
           if-no-files-found: warn
