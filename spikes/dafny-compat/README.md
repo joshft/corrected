@@ -127,6 +127,31 @@ Run-root cleanup (`scripts/clean-runs.sh`) exit:
 | 0 | pruned (or nothing to prune) — maintenance tool, no report |
 | 20 | usage error / unhardened invocation |
 
+Serial determinism lane (`scripts/determinism-lane.sh`) exit (PR1 / P3
+determinism-attestation, INV-005/INV-003/PRH-005 — drives the two nested
+determinism runs and emits `<run-root>/receipts/determinism-receipt.json`;
+**PR1 signs nothing** regardless of exit):
+
+| exit | meaning | receipt emitted? |
+|------|---------|------------------|
+| 0 | both nested runs completed and the declared deterministic projections AGREED across the two runs (comparison_status=equal) | yes |
+| 1 | a non-attesting terminal outcome propagated from the receipt emitter: the projections DIFFERED in this observation (comparison_status=different) — the disagreement HARD-FAILS the lane, mints nothing, and is NEVER retried into green (INV-003/PRH-005) — or a structural corpus fault classified infrastructure_invalid — either way mints nothing | yes |
+| 3 | infrastructure fault BEFORE comparison — no pinned .NET SDK resolved (checked `--dotnet-root`, `DOTNET_ROOT`, `HOME/.dotnet`, `out/cache/dotnet-root`), or the nested runs did not build the aggregator host — no receipt | no |
+| 20 | usage/pre-run error (unknown argument, missing `--run-root`, unhardened invocation, `run_cmd` DENY) — no receipt | no |
+
+**Codes 0/1 are propagated verbatim from the receipt emitter**
+(`SpikeAggregator --emit-determinism-receipt`, which sets the exit via
+`DeterminismDisposition.Dispose`): 0 on a successfully emitted `equal` receipt,
+1 on the `comparison_status=different` disagreement hard-fail (the INV-003
+observation-scoped signal — strong evidence for *this* observation, not a
+universal-nondeterminism claim, never retried — PRH-005) or a structural
+infrastructure_invalid corpus. A malformed *internal* emitter invocation
+propagates the emitter's own argument-validation diagnostic (exit 2); a
+receipt-write/projection fault inside the emitter propagates exit 3 (an
+infrastructure fault is NEVER recorded as `comparison_status=different` —
+INV-001). The literal shell-side faults are `exit 3` (SDK/aggregator absent) and
+`exit 20` (usage/pre-run); the emitter-propagated `different` code is 1.
+
 The full exit/report consistency matrix (including "failure exit + all-pass
 report ⇒ never COMPATIBLE") is committed in
 `schema/evidence-schema.json → route_outcome_algebra.exit_report_matrix`.

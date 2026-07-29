@@ -1,0 +1,11 @@
+{
+  "_comment": "PR1 / INV-002 — the committed artifact-ROLE registry (exactly 5 roles) and the closed role->kind map (run->run-report; route-a,route-b->route-report; control-a,control-b->control-report). 2 runs x 5 roles = 10 artifacts, 5 comparisons. Committed artifact (never in-test literals — RS-020).",
+  "roles": ["run", "route-a", "route-b", "control-a", "control-b"],
+  "role_to_kind": {
+    "run": "run-report",
+    "route-a": "route-report",
+    "route-b": "route-report",
+    "control-a": "control-report",
+    "control-b": "control-report"
+  }
+}

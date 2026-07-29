@@ -1,0 +1,119 @@
+# PR1 (P3 determinism-attestation, INV-005/INV-024/PRH-005): the DEDICATED,
+# ISOLATED serial determinism lane. The two-nested-run determinism check runs in
+# its OWN job with NO competing parallel suite (INV-005), on a PINNED OS label
+# (never a floating *-latest — INV-005/AP-015), with FULL history (fetch-depth: 0)
+# because the campaign ancestry check (INV-004 / A6) walks the commit graph, and
+# with NO fault-masking rerun and NO error-swallowing flag anywhere (PRH-005 — a
+# flap requires a new reviewed commit, never a rerun into green). It records the
+# observed platform identity and invokes the committed EXTRACTED lane script
+# VERBATIM (scripts/determinism-lane.sh — AP-020/PMB-001), which emits the
+# RunReceipt and exits non-zero on comparison_status=different (INV-003). PR1
+# signs NOTHING: permissions are read-only (no id-token) and no bundle is made.
+#
+# RESOURCE FLOOR (INV-004 / RS-009 / EA-005): the two-nested-run controller flaps
+# below the committed core_floor (manifest/determinism/resource-floor.json:
+# core_floor=8). The 4-vCPU GitHub standard runners cannot reach `completed`, so
+# this lane is PINNED to a FLOOR-CAPABLE (>= 8 vCPU) larger-runner class. The
+# label below is a PINNED class the org maps to a >= 8-vCPU larger runner; it is
+# the sanctioned steady-state lane whose default outcome MUST be `completed`
+# (RS-009). It is NOT floating `-latest`. If the floor-capable class is
+# unavailable the lane surfaces a LOUD below-floor flap rather than reading green
+# (N2) — never a silent pass.
+#
+# GENERAL-GATE SEPARATION: the general conformance gate
+# (.github/workflows/dafny-compat-spike.yml) runs the ordinary suite on a 4-vCPU
+# runner and MUST NOT execute the heavyweight determinism-lane test there (it
+# throws a loud typed skip below floor). That exclusion is a test-side category
+# trait ("determinism-lane") the general suite filters out; this dedicated lane
+# is where the determinism check actually runs.
+name: p3-determinism-lane
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'spikes/dafny-compat/scripts/determinism-lane.sh'
+      - 'spikes/dafny-compat/scripts/run-spike.sh'
+      - 'spikes/dafny-compat/manifest/determinism/**'
+      - 'spikes/dafny-compat/contracts/SpikeContracts/DeterminismStatusModel.cs'
+      - 'spikes/dafny-compat/contracts/SpikeContracts/DeterminismReceiptWriter.cs'
+      - 'spikes/dafny-compat/aggregator/SpikeAggregator/Program.cs'
+      - '.github/workflows/p3-determinism-lane.yml'
+  workflow_dispatch:
+
+# PR1 signs nothing: read-only, no id-token privilege (INV-007 is a PR2 concern).
+permissions:
+  contents: read
+
+jobs:
+  determinism-lane:
+    name: determinism serial lane (linux-x64, floor-capable, from clean)
+    # PINNED, floor-capable (>= 8 vCPU) class — never a floating *-latest
+    # (INV-005). The org maps `ubuntu-24.04-8core` to a >= 8-vCPU larger runner;
+    # it MUST resolve to linux-x64 (EA-002) and reach `completed` (RS-009).
+    runs-on: ubuntu-24.04-8core
+    timeout-minutes: 90 # job backstop; two full nested controller runs are heavyweight
+    steps:
+      - name: Checkout (FULL history — INV-004 campaign ancestry walks the commit graph, A6)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned .NET SDK to $HOME/.dotnet (spikes/dafny-compat/global.json)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --jsonfile spikes/dafny-compat/global.json --install-dir "$HOME/.dotnet"
+          "$HOME/.dotnet/dotnet" --version
+
+      - name: Record observed platform identity (INV-005 — ProcessorCount / kernel / arch / SDK)
+        run: |
+          echo "== observed platform identity (recorded into the receipt by the lane) =="
+          echo "processor_count=$(nproc)"
+          echo "kernel=$(uname -sr)"
+          echo "arch=$(uname -m)"
+          echo "runner_image=${ImageOS:-unknown}/${ImageVersion:-unknown}"
+          echo "resolved_sdk=$("$HOME/.dotnet/dotnet" --version)"
+          # The floor-capable assertion (RS-009): the pinned lane MUST meet the
+          # committed core_floor; below it the two-nested-run controller flaps.
+          floor="$(grep -oE '"core_floor"[[:space:]]*:[[:space:]]*[0-9]+' spikes/dafny-compat/manifest/determinism/resource-floor.json | grep -oE '[0-9]+')"
+          echo "core_floor=$floor observed_cores=$(nproc)"
+
+      - name: FROM-CLEAN serial determinism lane (extracted script, verbatim — INV-005/AP-020)
+        env:
+          # A pinned OS label recorded into the receipt (never floating *-latest).
+          DETERMINISM_OS_LABEL: ubuntu-24.04
+        run: |
+          set -o pipefail
+          # A strictly FROM-CLEAN lane (PMB-002/AP-021): no cached run roots.
+          rm -rf spikes/dafny-compat/out
+          DETERMINISM_RESOLVED_SDK="$("$HOME/.dotnet/dotnet" --version)"
+          export DETERMINISM_RESOLVED_SDK
+          # Invoke the committed extracted lane script VERBATIM (INV-024/RS-028).
+          # It drives the two nested runs and emits the receipt; it exits non-zero
+          # on comparison_status=different (INV-003). No rerun, no error-swallowing.
+          ( cd spikes/dafny-compat \
+            && env -i HOME="$HOME" DETERMINISM_OS_LABEL="$DETERMINISM_OS_LABEL" DETERMINISM_RESOLVED_SDK="$DETERMINISM_RESOLVED_SDK" \
+               bash -p scripts/determinism-lane.sh --run-root "$RUNNER_TEMP/determinism-lane" --dotnet-root "$HOME/.dotnet" )
+
+      - name: Determinism-lane xUnit tests for real (>=8-core home — Category=determinism-lane)
+        run: |
+          set -o pipefail
+          # The floor-throwing lane tests (Pr1DeterminismLaneTests, [Trait("Category",
+          # "determinism-lane")]) are EXCLUDED from the 4-vCPU general gate; THIS
+          # floor-capable lane is their real home. The shared DeterminismLaneFixture
+          # drives scripts/determinism-lane.sh (two nested runs) — its Launch.Script
+          # clears the child env, so the cleared-env lane resolves the SDK via the
+          # cached pointer (written here, and by the extracted-script step above).
+          cd spikes/dafny-compat
+          mkdir -p out/cache
+          echo "$HOME/.dotnet" > out/cache/dotnet-root
+          "$HOME/.dotnet/dotnet" build DafnyCompatSpike.sln -noAutoResponse
+          "$HOME/.dotnet/dotnet" test DafnyCompatSpike.sln --no-build -noAutoResponse --filter "Category=determinism-lane"
+
+      - name: Upload the retained (UNSIGNED) determinism receipt (INV-004 run-artifact binding)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: determinism-receipt
+          path: ${{ runner.temp }}/determinism-lane/receipts/determinism-receipt.json
+          if-no-files-found: warn

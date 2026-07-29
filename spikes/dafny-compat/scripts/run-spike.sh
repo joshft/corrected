@@ -475,6 +475,8 @@ RUN_ROOT=""
 OUT_PATH=""
 KEEP_ARG=""
 OUT_DIR_ARG=""
+EXCLUDE_CATEGORY=""
+PRINT_INNER_FILTER=0
 INNER=0
 CANONICAL=1
 SPIKE_RUN_ID="${SPIKE_RUN_ID:-}"
@@ -494,6 +496,18 @@ while [ $# -gt 0 ]; do
     --nonce) SPIKE_NONCE="$2"; shift 2 ;;
     --keep) KEEP_ARG="$2"; shift 2 ;;         # MA-ID-R2-3: prune-run-roots test phase only
     --out-dir) OUT_DIR_ARG="$2"; shift 2 ;;   # MA-RB-R2-*: prune/cache test phases only (isolated substrate)
+    # PR1 (P3 determinism-lane / QA-001): exclude a test Category from the canonical
+    # suite. env -i STRIPS env vars, so the general 4-vCPU CI gate passes the
+    # exclusion as an ARG (not env); it maps to `dotnet test --filter Category!=<cat>`.
+    # NOT a variance override — a canonical run stays canonical. With NO arg the
+    # local run/commands.test runs EVERY category (incl. determinism-lane on >=8 cores).
+    --exclude-category) EXCLUDE_CATEGORY="$2"; shift 2 ;;
+    # QA-008 class-fix: a DRY-RUN that reconstructs the inner argv (the outer->inner
+    # forward under test) + the inner suite `dotnet test` filter and PRINTS them, then
+    # exits 0 — WITHOUT provisioning/building/running. Lets an EXECUTION test prove the
+    # exclusion actually reaches the inner filter (a parse-based guard was blind to the
+    # outer->inner argv drop).
+    --print-inner-filter) PRINT_INNER_FILTER=1; shift ;;
     --dotnet-root) shift 2 ;;  # MA-UX-3: pre-scanned above for resolve_sdk; NOT a variance override
     *) echo "run-spike: unknown argument '$1'" >&2; exit 20 ;;
   esac
@@ -505,6 +519,74 @@ if [ -n "$SOLVER_OVERRIDE" ]; then
 fi
 
 cd -- "$SPIKE_ROOT"
+
+# QA-008: the SINGLE source of the inner controller argv. The real spawn (outer
+# watchdog) AND the --print-inner-filter dry-run both call this, so the dry-run
+# EXECUTION test exercises the ACTUAL outer->inner forward — a parse-only guard was
+# structurally blind to the argv drop this reconstruction is responsible for.
+build_inner_args() {
+  INNER_ARGS=(__inner --config "$CONFIG_FILE" --run-root "$RUN_ROOT" --out "$OUT_PATH" --run-id "$SPIKE_RUN_ID" --nonce "$SPIKE_NONCE")
+  if [ -n "$SOLVER_OVERRIDE" ]; then INNER_ARGS+=(--solver "$SOLVER_OVERRIDE"); fi
+  # The determinism-lane CI-separation exclusion MUST forward into the inner (the
+  # suite `dotnet test --filter` runs there), else the 4-vCPU general gate runs the
+  # floor-throwing lane tests and goes red.
+  if [ -n "$EXCLUDE_CATEGORY" ]; then INNER_ARGS+=(--exclude-category "$EXCLUDE_CATEGORY"); fi
+}
+
+# QA-012: the SINGLE source of the inner suite `dotnet test` filter args. The real
+# suite phase AND the --print-inner-filter dry-run both call this, so the EXECUTION
+# test is bound to the REAL filter construction — a second literal copy would let a
+# real-line drift (e.g. Category!= -> TestCategory!=) pass unnoticed (the exact
+# parallel-path blind spot). Reads EXCLUDE_CATEGORY (set by the inner arg-parse).
+build_test_filter_args() {
+  TEST_FILTER_ARGS=()
+  if [ -n "$EXCLUDE_CATEGORY" ]; then TEST_FILTER_ARGS=(--filter "Category!=$EXCLUDE_CATEGORY"); fi
+}
+
+# QA-013: the SINGLE source of the WHOLE suite `dotnet test` argv. The real suite
+# phase runs exactly `run_cmd "${SUITE_CMD[@]}"` and the --print-inner-filter dry-run
+# prints exactly this SUITE_CMD, so the EXECUTION test is bound to the REAL CONSUMED
+# command — not just the filter args (dropping the filter splice on a separate real
+# line would otherwise leave the dry-run output identical: the terminal parallel-path
+# residual). RUN_DIR_REL/RUN_LOCAL_SETTINGS are guarded (unset during the dry-run,
+# which runs before provisioning — set -u safe).
+build_suite_cmd() {
+  build_test_filter_args
+  SUITE_CMD=(dotnet test DafnyCompatSpike.sln --no-build -noAutoResponse \
+             -p:SpikeRunRootRel="${RUN_DIR_REL:-}" -p:RunSettingsFilePath="${RUN_LOCAL_SETTINGS:-}" \
+             ${TEST_FILTER_ARGS[@]+"${TEST_FILTER_ARGS[@]}"})
+}
+
+# QA-008/QA-012/QA-013 class-fix dry-run: reconstruct the inner argv via the SAME
+# build_inner_args the real spawn uses, RE-PARSE it into EXCLUDE_CATEGORY exactly as
+# the inner controller's own arg loop does, then build the FULL suite command via the
+# SAME build_suite_cmd the real suite phase runs — and print it. Proves end-to-end
+# that --exclude-category reaches the REAL consumed `dotnet test` argv (incl. the
+# filter). NOTE (honest residual): a dry-run cannot EXECUTE dotnet, so it proves the
+# command is CONSTRUCTED correctly, not that the real phase's run_cmd actually spawns
+# it — that final execution link is netted fail-closed by the live general gate
+# (a dropped filter -> determinism-lane tests throw on 4-vCPU -> gate red). No build/run.
+if [ "$PRINT_INNER_FILTER" = 1 ]; then
+  build_inner_args
+  printf 'inner-argv:'
+  for _a in "${INNER_ARGS[@]}"; do printf ' %s' "$_a"; done
+  printf '\n'
+  # Re-parse the reconstructed inner argv exactly as the inner controller does,
+  # setting EXCLUDE_CATEGORY so the SHARED suite builder sees the forwarded value.
+  EXCLUDE_CATEGORY=""
+  set -- "${INNER_ARGS[@]}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --exclude-category) EXCLUDE_CATEGORY="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  build_suite_cmd
+  printf 'inner-suite-cmd:'
+  for _a in "${SUITE_CMD[@]}"; do printf ' %s' "$_a"; done
+  printf '\n'
+  exit 0
+fi
 
 # --- generic operator phases (test-visible surface; faults are constructed BY
 # --- tests in test-owned scratch roots, never by SUT flags) -------------------
@@ -786,8 +868,10 @@ if [ "$INNER" = 0 ]; then
   OUTER_DEADLINE=$((DEADLINE + OUTER_GRACE))
 
   PID_FILE="$RUN_ROOT/.inner-pid"
-  INNER_ARGS=(__inner --config "$CONFIG_FILE" --run-root "$RUN_ROOT" --out "$OUT_PATH" --run-id "$SPIKE_RUN_ID" --nonce "$SPIKE_NONCE")
-  if [ -n "$SOLVER_OVERRIDE" ]; then INNER_ARGS+=(--solver "$SOLVER_OVERRIDE"); fi
+  # QA-008: build the inner argv via the SINGLE shared reconstruction (also used by
+  # the --print-inner-filter dry-run), which forwards --exclude-category into the
+  # inner (the suite `dotnet test --filter` runs there).
+  build_inner_args
   if [ "$CANONICAL" = 1 ]; then export SPIKE_CANONICAL=1; else export SPIKE_CANONICAL=0; fi
   export SPIKE_PID_FILE="$PID_FILE"
   export SPIKE_DEADLINE="$DEADLINE"
@@ -1469,7 +1553,16 @@ if [ "${SPIKE_CANONICAL:-0}" = 1 ]; then
   # -> this run's run-context.json), independent of the shared out/current pointer
   # (which is not published until after aggregation — bug #3). Setting the property
   # explicitly also suppresses the Directory.Build.props out/current fallback.
-  run_with_env test run_cmd dotnet test DafnyCompatSpike.sln --no-build -noAutoResponse -p:SpikeRunRootRel="$RUN_DIR_REL" -p:RunSettingsFilePath="$RUN_LOCAL_SETTINGS"
+  # PR1/QA-001: the general 4-vCPU CI gate passes --exclude-category determinism-lane
+  # (the floor-throwing lane tests can't meet the >=8-core floor there); with NO
+  # --exclude-category arg (local/commands.test) EVERY category runs. QA-012/QA-013:
+  # the WHOLE suite argv comes from the SINGLE shared builder build_suite_cmd the
+  # --print-inner-filter dry-run also uses, so the execution test is bound to THIS
+  # consumed command (filter splice included) — no parallel copy on a separate line.
+  # (The dry-run proves CONSTRUCTION; this is the only place that EXECUTES it, netted
+  # fail-closed by the live general gate if the filter were ever dropped.)
+  build_suite_cmd
+  run_with_env test run_cmd "${SUITE_CMD[@]}"
   SUITE_EXIT=$?
   set -e
   phase_guard test "$SUITE_EXIT"

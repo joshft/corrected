@@ -177,19 +177,29 @@ manifest **plus** `attested_commit` ancestor-of-HEAD — never a stored field in
   set-equal to a committed role registry**, every role maps to a declared kind, each role appears in both runs
   exactly once, every per-role **projection** digest matches, **AND** (RS-005) every per-role **recorded
   projection-policy identity** (projection schema/version + digest) is **set-equal to the manifest-pinned
-  projection policy** for that role/kind via a **closed role/kind→projection-policy map**. A degenerate/no-op
+  projection policy** for that role/kind via a **closed role/kind→projection-policy map**, **AND
+  (QA-005-tightened, 2026-07-29) every per-role recorded projection-IMPLEMENTATION digest — computed by running
+  the real projection over a committed self-test vector (`projection_impl_digest =
+  SHA256(DeterministicProjection(vector))`, the pin committed alongside the map) — is set-equal to the
+  manifest-pinned `projection_impl_digest`**. A degenerate/no-op
   projection that records an **off-manifest** policy identity is rejected (`projection-policy-mismatch`,
   INV-012) — so `equal` cannot be minted from projection hashes produced by a projection other than the
-  manifest-pinned one. (Raw digests are expected to differ; equality is a projection property.) The schema-kind
+  manifest-pinned one; and because the impl-digest is the projection's actual output over the pinned vector, a
+  producer that runs a **different** projection (even one that stamps the pinned schema/version identity string)
+  yields a different impl-digest and is rejected on a **REAL** receipt, not only a hand-forged fixture. (Raw digests are expected to differ; equality is a projection property.) The schema-kind
   and role registries **and** the role/kind→projection-policy map are **committed artifacts** the set-equalities
   derive from — **never in-test literals** (RS-020 — a set-equality against a hand-written `Dictionary` in the
   test cannot detect a registry that silently shrank; AP-022). **Residual-trust note (RS-005, honest per
   PAT-004/AP-004):** verification reconstructs the Statement from the committed receipt (INV-010) and cannot
   re-derive the projection from the *volatile raw reports* (INV-006 does not commit them), so the recorded
   projection *facts* are trusted **because the producer runs the reviewed, EA-006-protected projection code** on a
-  protected-`main` push (INV-007/025); the policy cross-check + protecting `spikes/dafny-compat/**` (EA-006) close
-  the *off-manifest-policy* variant, and this trusted-producer residual is recorded in the ledger — not claimed as
-  cryptographic closure.
+  protected-`main` push (INV-007/025); the policy cross-check **plus the projection-impl-digest cross-check
+  (QA-005-tightened: the pin is a genuine product of the reviewed projection over a committed self-test vector, so
+  a changed projection is caught on a real receipt — no longer a fixture-only guard)** + protecting
+  `spikes/dafny-compat/**` (EA-006) close the *off-manifest-policy* variant. The **narrowed** residual is now only
+  a projection engineered to reproduce the pinned output on the fixed self-test vector while diverging on real
+  inputs (a targeted-evasion residual) — for which the trusted, EA-006-protected producer remains the backstop;
+  recorded in the ledger, not claimed as cryptographic closure.
 - **Violated when**: kinds and roles are conflated (e.g., "five schema-declared kinds"); equality is over raw
   bytes; a role/kind is missing/duplicated without → `not_evaluated`; either registry set-equality is skipped; the
   role/kind→projection-policy cross-check is skipped (a recorded off-manifest projection policy mints `equal`); or
