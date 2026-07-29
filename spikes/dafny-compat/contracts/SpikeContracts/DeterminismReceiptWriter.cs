@@ -38,36 +38,51 @@ public static class DeterminismReceiptWriter
         ["control-b"] = "control-b.json",
     };
 
+    /// <summary>The role keys of the report-artifact layout — exposed (internal, IB-003)
+    /// so a test binds this 6th copy of the role set to the committed role registry.</summary>
+    internal static IReadOnlyCollection<string> ReportRoleKeys => new List<string>(RoleReportFile.Keys);
+
     /// <summary>CLI entrypoint dispatched from the aggregator host on `--emit-determinism-receipt`.</summary>
     public static int RunCli(string[] args)
     {
         string r1 = "", r2 = "", schema = "", registry = "", kindRegistry = "", roleRegistry = "", policyMap = "", outPath = "";
         string osLabel = "", runnerImage = "", kernel = "", resolvedSdk = "", attestedCommit = "", subjectManifestDigest = "", policyVersion = "1";
 
-        for (var i = 0; i < args.Length; i++)
+        try
         {
-            string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"missing value for {args[i]}");
-            switch (args[i])
+            for (var i = 0; i < args.Length; i++)
             {
-                case "--r1": r1 = Next(); break;
-                case "--r2": r2 = Next(); break;
-                case "--schema": schema = Next(); break;
-                case "--registry": registry = Next(); break;
-                case "--kind-registry": kindRegistry = Next(); break;
-                case "--role-registry": roleRegistry = Next(); break;
-                case "--policy-map": policyMap = Next(); break;
-                case "--out": outPath = Next(); break;
-                case "--os-label": osLabel = Next(); break;
-                case "--runner-image": runnerImage = Next(); break;
-                case "--kernel": kernel = Next(); break;
-                case "--resolved-sdk": resolvedSdk = Next(); break;
-                case "--attested-commit": attestedCommit = Next(); break;
-                case "--subject-manifest-digest": subjectManifestDigest = Next(); break;
-                case "--policy-version": policyVersion = Next(); break;
-                default:
-                    Console.Error.WriteLine($"emit-determinism-receipt: unknown argument '{args[i]}'");
-                    return 2;
+                string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"missing value for {args[i]}");
+                switch (args[i])
+                {
+                    case "--r1": r1 = Next(); break;
+                    case "--r2": r2 = Next(); break;
+                    case "--schema": schema = Next(); break;
+                    case "--registry": registry = Next(); break;
+                    case "--kind-registry": kindRegistry = Next(); break;
+                    case "--role-registry": roleRegistry = Next(); break;
+                    case "--policy-map": policyMap = Next(); break;
+                    case "--out": outPath = Next(); break;
+                    case "--os-label": osLabel = Next(); break;
+                    case "--runner-image": runnerImage = Next(); break;
+                    case "--kernel": kernel = Next(); break;
+                    case "--resolved-sdk": resolvedSdk = Next(); break;
+                    case "--attested-commit": attestedCommit = Next(); break;
+                    case "--subject-manifest-digest": subjectManifestDigest = Next(); break;
+                    case "--policy-version": policyVersion = Next(); break;
+                    default:
+                        Console.Error.WriteLine($"emit-determinism-receipt: unknown argument '{args[i]}'");
+                        return 2;
+                }
             }
+        }
+        catch (ArgumentException ex)
+        {
+            // A missing value for a known flag (Next() threw) is a MALFORMED invocation,
+            // not an infrastructure fault — exit 2 (the documented arg-validation code in
+            // the README exit table), never an uncaught crash (~134). (EH-F2/IB)
+            Console.Error.WriteLine($"emit-determinism-receipt: {ex.Message}");
+            return 2;
         }
 
         foreach (var (name, value) in new[]
@@ -139,17 +154,26 @@ public static class DeterminismReceiptWriter
     public static int PrintProjectionImplDigestCli(string[] args)
     {
         string schema = "", vector = "";
-        for (var i = 0; i < args.Length; i++)
+        try
         {
-            string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"missing value for {args[i]}");
-            switch (args[i])
+            for (var i = 0; i < args.Length; i++)
             {
-                case "--schema": schema = Next(); break;
-                case "--vector": vector = Next(); break;
-                default:
-                    Console.Error.WriteLine($"print-projection-impl-digest: unknown argument '{args[i]}'");
-                    return 2;
+                string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"missing value for {args[i]}");
+                switch (args[i])
+                {
+                    case "--schema": schema = Next(); break;
+                    case "--vector": vector = Next(); break;
+                    default:
+                        Console.Error.WriteLine($"print-projection-impl-digest: unknown argument '{args[i]}'");
+                        return 2;
+                }
             }
+        }
+        catch (ArgumentException ex)
+        {
+            // A missing flag value is a malformed invocation — exit 2, never a crash. (EH-F2)
+            Console.Error.WriteLine($"print-projection-impl-digest: {ex.Message}");
+            return 2;
         }
         if (string.IsNullOrEmpty(schema) || string.IsNullOrEmpty(vector))
         {
@@ -365,12 +389,27 @@ public static class DeterminismReceiptWriter
     private static string Sha256Text(string text) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
-    private static void AtomicWrite(string path, string content)
+    internal static void AtomicWrite(string path, string content)
     {
         var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
         Directory.CreateDirectory(dir);
         var temp = path + ".tmp-" + Environment.ProcessId;
-        File.WriteAllText(temp, content);
-        File.Move(temp, path, overwrite: true);
+        try
+        {
+            File.WriteAllText(temp, content);
+            File.Move(temp, path, overwrite: true);
+        }
+        finally
+        {
+            // RLT-2: on a WriteAllText/Move fault the temp file would otherwise be
+            // orphaned beside the destination. On success the Move consumed it (no-op
+            // here); on failure this cleans it up. Best-effort — a delete fault must
+            // NOT mask the original write fault that is propagating out.
+            if (File.Exists(temp))
+            {
+                try { File.Delete(temp); }
+                catch { /* keep the original exception as the surfaced fault */ }
+            }
+        }
     }
 }

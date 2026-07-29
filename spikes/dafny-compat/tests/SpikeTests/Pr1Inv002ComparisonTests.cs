@@ -99,6 +99,22 @@ public class Pr1Inv002ComparisonTests
         Assert.Equal(5, map.Count); // total over every role, no extras
     }
 
+    // Tests INV-002 [unit] (IB-003 / DF-004): the report-artifact LAYOUT role set
+    // (DeterminismReceiptWriter.RoleReportFile — a 6th in-code copy of the role set) is
+    // SET-EQUAL to the committed role registry. Binding it here means a rename / add /
+    // drop of a layout role that diverges from the committed registry fails RED, closing
+    // the "unbound copy of the role set" gap.
+    [Fact]
+    public void ReportArtifactLayoutRoleKeys_SetEqualToCommittedRoleRegistry()
+    {
+        var registryRoles = DeterminismRegistries.Roles(RoleRegistryPath).ToHashSet();
+        var layoutRoles = DeterminismReceiptWriter.ReportRoleKeys.ToHashSet();
+        Assert.True(layoutRoles.SetEquals(registryRoles),
+            $"RoleReportFile layout keys [{string.Join(",", layoutRoles.OrderBy(s => s, StringComparer.Ordinal))}] "
+            + $"diverge from the committed role registry [{string.Join(",", registryRoles.OrderBy(s => s, StringComparer.Ordinal))}] "
+            + "(IB-003: a 6th unbound copy of the role set)");
+    }
+
     // Tests INV-002 [unit] (RS-005): the closed role/kind->projection-policy map
     // pins a policy for every role at its declared kind; the pinned digest is the
     // committed evidence-schema identity.

@@ -60,6 +60,10 @@ public class Pr1RunRootBoundaryTests
                 "a refused out-of-tree lane must emit NO receipt");
             // and BEFORE any build — no stray in-tree tree mirroring the out-of-tree path
             AssertNoStrayInTreeBuild(oot);
+            // RLT-1/AUDIT-ARCH-1: the refused root must not orphan the empty dir it
+            // created to canonicalize (the guard `rm -d`s it before exiting).
+            Assert.False(Directory.Exists(oot),
+                $"a refused out-of-tree lane run-root ({oot}) must not orphan an empty dir");
         }
         finally { TryDelete(oot); }
     }
@@ -79,6 +83,10 @@ public class Pr1RunRootBoundaryTests
                 $"run-spike accepted an out-of-tree --run-root ({oot}) — it must refuse fail-closed (BLOCKING-1). stderr: {run.StdErr}");
             Assert.Contains("within the spike tree", run.StdErr);
             AssertNoStrayInTreeBuild(oot);
+            // RLT-1/AUDIT-ARCH-1: the refused root must not orphan the empty dir it
+            // created to canonicalize (the guard `rm -d`s it before exiting).
+            Assert.False(Directory.Exists(oot),
+                $"a refused out-of-tree run-root ({oot}) must not orphan an empty dir");
         }
         finally { TryDelete(oot); }
     }

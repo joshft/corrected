@@ -50,6 +50,30 @@ export PATH
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SPIKE_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
+# SINGLE-SOURCED in-tree run-root guard (RLT-1/AUDIT-ARCH-1) — mirrors
+# run-spike.sh's ensure_in_tree_run_root. Creates the root (so `cd && pwd` can
+# canonicalize it), canonicalizes it, then refuses an out-of-tree root fail-closed,
+# removing the just-created EMPTY dir first so a refusal leaves NO orphan. `rm -d`
+# removes ONLY an empty dir (allowlist-safe — never `rm -rf` a caller-supplied path).
+# Mutates the global RUN_ROOT.
+#
+# Why (BLOCKING-1, cverify 2026-07-29): an out-of-tree root makes the nested
+# run-spike.sh pass an ABSOLUTE SpikeRunRootRel to MSBuild — build outputs land
+# in-tree while the DD-008 completeness check resolves the true absolute root
+# (spurious INCOMPLETE) — and leaks an absolute host path into the recorded build
+# argv (PRH-005). Refuse it HERE, before any SDK/build work, so the CI lane
+# (INV-024/RS-028) can never mis-drive it.
+ensure_in_tree_run_root() {
+  run_cmd mkdir -p -- "$RUN_ROOT"
+  RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
+  case "$RUN_ROOT" in
+    "$SPIKE_ROOT"/*) return 0 ;;
+  esac
+  run_cmd rm -d -- "$RUN_ROOT" 2>/dev/null || true
+  echo "determinism-lane: refusing an out-of-tree --run-root '$RUN_ROOT' — it must be within the spike tree ($SPIKE_ROOT) so the nested SpikeRunRootRel stays SPIKE-relative (DD-008 build/output divergence, PRH-005 argv leak). Use an in-tree root, e.g. --run-root out/determinism-lane." >&2
+  exit 20
+}
+
 RUN_ROOT=""
 DOTNET_ROOT_ARG=""
 while [ $# -gt 0 ]; do
@@ -64,20 +88,7 @@ if [ -z "$RUN_ROOT" ]; then
   echo "determinism-lane: --run-root is required (the per-run subroots r1/r2 and the receipt live under it)" >&2
   exit 20
 fi
-run_cmd mkdir -p -- "$RUN_ROOT"
-RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
-
-# BLOCKING-1 (cverify 2026-07-29): the run root MUST live within the spike tree.
-# An out-of-tree root makes the nested run-spike.sh pass an ABSOLUTE SpikeRunRootRel
-# to MSBuild — build outputs land in-tree while the DD-008 completeness check
-# resolves the true absolute root (spurious INCOMPLETE) — and leaks an absolute host
-# path into the recorded build argv (PRH-005). Refuse it fail-closed HERE, before any
-# SDK/build work, so the CI lane (INV-024/RS-028) can never mis-drive it.
-case "$RUN_ROOT" in
-  "$SPIKE_ROOT"/*) : ;;
-  *) echo "determinism-lane: refusing an out-of-tree --run-root '$RUN_ROOT' — it must be within the spike tree ($SPIKE_ROOT) so the nested SpikeRunRootRel stays SPIKE-relative (DD-008 build/output divergence, PRH-005 argv leak). Use an in-tree root, e.g. --run-root out/determinism-lane." >&2
-     exit 20 ;;
-esac
+ensure_in_tree_run_root
 
 # --- .NET SDK resolution (mirrors run-spike.sh): --dotnet-root / DOTNET_ROOT,
 # --- then the HOME-local install, then the pointer a controller run cached.

@@ -20,8 +20,8 @@
       "resolved_at": "2026-07-24",
       "source_file": ".correctless/specs/dafny-compat-spike.md",
       "finding_id": "DD-007",
-      "summary": "Deferred obligation: promote ADR-0001 from provisional to accepted (or supersede with counter-evidence) \u2014 inherited by the final Phase 0.0 feature's spec.",
-      "resolution": "ADR-0001 promoted provisional\u2192accepted (P1 of the phase-0.1-worker readiness gate): adr_lint block set to in-process-selected / Route A / COMPATIBLE, anchored to the canonical committed sample; INV-013 AdrLinter returns zero findings for the positive selection (test Inv013AdjudicationTests.AdrLinter_CommittedAdr_WithCommittedSampleRecords_ZeroFindings). Required correcting one linter rule (Components.cs AdrLinter.Lint): a COMPATIBLE verdict no longer requires an adjudication_record_id \u2014 adjudication records are a failure-path artifact (AdjudicationStateMachine), so all-pass runs and the frozen canonical sample legitimately carry none (the spike QA-006 catch-22); the committed-evidence PATH remains the anchor and rejection claims still require a record. DD-007 component-table propagation applied in .correctless/ARCHITECTURE.md (core-worker row: drop DafnyPipeline, add DafnyDriver + DafnyLanguageServer for the selected Route A); DESIGN.md 'Dafny publishes'/spike statements are not production-closure claims and are unchanged. RESIDUAL (Phase 0.1 scope, NOT DF-002): INV-003 enforcement-(b) mechanical component-table consistency gate + the readiness-block satisfied:true flip are homed with INV-002 in the not-yet-built build-gate carrier (RS-002 ordering)."
+      "summary": "Deferred obligation: promote ADR-0001 from provisional to accepted (or supersede with counter-evidence) — inherited by the final Phase 0.0 feature's spec.",
+      "resolution": "ADR-0001 promoted provisional→accepted (P1 of the phase-0.1-worker readiness gate): adr_lint block set to in-process-selected / Route A / COMPATIBLE, anchored to the canonical committed sample; INV-013 AdrLinter returns zero findings for the positive selection (test Inv013AdjudicationTests.AdrLinter_CommittedAdr_WithCommittedSampleRecords_ZeroFindings). Required correcting one linter rule (Components.cs AdrLinter.Lint): a COMPATIBLE verdict no longer requires an adjudication_record_id — adjudication records are a failure-path artifact (AdjudicationStateMachine), so all-pass runs and the frozen canonical sample legitimately carry none (the spike QA-006 catch-22); the committed-evidence PATH remains the anchor and rejection claims still require a record. DD-007 component-table propagation applied in .correctless/ARCHITECTURE.md (core-worker row: drop DafnyPipeline, add DafnyDriver + DafnyLanguageServer for the selected Route A); DESIGN.md 'Dafny publishes'/spike statements are not production-closure claims and are unchanged. RESIDUAL (Phase 0.1 scope, NOT DF-002): INV-003 enforcement-(b) mechanical component-table consistency gate + the readiness-block satisfied:true flip are homed with INV-002 in the not-yet-built build-gate carrier (RS-002 ordering)."
     },
     {
       "id": "DF-003",
@@ -43,7 +43,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-005",
@@ -54,7 +54,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-006",
@@ -65,7 +65,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-007",
@@ -76,7 +76,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-008",
@@ -87,7 +87,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-009",
@@ -98,7 +98,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-010",
@@ -109,7 +109,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-011",
@@ -120,7 +120,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-012",
@@ -131,7 +131,7 @@
       "severity": "LOW",
       "status": "open",
       "deferred_at": "2026-07-22",
-      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+      "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent — no verdict-integrity impact)"
     },
     {
       "id": "DF-013",
@@ -319,6 +319,17 @@
       "status": "open",
       "deferred_at": "2026-07-29",
       "disposition": "mini-audit round 1 (tier-4, ci-latent); net holds under current runner sizing. (Pure-INFO items MA-FC-002 and MA-ID-005 intentionally NOT logged -- both explicitly 'not a hole / noted for completeness' in the mini-audit artifact.)"
+    },
+    {
+      "id": "DF-030",
+      "finding_id": "CONC-1",
+      "source_file": ".correctless/artifacts/findings/audit-qa-2026-07-29-round-1.json",
+      "title": "acquire_out_lock stale-lock reclaim has a mkdir-TOCTOU window (pre-existing, out of PR1 scope)",
+      "detail": "run-spike.sh acquire_out_lock's stale-lock reclaim path has a mkdir-based TOCTOU window between judging a lock dir stale and reclaiming it. Fail-closed and PRE-EXISTING (not introduced by PR1). Surfaced by /caudit qa round 1 (concurrency lens). Deferred per user disposition 'Fix A-G, defer H'. Fix: make the stale-reclaim atomic (rename-into-place, or a single mkdir with an owner token verified after acquisition).",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "caudit qa round 1 (concurrency lens); pre-existing shell lock race, fail-closed; out of PR1 scope."
     }
   ]
 }

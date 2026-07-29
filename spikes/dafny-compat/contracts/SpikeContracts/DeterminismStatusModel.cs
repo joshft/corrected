@@ -179,7 +179,11 @@ internal static class WireEnum
                 sb.Append(part.Substring(1));
             }
         }
-        if (!Enum.TryParse<T>(sb.ToString(), ignoreCase: true, out var value))
+        // Enum.IsDefined guards the NUMERIC-token bypass (IB-001): Enum.TryParse
+        // accepts a bare numeric string ("3", "999", "-1") as an UNDEFINED underlying
+        // value, so TryParse alone would smuggle an out-of-domain enum past the closed
+        // check. Require the parsed value to be a DEFINED member.
+        if (!Enum.TryParse<T>(sb.ToString(), ignoreCase: true, out var value) || !Enum.IsDefined(value))
         {
             throw new InvalidOperationException(
                 $"unrecognized {typeof(T).Name} wire token '{wire}' — not a member of the closed domain (INV-001)");

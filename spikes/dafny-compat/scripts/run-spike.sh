@@ -137,11 +137,20 @@ CACHE_DIR="$SPIKE_ROOT/out/cache"
 # run root — a silent divergence that fails the run INCOMPLETE — and would leak an
 # absolute host path into the recorded restore/build argv (PRH-005). Refuse it
 # fail-closed, before any provision/restore/build work.
-require_in_tree_run_root() { # absolute-canonical-run-root
-  case "$1" in
+ensure_in_tree_run_root() { # -> canonical in-tree RUN_ROOT (mutated in place)
+  # SINGLE-SOURCED guard (RLT-1/AUDIT-ARCH-1) owning mkdir+canonicalize+teardown for
+  # BOTH the outer-watchdog and inner-controller call sites. The mkdir is required so
+  # `cd && pwd` can canonicalize a relative/symlinked root; on refusal we `rm -d` the
+  # just-created EMPTY dir first so a refused out-of-tree root leaves NO orphan. `rm -d`
+  # removes ONLY an empty dir (allowlist-safe — never `rm -rf` a caller-supplied path).
+  # Mutates the global RUN_ROOT.
+  run_cmd mkdir -p -- "$RUN_ROOT"
+  RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
+  case "$RUN_ROOT" in
     "$SPIKE_ROOT"/*) return 0 ;;
   esac
-  echo "run-spike: refusing an out-of-tree --run-root '$1' — it must be within the spike tree ($SPIKE_ROOT) so SpikeRunRootRel stays SPIKE-relative (DD-008 build/output divergence, PRH-005 argv leak). Use an in-tree root, e.g. --run-root out/<name>." >&2
+  run_cmd rm -d -- "$RUN_ROOT" 2>/dev/null || true
+  echo "run-spike: refusing an out-of-tree --run-root '$RUN_ROOT' — it must be within the spike tree ($SPIKE_ROOT) so SpikeRunRootRel stays SPIKE-relative (DD-008 build/output divergence, PRH-005 argv leak). Use an in-tree root, e.g. --run-root out/<name>." >&2
   exit 20
 }
 
@@ -836,9 +845,7 @@ if [ "$INNER" = 0 ]; then
   if [ -z "$RUN_ROOT" ]; then
     RUN_ROOT="$SPIKE_ROOT/out/$SPIKE_RUN_ID"
   fi
-  run_cmd mkdir -p -- "$RUN_ROOT"
-  RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
-  require_in_tree_run_root "$RUN_ROOT"
+  ensure_in_tree_run_root
   RUN_DIR_REL="${RUN_ROOT#"$SPIKE_ROOT"/}"
   if [ -z "$OUT_PATH" ]; then
     OUT_PATH="$RUN_ROOT/reports/run-report.json"
@@ -1011,7 +1018,7 @@ phase_guard() { # phase-name exit-code
     fail_run WallClockExpiry "$1 phase exceeded the ${WALL_BOUND}s wall-clock bound on the /proc/uptime monotonic deadline; per-phase supervisor delivered ${SPIKE_PHASE_SIGNALS:-SIGKILL} (QA-007/RS-015/MA-XC-5)"
   fi
 }
-require_in_tree_run_root "$RUN_ROOT"
+ensure_in_tree_run_root
 RUN_DIR_REL="${RUN_ROOT#"$SPIKE_ROOT"/}"
 run_cmd mkdir -p -- "$RUN_ROOT/reports" "$RUN_ROOT/receipts" "$RUN_ROOT/sentinel" "$RUN_ROOT/decoys" "$RUN_ROOT/tmp" "$RUN_ROOT/dotnet-cli-home" "$RUN_ROOT/packages"
 

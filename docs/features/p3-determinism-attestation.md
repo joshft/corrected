@@ -77,9 +77,11 @@ The lane run root **must live within the spike tree** so `SpikeRunRootRel` stays
 (`Directory.Build.props`). An out-of-tree root (e.g. `$RUNNER_TEMP`) makes MSBuild write build
 outputs in-tree while the DD-008 completeness check resolves the true absolute root — a silent
 INCOMPLETE — and would leak an absolute host path into the recorded build argv (PRH-005). Both
-`run-spike.sh` (`require_in_tree_run_root`) and `determinism-lane.sh` now **refuse an out-of-tree
-`--run-root` fail-closed** before any build; `Pr1RunRootBoundaryTests` exercises the real scripts
-with an out-of-tree root in the general from-clean gate.
+`run-spike.sh` and `determinism-lane.sh` each carry a **single-sourced `ensure_in_tree_run_root`
+guard** that creates and canonicalizes the root, **refuses an out-of-tree `--run-root` fail-closed**
+before any build, and `rm -d`s the just-created empty dir on refusal so nothing is orphaned
+(RLT-1/AUDIT-ARCH-1). `Pr1RunRootBoundaryTests` exercises the real scripts with an out-of-tree
+root in the general from-clean gate, asserting both the refusal and the no-orphan cleanup.
 
 ## How to run
 

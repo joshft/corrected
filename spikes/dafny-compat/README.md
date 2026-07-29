@@ -137,7 +137,7 @@ determinism runs and emits `<run-root>/receipts/determinism-receipt.json`;
 | 0 | emitter | both nested runs completed and the declared deterministic projections AGREED across the two runs (comparison_status=equal) | yes |
 | 1 | emitter | the projections DIFFERED in this observation (comparison_status=different) — the disagreement HARD-FAILS the lane, mints nothing, and is NEVER retried into green (INV-003/PRH-005) — or a structural corpus fault classified infrastructure_invalid — either way mints nothing | yes |
 | 1 | nested (`set -e`) | a nested `run-spike.sh` exited 1 (a route child failed, aggregation detected a failure, or the suite failed) and `set -e` aborted the lane BEFORE the emitter ran | no |
-| 3 | emitter | the emitter refused/failed to write — the PRH-003 privacy scan found a local-identity leak in a Corrected-authored field (fail-closed, AFTER comparison), an AtomicWrite/projection fault threw (AFTER comparison), or the committed schema failed `ValidateSchemaFile` (BEFORE comparison) — an infrastructure fault is NEVER recorded as comparison_status=different (INV-001) | no |
+| 3 | emitter | the emitter refused/failed to write — the PRH-003 privacy scan found a local-identity leak in a Corrected-authored field (fail-closed, AFTER comparison), the receipt AtomicWrite threw (AFTER comparison), a projection fault threw (BEFORE the comparison verdict — the projection is its input), or the committed schema failed `ValidateSchemaFile` (BEFORE comparison) — an infrastructure fault is NEVER recorded as comparison_status=different (INV-001) | no |
 | 3 | shell (before comparison) | no pinned .NET SDK resolved (checked `--dotnet-root`, `DOTNET_ROOT`, `HOME/.dotnet`, `out/cache/dotnet-root`), or the nested runs did not build the aggregator host | no |
 | 20 | shell (pre-run) | usage/pre-run error (unknown argument, missing `--run-root`, unhardened invocation, `run_cmd` DENY) | no |
 | 20 | nested (`set -e`) | a nested `run-spike.sh` exited 20 (INCOMPLETE — a per-run prerequisite/wall-clock/operator-cancel fault, or a pre-run failure) and `set -e` aborted the lane BEFORE the emitter ran | no |
@@ -163,8 +163,9 @@ and propagated verbatim: 0 on a successfully emitted `equal` receipt; 1 on the
 observation-scoped signal — strong evidence for *this* observation, not a
 universal-nondeterminism claim, never retried — PRH-005) or a structural
 infrastructure_invalid corpus (both WRITE a receipt); 3 when the emitter
-refuses/fails to write — the PRH-003 privacy scan flagged a local-identity leak or
-an AtomicWrite/projection fault threw (both AFTER the comparison), or the
+refuses/fails to write — the PRH-003 privacy scan flagged a local-identity leak,
+the receipt AtomicWrite threw (AFTER the comparison), a projection fault threw
+(BEFORE the comparison verdict — the projection is the comparison's input), or the
 committed schema failed `ValidateSchemaFile` (BEFORE the comparison) (an
 infrastructure fault is NEVER recorded as `comparison_status=different` — INV-001). A malformed
 *internal* emitter invocation propagates the emitter's own argument-validation

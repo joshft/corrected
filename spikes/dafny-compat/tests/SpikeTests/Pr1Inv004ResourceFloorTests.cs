@@ -17,6 +17,8 @@
 // committed campaign rows are an empty placeholder until GREEN's measurement
 // campaign fills them, and the routing through Load asserts Rows.Count>0 so an
 // empty campaign can never vacuously pass (AP-018).
+using System.Security.Cryptography;
+using System.Text;
 using Corrected.Spike.Contracts;
 using Xunit;
 
@@ -37,6 +39,35 @@ public class Pr1Inv004ResourceFloorTests
         var plan = ResourceFloorCampaign.Load(FloorPath, RowsPath);
         Assert.NotEmpty(plan.Rows);
         Assert.All(plan.Rows, row => Assert.Equal(1, row.RunAttempt));
+    }
+
+    // Tests INV-004 [unit] (IB-002 / PAT-004): the committed plan_digest is RECOMPUTABLE
+    // from the committed plan parameters — not merely loaded and trusted. sha256 of the
+    // canonical preimage `core_floor=…;plan_commit=…;n=…;rule=…` must equal the committed
+    // plan_digest, the committed row COUNT must equal the declared campaign size n, and
+    // every retained row must carry that same plan_digest. A parameter edited without
+    // recomputing the digest (or a row count that drifts from n) fails RED.
+    [Fact]
+    public void PlanDigest_RecomputesFromCommittedParameters_AndBindsEveryRow()
+    {
+        using var floor = SpikePaths.Json(FloorPath);
+        var coreFloor = floor.RootElement.GetProperty("core_floor").GetInt32();
+        var planCommit = floor.RootElement.GetProperty("plan_commit").GetString()!;
+        var n = floor.RootElement.GetProperty("n").GetInt32();
+        var committedDigest = floor.RootElement.GetProperty("plan_digest").GetString()!;
+
+        // The canonical campaign-protocol rule token — the `rule=` field of the
+        // plan_digest preimage documented in resource-floor.json's _comment (a shortened
+        // protocol constant, NOT the prose eligible_run_sequence_rule field).
+        const string RuleToken = "first-N-attempt-1-runs-after-plan-commit-on-pinned-serial-lane";
+        var preimage = $"core_floor={coreFloor};plan_commit={planCommit};n={n};rule={RuleToken}";
+        var recomputed = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(preimage))).ToLowerInvariant();
+        Assert.Equal(committedDigest, recomputed);
+
+        var plan = ResourceFloorCampaign.Load(FloorPath, RowsPath);
+        Assert.Equal(n, plan.Rows.Count);
+        Assert.All(plan.Rows, row => Assert.Equal(committedDigest, row.PlanDigest));
     }
 
     // Tests INV-004 [unit]: the plan cannot be chosen after seeing results — the

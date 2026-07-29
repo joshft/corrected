@@ -182,6 +182,23 @@ public class Pr1Inv001StatusModelTests
         Assert.Equal(comp, Enum.GetValues<ComparisonStatus>().Select(x => Wire(x)).ToHashSet());
     }
 
+    // Tests INV-001 [unit] (IB-001): WireEnum.Parse is CLOSED over the enum's DEFINED
+    // members — a NUMERIC wire token ("3", "999", "-1") that Enum.TryParse would accept
+    // as an UNDEFINED underlying value is REJECTED (the Enum.IsDefined guard), so a
+    // forged numeric status token can never smuggle an out-of-domain enum value in. The
+    // real snake_case tokens still round-trip (the guard does not over-reject).
+    [Fact]
+    public void WireEnumParse_RejectsUndefinedNumericTokens_ButRoundTripsRealTokens()
+    {
+        foreach (var token in new[] { "3", "999", "-1" })
+        {
+            Assert.Throws<InvalidOperationException>(() => WireEnum.Parse<ExecutionStatus>(token));
+            Assert.Throws<InvalidOperationException>(() => WireEnum.Parse<ComparisonStatus>(token));
+        }
+        Assert.Equal(ExecutionStatus.ResourceFloorSkipped, WireEnum.Parse<ExecutionStatus>("resource_floor_skipped"));
+        Assert.Equal(ComparisonStatus.NotEvaluated, WireEnum.Parse<ComparisonStatus>("not_evaluated"));
+    }
+
     // Tests INV-001 [unit]: the safety-direction invariant — no infrastructure
     // fault may be recorded as comparison_status=different. The committed table
     // never legalizes a `different` comparison outside `completed`, and the
