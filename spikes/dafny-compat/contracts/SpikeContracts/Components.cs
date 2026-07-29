@@ -2,6 +2,7 @@
 // Every acceptance-relevant error path fails closed (AP-001): no fallback to
 // the optimistic verdict, no pass-through of unenforced input.
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -1234,13 +1235,16 @@ public static class ManagedLauncher
             psi.Environment[kv.Key] = kv.Value;
         }
 
-        var stopwatch = Stopwatch.StartNew();
-        using var process = new Process { StartInfo = psi };
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) { lock (stdout) { stdout.AppendLine(e.Data); } } };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { lock (stderr) { stderr.AppendLine(e.Data); } } };
-        process.Start();
+        var stopwatch = Stopwatch.StartNew();
+        // ETXTBSY-tolerant start: under concurrent fork+exec a writable descriptor
+        // on the target executable can be inherited by a sibling fork, so the
+        // kernel transiently refuses the exec ("Text file busy"). Retry past that
+        // window rather than surface a spurious start failure (green-from-clean:
+        // an un-retried race reds the suite non-deterministically). The window is
+        // normally sub-millisecond; a persistent ETXTBSY still surfaces.
+        using var process = StartWithEtxtbsyRetry(psi, stdout, stderr);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
@@ -1309,6 +1313,46 @@ public static class ManagedLauncher
         lock (stdout) { outText = stdout.ToString(); }
         lock (stderr) { errText = stderr.ToString(); }
         return new LaunchResult(exitCode, signal, outText, errText, stopwatch.Elapsed.TotalMilliseconds);
+    }
+
+    // ETXTBSY (errno 26 on Linux/Unix): exec of a file that currently has a
+    // writable descriptor open somewhere. Transient under concurrent fork+exec.
+    private const int EtxtbsyErrno = 26;
+
+    /// <summary>
+    /// Starts the child, retrying only on a transient ETXTBSY (bounded, ~3s
+    /// ceiling; the race normally clears in well under a millisecond). A fresh
+    /// Process is built per attempt because a failed Start() leaves no reusable
+    /// handle. Any non-ETXTBSY failure — or a persistent ETXTBSY past the budget —
+    /// propagates unchanged, so a genuine start fault is never masked.
+    /// </summary>
+    private static Process StartWithEtxtbsyRetry(ProcessStartInfo psi, StringBuilder stdout, StringBuilder stderr)
+    {
+        const int maxAttempts = 60; // ×50ms ≈ 3s ceiling
+        for (var attempt = 1; ; attempt++)
+        {
+            var process = new Process { StartInfo = psi };
+            process.OutputDataReceived += (_, e) => { if (e.Data is not null) { lock (stdout) { stdout.AppendLine(e.Data); } } };
+            process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { lock (stderr) { stderr.AppendLine(e.Data); } } };
+            try
+            {
+                process.Start();
+                return process;
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == EtxtbsyErrno && attempt < maxAttempts)
+            {
+                process.Dispose();
+                Thread.Sleep(50);
+            }
+            catch
+            {
+                // Persistent ETXTBSY past the budget, a non-ETXTBSY start fault,
+                // or anything else: dispose this attempt's handle and propagate
+                // unchanged — a genuine failure is never masked (fails closed).
+                process.Dispose();
+                throw;
+            }
+        }
     }
 }
 

@@ -801,3 +801,63 @@ public class MiniAudit1HarnessTests
         Assert.Contains("MA-VI-3", p03.GetProperty("detail").GetString());
     }
 }
+
+// ---------------------------------------------- launcher ETXTBSY robustness
+
+// Regression for the concurrent fork+exec ETXTBSY race surfaced as a full-suite
+// flake in ConcurrentStubInvocations_BothEntriesSurvive (2026-07-29): under
+// xUnit's parallel test execution a writable fd on a freshly-written executable
+// can be inherited by another thread's fork, and the kernel then refuses the
+// exec with ETXTBSY ("Text file busy"). ManagedLauncher.Launch must treat that
+// as transient and retry rather than surface a spurious start failure — a
+// green-from-clean invariant (a flaky launch reds the suite non-deterministically).
+public class ManagedLauncherEtxtbsyTests
+{
+    private static readonly IReadOnlyDictionary<string, string> StubEnv =
+        new Dictionary<string, string> { ["PATH"] = "/usr/bin:/bin" };
+
+    // Tests the launcher's ETXTBSY retry deterministically: a file held open for
+    // WRITING cannot be exec'd (i_writecount > 0 ⇒ ETXTBSY) until the writer
+    // closes. We release the write handle ~300 ms into the launch. A launcher
+    // that retries past the transient window starts the child and observes exit 0;
+    // a single-shot process.Start() throws Win32Exception(ETXTBSY) immediately.
+    [Fact]
+    public void Launch_RetriesPastTransientEtxtbsy()
+    {
+        var scratch = SpikePaths.TestScratch("launcher-etxtbsy");
+        Directory.CreateDirectory(scratch);
+        var stub = Path.Combine(scratch, "etxtbsy-stub");
+        File.WriteAllText(stub, "#!/bin/sh\nexit 0\n");
+        File.SetUnixFileMode(stub,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+        // Hold a WRITABLE descriptor open: exec of `stub` returns ETXTBSY until
+        // this handle is closed. Release it ~300 ms in — inside the launcher's
+        // retry budget, far past a single-shot Start()'s first attempt (~0 ms).
+        const int holdMs = 300;
+        var writer = new FileStream(stub, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
+        var releaser = Task.Run(() => { Thread.Sleep(holdMs); writer.Dispose(); });
+
+        try
+        {
+            var result = ManagedLauncher.Launch(
+                new LaunchRequest(stub, Array.Empty<string>(), scratch, StubEnv, 30));
+
+            Assert.Equal(0, result.ExitCode);   // the child actually started
+            // Non-vacuity floor: the only way to reach exit 0 is to retry PAST the
+            // held window, so the launch cannot have returned before the release.
+            // A reverted single-shot Start() throws ETXTBSY (never reaches here);
+            // a filesystem that never enforced ETXTBSY would return in ~0 ms and
+            // trip this floor rather than pass green without exercising the retry.
+            Assert.True(result.DurationMs >= holdMs - 100,
+                $"launch returned in {result.DurationMs:F0} ms — the retry did not span the {holdMs} ms ETXTBSY window");
+        }
+        finally
+        {
+            releaser.Wait();
+            writer.Dispose();                   // idempotent — never leak the handle
+        }
+    }
+}
