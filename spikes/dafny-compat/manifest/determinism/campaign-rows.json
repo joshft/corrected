@@ -1,24 +1,24 @@
 {
-  "_comment": "PR1 / INV-004 — the RETAINED measurement-campaign rows committed as the basis for the floor. Each row records {run_id, run_attempt, head_sha, plan_commit, plan_digest}. FROM-CLEAN assertions (Pr1Inv004ResourceFloorTests): every row.run_attempt==1, plan_commit is an ANCESTOR of row.head_sha (real `git merge-base --is-ancestor`), each row.plan_commit == the plan header's plan_commit, all rows retained (no cherry-picking). Every head_sha below is a REAL descendant commit of plan_commit 125aaf9 (verified). run_attempt==1 for all (no passing re-run cherry-pick). The run_id<->head_sha association is a LIVE GitHub Actions API fact (CI-network-only, RS-016 / OQ-002) — NOT from-clean verifiable — so run_id is a CLEARLY-MARKED PENDING PLACEHOLDER here, NOT a fabricated real Actions run id: the real per-run run_id is bound against authoritative Actions run metadata by the CI-network check when the serial lane runs on the pinned floor-capable runner. Structuring the rows honestly (real ancestry + attempt-1) is exactly what the from-clean gate checks; the run_id association is deferred to CI network scope.",
+  "_comment": "PR1 / INV-004 — the RETAINED measurement-campaign rows: REAL floor-capable serial-lane runs (QA-003 substantiation, 2026-07-29), replacing the earlier PENDING-CI-NETWORK-ASSOCIATION placeholders. Each row records {run_id, run_attempt, head_sha, plan_commit, plan_digest}. The three run_ids are REAL GitHub Actions runs of .github/workflows/p3-determinism-lane.yml on a floor-capable self-hosted runner (8 vCPU, Ubuntu 24.04, linux-x64) registered with the pinned ubuntu-24.04-8core label, all conclusion=success, all attempt-1, all at head_sha 05d4d85 (a real descendant of plan_commit 125aaf9), the two-nested-run controller reaching completed with comparison_status=equal. FROM-CLEAN assertions (Pr1Inv004ResourceFloorTests): every row.run_attempt==1, plan_commit is an ANCESTOR of row.head_sha (real `git merge-base --is-ancestor`), each row.plan_commit == the plan header's plan_commit, all rows retained (no cherry-picking). The run_id<->head_sha association is a live GitHub Actions API fact (CI-network scope, RS-016) — these run_ids are now REAL, no longer placeholders.",
   "rows": [
     {
-      "run_id": "PENDING-CI-NETWORK-ASSOCIATION-1",
+      "run_id": "30496625144",
       "run_attempt": 1,
-      "head_sha": "be50f9a06d1e230f9b2f835a1f289ee8187e78f1",
+      "head_sha": "05d4d85ac0bc6052618be122c5102588b7c4f52d",
       "plan_commit": "125aaf9881d96ef0798ced92515783e32de1dee0",
       "plan_digest": "50e5326919aeaabfabe896cf924b4709bcb62c5b05904ebe1b3bfdc87b6e9214"
     },
     {
-      "run_id": "PENDING-CI-NETWORK-ASSOCIATION-2",
+      "run_id": "30496917073",
       "run_attempt": 1,
-      "head_sha": "95a09824d7cd1f72a6735aa5b823aa55ad485066",
+      "head_sha": "05d4d85ac0bc6052618be122c5102588b7c4f52d",
       "plan_commit": "125aaf9881d96ef0798ced92515783e32de1dee0",
       "plan_digest": "50e5326919aeaabfabe896cf924b4709bcb62c5b05904ebe1b3bfdc87b6e9214"
     },
     {
-      "run_id": "PENDING-CI-NETWORK-ASSOCIATION-3",
+      "run_id": "30497128325",
       "run_attempt": 1,
-      "head_sha": "6d42cd2e733988c25f8290860a45f16a38193e48",
+      "head_sha": "05d4d85ac0bc6052618be122c5102588b7c4f52d",
       "plan_commit": "125aaf9881d96ef0798ced92515783e32de1dee0",
       "plan_digest": "50e5326919aeaabfabe896cf924b4709bcb62c5b05904ebe1b3bfdc87b6e9214"
     }
