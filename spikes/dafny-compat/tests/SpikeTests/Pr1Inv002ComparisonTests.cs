@@ -105,12 +105,17 @@ public class Pr1Inv002ComparisonTests
     [Fact]
     public void ProjectionPolicyMap_IsClosedOverEveryRoleKind()
     {
+        // MA-UC-101: the pinned digest is bound to the LIVE evidence schema (recomputed
+        // from schema/evidence-schema.json), NOT an in-test literal copy. A schema bump
+        // that does not also update projection-policy-map.json turns this RED — the copy
+        // in the policy map must track the schema it identifies.
+        var liveSchemaDigest = SpikePaths.Sha256File(SpikePaths.P("schema", "evidence-schema.json"));
         foreach (var (role, kind) in RolesKinds)
         {
             var policy = DeterminismRegistries.PinnedPolicy(PolicyMapPath, role, kind);
             Assert.Equal("corrected.determinism.projection", policy.SchemaId);
             Assert.Equal(2, policy.Version);
-            Assert.Equal(PinnedDigest, policy.Digest);
+            Assert.Equal(liveSchemaDigest, policy.Digest);
         }
     }
 

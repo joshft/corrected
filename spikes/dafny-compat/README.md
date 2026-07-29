@@ -132,25 +132,46 @@ determinism-attestation, INV-005/INV-003/PRH-005 — drives the two nested
 determinism runs and emits `<run-root>/receipts/determinism-receipt.json`;
 **PR1 signs nothing** regardless of exit):
 
-| exit | meaning | receipt emitted? |
-|------|---------|------------------|
-| 0 | both nested runs completed and the declared deterministic projections AGREED across the two runs (comparison_status=equal) | yes |
-| 1 | a non-attesting terminal outcome propagated from the receipt emitter: the projections DIFFERED in this observation (comparison_status=different) — the disagreement HARD-FAILS the lane, mints nothing, and is NEVER retried into green (INV-003/PRH-005) — or a structural corpus fault classified infrastructure_invalid — either way mints nothing | yes |
-| 3 | infrastructure fault BEFORE comparison — no pinned .NET SDK resolved (checked `--dotnet-root`, `DOTNET_ROOT`, `HOME/.dotnet`, `out/cache/dotnet-root`), or the nested runs did not build the aggregator host — no receipt | no |
-| 20 | usage/pre-run error (unknown argument, missing `--run-root`, unhardened invocation, `run_cmd` DENY) — no receipt | no |
+| exit | origin | meaning | receipt emitted? |
+|------|--------|---------|------------------|
+| 0 | emitter | both nested runs completed and the declared deterministic projections AGREED across the two runs (comparison_status=equal) | yes |
+| 1 | emitter | the projections DIFFERED in this observation (comparison_status=different) — the disagreement HARD-FAILS the lane, mints nothing, and is NEVER retried into green (INV-003/PRH-005) — or a structural corpus fault classified infrastructure_invalid — either way mints nothing | yes |
+| 1 | nested (`set -e`) | a nested `run-spike.sh` exited 1 (a route child failed, aggregation detected a failure, or the suite failed) and `set -e` aborted the lane BEFORE the emitter ran | no |
+| 3 | emitter | the emitter refused/failed to write — the PRH-003 privacy scan found a local-identity leak in a Corrected-authored field (fail-closed, AFTER comparison), an AtomicWrite/projection fault threw (AFTER comparison), or the committed schema failed `ValidateSchemaFile` (BEFORE comparison) — an infrastructure fault is NEVER recorded as comparison_status=different (INV-001) | no |
+| 3 | shell (before comparison) | no pinned .NET SDK resolved (checked `--dotnet-root`, `DOTNET_ROOT`, `HOME/.dotnet`, `out/cache/dotnet-root`), or the nested runs did not build the aggregator host | no |
+| 20 | shell (pre-run) | usage/pre-run error (unknown argument, missing `--run-root`, unhardened invocation, `run_cmd` DENY) | no |
+| 20 | nested (`set -e`) | a nested `run-spike.sh` exited 20 (INCOMPLETE — a per-run prerequisite/wall-clock/operator-cancel fault, or a pre-run failure) and `set -e` aborted the lane BEFORE the emitter ran | no |
 
-**Codes 0/1 are propagated verbatim from the receipt emitter**
-(`SpikeAggregator --emit-determinism-receipt`, which sets the exit via
-`DeterminismDisposition.Dispose`): 0 on a successfully emitted `equal` receipt,
-1 on the `comparison_status=different` disagreement hard-fail (the INV-003
+**Nested-origin vs emitter-origin.** The lane drives the two nested
+`run-spike.sh` runs under `set -e`, so **ANY non-zero exit from a nested run is
+propagated VERBATIM** — the lane aborts with the nested code BEFORE the emitter
+runs, and **no determinism receipt is written**. This is why the same code (1 or
+20, and also a nested `exit 30` unhardened-refusal that has no dedicated row
+because it is never a direct lane exit) can mean two different things. The stderr
+line disambiguates: a nested-origin failure is immediately preceded by
+`determinism-lane: nested determinism run N -> …` and NO `receipt at …` line is
+ever printed, whereas EVERY emitter-reached exit (0/1/3) prints
+`determinism-lane: receipt at <path> (emitter exit N)` — so that line's presence
+marks emitter-origin and its `(emitter exit N)` gives the code. Note the line
+prints `receipt at …` even on an emitter-`3` refusal, when NO receipt is actually
+written (see the receipt-emitted column).
+
+**Emitter-origin codes 0/1/3** are set by the receipt emitter
+(`SpikeAggregator --emit-determinism-receipt`, via `DeterminismDisposition.Dispose`)
+and propagated verbatim: 0 on a successfully emitted `equal` receipt; 1 on the
+`comparison_status=different` disagreement hard-fail (the INV-003
 observation-scoped signal — strong evidence for *this* observation, not a
 universal-nondeterminism claim, never retried — PRH-005) or a structural
-infrastructure_invalid corpus. A malformed *internal* emitter invocation
-propagates the emitter's own argument-validation diagnostic (exit 2); a
-receipt-write/projection fault inside the emitter propagates exit 3 (an
-infrastructure fault is NEVER recorded as `comparison_status=different` —
-INV-001). The literal shell-side faults are `exit 3` (SDK/aggregator absent) and
-`exit 20` (usage/pre-run); the emitter-propagated `different` code is 1.
+infrastructure_invalid corpus (both WRITE a receipt); 3 when the emitter
+refuses/fails to write — the PRH-003 privacy scan flagged a local-identity leak or
+an AtomicWrite/projection fault threw (both AFTER the comparison), or the
+committed schema failed `ValidateSchemaFile` (BEFORE the comparison) (an
+infrastructure fault is NEVER recorded as `comparison_status=different` — INV-001). A malformed
+*internal* emitter invocation propagates the emitter's own argument-validation
+diagnostic (exit 2). The DIRECT shell-side faults in `determinism-lane.sh` are
+`exit 3` (SDK/aggregator absent, before comparison) and `exit 20` (usage/pre-run);
+every other observed code is a propagation (nested-origin via `set -e`, or the
+emitter-origin 0/1/3).
 
 The full exit/report consistency matrix (including "failure exit + all-pass
 report ⇒ never COMPATIBLE") is committed in

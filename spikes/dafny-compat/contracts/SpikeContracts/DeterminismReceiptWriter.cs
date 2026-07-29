@@ -200,16 +200,11 @@ public static class DeterminismReceiptWriter
         var comparison = DeterminismComparison.Compare(run1, run2, kindRegistryPath, roleRegistryPath, policyMapPath);
 
         // Both nested runs completed (the lane guards the resource floor before it
-        // runs). Map the derived comparison onto the CLOSED legal-status table:
-        // equal/different keep execution=completed; a structural not_evaluated is a
-        // run-level fault -> infrastructure_invalid/not_evaluated (INV-001 — never
-        // a completed+not_evaluated illegal pair, never a fail-open different).
-        var status = comparison.Status switch
-        {
-            ComparisonStatus.Equal => new ReceiptStatus(ExecutionStatus.Completed, ComparisonStatus.Equal),
-            ComparisonStatus.Different => new ReceiptStatus(ExecutionStatus.Completed, ComparisonStatus.Different),
-            _ => new ReceiptStatus(ExecutionStatus.InfrastructureInvalid, ComparisonStatus.NotEvaluated),
-        };
+        // runs). Map the derived comparison onto the CLOSED legal-status table via
+        // the SINGLE-SOURCED, exhaustively-tested pure mapping below (MA-CC-001/
+        // MA-FO-001): the shipped receipt status is derived here — not by an
+        // untested inline switch — so a fail-open regression is a RED test.
+        var status = MapComparisonToReceiptStatus(comparison.Status);
 
         var platform = ObservePlatform(osLabel, runnerImage, kernel, resolvedSdk);
 
@@ -221,6 +216,28 @@ public static class DeterminismReceiptWriter
             string.IsNullOrEmpty(policyVersion) ? "1" : policyVersion,
             platform, run1, run2);
     }
+
+    /// <summary>
+    /// INV-001 (MA-CC-001/MA-FO-001): the SHIPPED, single-sourced mapping from a derived
+    /// <see cref="ComparisonStatus"/> to the receipt's legal (execution, comparison) pair.
+    /// It BRIDGES to the pure total <see cref="DeterminismClassifier.Classify"/> over the
+    /// closed legal-status table (which is thereby a LIVE production surface, not a dead
+    /// surrogate — MA-CC-002): equal/different are completed rows; a structural
+    /// not_evaluated (and any future/unknown comparison value via the classifier's own
+    /// fail-closed default) absorbs to infrastructure_invalid/not_evaluated — NEVER a
+    /// completed+not_evaluated illegal pair and NEVER a fail-open comparison=different.
+    /// The mint-eligible (completed, equal) cell is reachable ONLY from ComparisonStatus.Equal.
+    /// Build calls THIS; an exhaustive cross-value test pins it so a fail-open regression is RED.
+    /// </summary>
+    public static ReceiptStatus MapComparisonToReceiptStatus(ComparisonStatus comparison) =>
+        DeterminismClassifier.Classify(comparison switch
+        {
+            ComparisonStatus.Equal => RunnerOutcomeKind.CompletedProjectionsEqual,
+            ComparisonStatus.Different => RunnerOutcomeKind.CompletedProjectionsDiffer,
+            // not_evaluated is a structural corpus fault at run level; any future
+            // ComparisonStatus value also absorbs here — fail-closed, never mint-eligible.
+            _ => RunnerOutcomeKind.InfrastructureFault,
+        });
 
     /// <summary>Resolves the committed self-test vector (repo-relative in the manifest) to an absolute path under the spike root.</summary>
     private static string ResolveSelfTestVector(string schemaPath, string policyMapPath)
@@ -306,7 +323,7 @@ public static class DeterminismReceiptWriter
             var imageVersion = Environment.GetEnvironmentVariable("ImageVersion");
             image = (!string.IsNullOrWhiteSpace(imageOs) || !string.IsNullOrWhiteSpace(imageVersion))
                 ? $"{imageOs}/{imageVersion}"
-                : "local-dev-noncI-runner";
+                : "local-dev-nonci-runner";
         }
 
         var kern = string.IsNullOrWhiteSpace(kernel) ? RuntimeInformation.OSDescription : kernel;

@@ -92,6 +92,7 @@ public class Pr1Inv001StatusModelTests
     [Fact]
     public void Classifier_IsTotalOverRunnerOutcomeKind_NeverFailsOpen()
     {
+        var mintEligibleKinds = new List<RunnerOutcomeKind>();
         foreach (var k in Enum.GetValues<RunnerOutcomeKind>())
         {
             var status = DeterminismClassifier.Classify(k);
@@ -102,7 +103,70 @@ public class Pr1Inv001StatusModelTests
                 // the never-`different`-on-fault safety direction
                 Assert.Equal(ExecutionStatus.Completed, status.Execution);
             }
+            if (status is { Execution: ExecutionStatus.Completed, Comparison: ComparisonStatus.Equal })
+            {
+                mintEligibleKinds.Add(k);
+            }
         }
+
+        // MA-FO-002 — the DANGEROUS direction (symmetric to the never-`different`
+        // guard above): the mint-eligible (completed, equal) cell must be reachable
+        // from EXACTLY ONE RunnerOutcomeKind — the legitimate CompletedProjectionsEqual.
+        // A future kind (or a regressed arm/default) that also maps to (completed, equal)
+        // would silently mint-attest a non-equal outcome; this fails it RED.
+        Assert.Equal(new[] { RunnerOutcomeKind.CompletedProjectionsEqual }, mintEligibleKinds);
+
+        // The fail-closed default must NOT be mint-eligible: an unknown/future kind
+        // (an out-of-range value hitting the `_ =>` arm) absorbs to
+        // infrastructure_invalid/not_evaluated, never the (completed, equal) cell.
+        var unknown = DeterminismClassifier.Classify((RunnerOutcomeKind)0xBEEF);
+        Assert.Equal(new ReceiptStatus(ExecutionStatus.InfrastructureInvalid, ComparisonStatus.NotEvaluated), unknown);
+    }
+
+    // Tests INV-001 [unit] (MA-CC-001/MA-FO-001, AP-022): the SHIPPED receipt-status
+    // mapping — the one DeterminismReceiptWriter.Build actually derives the emitted
+    // execution/comparison pair from — is EXHAUSTIVELY fail-closed-tested over EVERY
+    // ComparisonStatus value (the closed comparison domain) PLUS the out-of-range
+    // default. This exercises the PRODUCTION surface (MapComparisonToReceiptStatus),
+    // not the dead-surrogate Classify: mutating its default or its non-Equal arm to
+    // (completed, equal) turns THIS test RED. Every cell must be a legal pair; the
+    // mint-eligible (completed, equal) cell is reachable ONLY from ComparisonStatus.Equal;
+    // Different is a completed disagreement; not_evaluated and the default fail closed to
+    // infrastructure_invalid/not_evaluated — never a fail-open different, never illegal.
+    [Fact]
+    public void ShippedReceiptStatusMapping_IsExhaustive_OnlyEqualIsMintEligible()
+    {
+        var mintEligible = new List<ComparisonStatus>();
+        foreach (var c in Enum.GetValues<ComparisonStatus>())
+        {
+            var status = DeterminismReceiptWriter.MapComparisonToReceiptStatus(c);
+            Assert.True(DeterminismClassifier.IsLegalStatusPair(status.Execution, status.Comparison),
+                $"comparison_status={c} maps to an (execution, comparison) pair outside the closed legal table (INV-001)");
+            if (status is { Execution: ExecutionStatus.Completed, Comparison: ComparisonStatus.Equal })
+            {
+                mintEligible.Add(c);
+            }
+        }
+
+        // Exactly-once mint reachability: only Equal yields the attestable cell. A
+        // regressed Different/default arm (or a future ComparisonStatus) mapping to
+        // (completed, equal) breaks this — the load-bearing fail-open guard.
+        Assert.Equal(new[] { ComparisonStatus.Equal }, mintEligible);
+
+        // The exact behavior-preserving per-value mapping (the happy Equal path is
+        // byte-identical to before the single-sourcing refactor).
+        Assert.Equal(new ReceiptStatus(ExecutionStatus.Completed, ComparisonStatus.Equal),
+            DeterminismReceiptWriter.MapComparisonToReceiptStatus(ComparisonStatus.Equal));
+        Assert.Equal(new ReceiptStatus(ExecutionStatus.Completed, ComparisonStatus.Different),
+            DeterminismReceiptWriter.MapComparisonToReceiptStatus(ComparisonStatus.Different));
+        Assert.Equal(new ReceiptStatus(ExecutionStatus.InfrastructureInvalid, ComparisonStatus.NotEvaluated),
+            DeterminismReceiptWriter.MapComparisonToReceiptStatus(ComparisonStatus.NotEvaluated));
+
+        // The fail-closed default: an out-of-range/future comparison value absorbs to
+        // infrastructure_invalid/not_evaluated — a legal, non-mint-eligible pair.
+        var defaulted = DeterminismReceiptWriter.MapComparisonToReceiptStatus((ComparisonStatus)0xBEEF);
+        Assert.Equal(new ReceiptStatus(ExecutionStatus.InfrastructureInvalid, ComparisonStatus.NotEvaluated), defaulted);
+        Assert.True(DeterminismClassifier.IsLegalStatusPair(defaulted.Execution, defaulted.Comparison));
     }
 
     // Tests INV-001 [unit]: the C# ExecutionStatus/ComparisonStatus enums are
