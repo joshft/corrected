@@ -53,8 +53,9 @@ public sealed class DeterminismLaneFixture : IDisposable
         _scope = SpikePaths.TransientScratch("pr1-determinism-lane-shared");
         RunRoot = _scope.Root;
 
-        // Execute the committed extracted lane script VERBATIM (INV-024/RS-028).
-        var run = Launch.Script("scripts/determinism-lane.sh", null, "--run-root", RunRoot);
+        // Execute the committed extracted lane script VERBATIM (INV-024/RS-028), under the
+        // job-coordinated lane timeout (DF-013 — two nested runs can exceed the default 600s cap).
+        var run = Launch.LaneScript("scripts/determinism-lane.sh", null, "--run-root", RunRoot);
         ExitCode = run.ExitCode;
         StdErr = run.StdErr;
 

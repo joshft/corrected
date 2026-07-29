@@ -142,15 +142,31 @@ public static class Launch
             "dotnet", argv, SpikePaths.SpikeRoot, env, 600));
     }
 
+    /// <summary>Default script launcher wall-clock cap (seconds). Fine for the fast, early-exiting
+    /// scripts; the determinism LANE needs a larger, job-coordinated cap (<see cref="LaneTimeoutSeconds"/>).</summary>
+    private const int DefaultScriptTimeoutSeconds = 600;
+
+    /// <summary>DF-013 (MA-RB-2): the determinism lane drives TWO nested run-spike runs (each
+    /// self-budgeting 1800s), so the default 600s script cap would SIGKILL a legitimately-long lane
+    /// on the pinned &gt;=8-core runner and red-fail EVERY lane test on WORKING determinism. This cap
+    /// fits two nested runs + build/aggregation while staying UNDER the 90-min (5400s) CI job backstop
+    /// (.github/workflows/p3-determinism-lane.yml: timeout-minutes: 90).</summary>
+    public const int LaneTimeoutSeconds = 4800;
+
     /// <summary>Launches a script under the hardened contract (bash -p).</summary>
     public static LaunchResult Script(string scriptRelPath, IReadOnlyDictionary<string, string>? env = null, params string[] args)
-        => ScriptCore(scriptRelPath, hardened: true, env, args);
+        => ScriptCore(scriptRelPath, hardened: true, env, args, DefaultScriptTimeoutSeconds);
+
+    /// <summary>Launches the determinism LANE script under the hardened contract with the
+    /// job-coordinated <see cref="LaneTimeoutSeconds"/> cap (DF-013).</summary>
+    public static LaunchResult LaneScript(string scriptRelPath, IReadOnlyDictionary<string, string>? env = null, params string[] args)
+        => ScriptCore(scriptRelPath, hardened: true, env, args, LaneTimeoutSeconds);
 
     /// <summary>TA-B9: launches a script WITHOUT -p, simulating a careless operator invocation, so BASH_ENV genuinely fires.</summary>
     public static LaunchResult ScriptUnhardened(string scriptRelPath, IReadOnlyDictionary<string, string>? env = null, params string[] args)
-        => ScriptCore(scriptRelPath, hardened: false, env, args);
+        => ScriptCore(scriptRelPath, hardened: false, env, args, DefaultScriptTimeoutSeconds);
 
-    private static LaunchResult ScriptCore(string scriptRelPath, bool hardened, IReadOnlyDictionary<string, string>? env, string[] args)
+    private static LaunchResult ScriptCore(string scriptRelPath, bool hardened, IReadOnlyDictionary<string, string>? env, string[] args, int timeoutSeconds)
     {
         var script = SpikePaths.P(scriptRelPath.Split('/'));
         Assert.True(File.Exists(script), $"missing committed script: {scriptRelPath}");
@@ -179,7 +195,7 @@ public static class Launch
             Argv: argv,
             WorkingDirectory: SpikePaths.SpikeRoot,
             EnvironmentProfile: launchEnv,
-            TimeoutSeconds: 600));
+            TimeoutSeconds: timeoutSeconds));
     }
 
     /// <summary>Launches an arbitrary allowlisted executable through the managed launcher (e.g. the real curl for TA-B9).</summary>

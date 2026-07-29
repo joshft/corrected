@@ -77,6 +77,13 @@ jobs:
           # committed core_floor; below it the two-nested-run controller flaps.
           floor="$(grep -oE '"core_floor"[[:space:]]*:[[:space:]]*[0-9]+' spikes/dafny-compat/manifest/determinism/resource-floor.json | grep -oE '[0-9]+')"
           echo "core_floor=$floor observed_cores=$(nproc)"
+          # DF-014 (MA-ID-001) / RS-009 / N2: LOUD-FAIL if the pinned floor-capable class did NOT
+          # resolve to a >= core_floor runner. The two-nested-run controller flaps below floor, so
+          # reading green on a sub-floor runner would be a false pass — never silently proceed.
+          if [ "$(nproc)" -lt "$floor" ]; then
+            echo "::error::determinism lane landed on a SUB-FLOOR runner ($(nproc) vCPU < core_floor=$floor) — the pinned floor-capable class did not resolve; refusing to read green (DF-014)."
+            exit 1
+          fi
 
       - name: FROM-CLEAN serial determinism lane (extracted script, verbatim — INV-005/AP-020)
         env:
@@ -100,6 +107,20 @@ jobs:
           ( cd spikes/dafny-compat \
             && env -i HOME="$HOME" DETERMINISM_OS_LABEL="$DETERMINISM_OS_LABEL" DETERMINISM_RESOLVED_SDK="$DETERMINISM_RESOLVED_SDK" \
                bash -p scripts/determinism-lane.sh --run-root out/determinism-lane --dotnet-root "$HOME/.dotnet" )
+
+      - name: Assert the determinism receipt was emitted (DF-014 — content, not just exit code)
+        run: |
+          # DF-014 (MA-ID-001): the extracted-script step above checks only the exit code; assert
+          # here that it actually EMITTED a receipt (fail-closed on a silent no-receipt). The deep
+          # per-role projection-agreement content is asserted by the xUnit lane step below.
+          receipt=spikes/dafny-compat/out/determinism-lane/receipts/determinism-receipt.json
+          if [ ! -s "$receipt" ]; then
+            echo "::error::determinism receipt missing or empty at $receipt — the lane step exited 0 but emitted no receipt (DF-014)."
+            exit 1
+          fi
+          jq -e . "$receipt" >/dev/null \
+            || { echo "::error::determinism receipt at $receipt is not valid JSON (DF-014)."; exit 1; }
+          echo "determinism receipt present and parseable: $receipt"
 
       - name: Determinism-lane xUnit tests for real (>=8-core home — Category=determinism-lane)
         run: |

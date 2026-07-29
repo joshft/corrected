@@ -140,9 +140,11 @@
       "title": "Determinism-lane fixture drives the two-nested-run lane via ManagedLauncher's hardcoded 600s cap",
       "detail": "DeterminismLaneFixture (Launch.cs:182) uses a 600s launcher cap, 9x smaller than the 90-min job budget and the nested runs' own 1800s self-budget. Legit determinism taking >600s -> SIGKILL(137) -> Receipt null -> RequireReceipt Assert.True(ExitCode==0) fails ALL lane tests -> the sanctioned >=8-core lane can be permanently RED on WORKING determinism. Fix: raise/parameterize the lane fixture launcher timeout, coordinated with the job budget.",
       "severity": "MEDIUM",
-      "status": "open",
+      "status": "resolved",
       "deferred_at": "2026-07-29",
-      "disposition": "mini-audit round 1, HIGH (tier-3, test-infra); PR1 not a current fail-open; CI-reliability pre-landing item (sibling of QA-003 / task #56)"
+      "disposition": "mini-audit round 1, HIGH (tier-3, test-infra); PR1 not a current fail-open; CI-reliability pre-landing item (sibling of QA-003 / task #56)",
+      "resolved": "2026-07-29",
+      "resolution": "Fixed on the feature branch pre-landing: Launch.LaneScript with a job-coordinated LaneTimeoutSeconds=4800 (the DeterminismLaneFixture uses it); guard test asserts the cap exceeds 2×1800s and stays under the 90-min job backstop."
     },
     {
       "id": "DF-014",
@@ -153,7 +155,8 @@
       "severity": "MEDIUM",
       "status": "open",
       "deferred_at": "2026-07-29",
-      "disposition": "mini-audit round 1, HIGH (tier-3, ci-config); CI-reliability pre-landing item (sibling of QA-003 / task #56)"
+      "disposition": "mini-audit round 1, HIGH (tier-3, ci-config); CI-reliability pre-landing item (sibling of QA-003 / task #56)",
+      "resolution_progress": "PARTIAL (feature branch pre-landing): committed the LOUD-FAIL floor assertion (nproc < core_floor -> exit 1) + a receipt-emitted content guard + structural CI-config tests (Pr1CiSeparationTests). RESIDUAL (status kept open): making the lane a REQUIRED check is a repo branch-protection setting, not in-repo YAML — a repo-admin action."
     },
     {
       "id": "DF-015",

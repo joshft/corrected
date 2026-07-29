@@ -87,6 +87,42 @@ public class Pr1CiSeparationTests
         Assert.DoesNotContain("--exclude-category", lane);
     }
 
+    // Tests DF-013 (MA-RB-2) [unit]: the lane fixture's launcher cap must accommodate TWO nested
+    // run-spike runs (each self-budgeting 1800s) — a too-small cap SIGKILLs a WORKING lane and reds
+    // every lane test on the pinned >= 8-core runner. It must exceed 2×1800s and stay under the
+    // 90-min (5400s) CI job backstop the lane workflow actually commits.
+    [Fact]
+    public void LaneLauncherTimeout_FitsTwoNestedRuns_UnderTheJobBackstop()
+    {
+        Assert.True(Launch.LaneTimeoutSeconds >= 2 * 1800,
+            $"lane launcher cap {Launch.LaneTimeoutSeconds}s must exceed two nested 1800s run budgets (DF-013)");
+        Assert.True(Launch.LaneTimeoutSeconds < 90 * 60,
+            $"lane launcher cap {Launch.LaneTimeoutSeconds}s must stay under the 90-min CI job backstop (DF-013)");
+        Assert.Contains("timeout-minutes: 90", LaneWorkflow); // the backstop the cap is coordinated with
+    }
+
+    // Tests DF-014 (MA-ID-001) [unit] (structural CI-config guard — a CI-only job step cannot be
+    // executed here): the lane workflow LOUD-FAILS if it lands on a sub-floor runner
+    // (nproc < core_floor -> exit 1) rather than reading green on a runner that flaps.
+    [Fact]
+    public void LaneWorkflow_LoudFailsOnASubFloorRunner()
+    {
+        var lane = LaneWorkflow;
+        Assert.Contains("-lt \"$floor\"", lane);     // the floor comparison condition
+        Assert.Contains("SUB-FLOOR runner", lane);   // the loud-fail diagnostic (DF-014)
+    }
+
+    // Tests DF-014 (MA-ID-001) [unit] (structural CI-config guard): the lane workflow asserts the
+    // extracted-script step actually EMITTED a receipt (content-existence, not just exit code) —
+    // fail-closed on a silent no-receipt.
+    [Fact]
+    public void LaneWorkflow_AssertsReceiptWasEmitted()
+    {
+        var lane = LaneWorkflow;
+        Assert.Contains("determinism-receipt.json", lane);
+        Assert.Contains("receipt missing or empty", lane); // the fail-closed existence guard (DF-014)
+    }
+
     // Tests QA-001/QA-011 [unit] (class-fix, keyed off the SHARED mechanism — not
     // free-text): every test class that consumes the DeterminismLaneFixture floor-gate
     // (IClassFixture<DeterminismLaneFixture>, or reads its BelowFloor loud-throw gate)
