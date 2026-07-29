@@ -141,15 +141,20 @@ ensure_in_tree_run_root() { # -> canonical in-tree RUN_ROOT (mutated in place)
   # SINGLE-SOURCED guard (RLT-1/AUDIT-ARCH-1) owning mkdir+canonicalize+teardown for
   # BOTH the outer-watchdog and inner-controller call sites. The mkdir is required so
   # `cd && pwd` can canonicalize a relative/symlinked root; on refusal we `rm -d` the
-  # just-created EMPTY dir first so a refused out-of-tree root leaves NO orphan. `rm -d`
-  # removes ONLY an empty dir (allowlist-safe — never `rm -rf` a caller-supplied path).
+  # dir ONLY IF WE JUST CREATED IT (LOW-1: a pre-existing operator dir is left untouched)
+  # so a refused out-of-tree root leaves NO orphan and never deletes a dir we did not
+  # make. `rm -d` removes ONLY an empty dir (allowlist-safe — never `rm -rf` a caller path).
   # Mutates the global RUN_ROOT.
+  local created=""
+  [ -d "$RUN_ROOT" ] || created=1
   run_cmd mkdir -p -- "$RUN_ROOT"
   RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
   case "$RUN_ROOT" in
     "$SPIKE_ROOT"/*) return 0 ;;
   esac
-  run_cmd rm -d -- "$RUN_ROOT" 2>/dev/null || true
+  if [ -n "$created" ]; then
+    run_cmd rm -d -- "$RUN_ROOT" 2>/dev/null || true
+  fi
   echo "run-spike: refusing an out-of-tree --run-root '$RUN_ROOT' — it must be within the spike tree ($SPIKE_ROOT) so SpikeRunRootRel stays SPIKE-relative (DD-008 build/output divergence, PRH-005 argv leak). Use an in-tree root, e.g. --run-root out/<name>." >&2
   exit 20
 }

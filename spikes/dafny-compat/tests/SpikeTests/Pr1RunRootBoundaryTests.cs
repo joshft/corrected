@@ -91,6 +91,30 @@ public class Pr1RunRootBoundaryTests
         finally { TryDelete(oot); }
     }
 
+    // LOW-1 (qa-r1 fix-diff-review): the guard must NOT delete a run-root the operator
+    // PRE-CREATED — only the dir the guard itself made to canonicalize. A pre-existing
+    // empty out-of-tree dir is refused (exit 20) but SURVIVES. determinism-lane.sh shares
+    // the mirrored ensure_in_tree_run_root guard with the same created-only teardown.
+    [Fact]
+    public void RunSpike_RefusesOutOfTreeRunRoot_ButKeepsAPreExistingDir()
+    {
+        var oot = OutOfTreeRoot();
+        Directory.CreateDirectory(oot); // operator pre-created the (empty) dir
+        try
+        {
+            var run = Launch.Script("scripts/run-spike.sh", null, "--run-root", oot);
+
+            Assert.False(run.ExitCode == 0,
+                $"run-spike accepted an out-of-tree --run-root ({oot}). stderr: {run.StdErr}");
+            Assert.Contains("within the spike tree", run.StdErr);
+            // the guard only tears down a dir IT created; a pre-existing operator dir survives
+            Assert.True(Directory.Exists(oot),
+                $"the guard deleted a PRE-EXISTING operator dir ({oot}) it did not create (LOW-1)");
+            AssertNoStrayInTreeBuild(oot);
+        }
+        finally { TryDelete(oot); }
+    }
+
     // The bug wrote build outputs under $SPIKE_ROOT/<out-of-tree-path-minus-leading-slash>.
     // Assert no such stray in-tree tree was created (proves the refusal fired before build).
     private static void AssertNoStrayInTreeBuild(string outOfTreeRoot)

@@ -64,12 +64,18 @@ SPIKE_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 # argv (PRH-005). Refuse it HERE, before any SDK/build work, so the CI lane
 # (INV-024/RS-028) can never mis-drive it.
 ensure_in_tree_run_root() {
+  # LOW-1: `rm -d` the dir on refusal ONLY IF WE JUST CREATED IT — a pre-existing
+  # operator dir is left untouched (never delete a dir we did not make).
+  local created=""
+  [ -d "$RUN_ROOT" ] || created=1
   run_cmd mkdir -p -- "$RUN_ROOT"
   RUN_ROOT="$(cd -- "$RUN_ROOT" && pwd)"
   case "$RUN_ROOT" in
     "$SPIKE_ROOT"/*) return 0 ;;
   esac
-  run_cmd rm -d -- "$RUN_ROOT" 2>/dev/null || true
+  if [ -n "$created" ]; then
+    run_cmd rm -d -- "$RUN_ROOT" 2>/dev/null || true
+  fi
   echo "determinism-lane: refusing an out-of-tree --run-root '$RUN_ROOT' — it must be within the spike tree ($SPIKE_ROOT) so the nested SpikeRunRootRel stays SPIKE-relative (DD-008 build/output divergence, PRH-005 argv leak). Use an in-tree root, e.g. --run-root out/determinism-lane." >&2
   exit 20
 }
