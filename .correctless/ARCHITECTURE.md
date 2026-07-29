@@ -91,7 +91,7 @@ dafny_family_absent:
 - name: "reference-ci-provenance"
   type: cli
   handler: ".github/workflows/phase-0-1-reference-ci.yml:verify-before-run"
-  test_via: "run the reference-CI lane (or its extracted script) with the PINNED external SLSA/signature verifier + pinned Cosign identity against a tampered-artifact fixture (INV-031/032/033), plus the determinism lane that emits a counted ran/skipped outcome with observed cores + RID (INV-005 / P3)"
+  test_via: "run the reference-CI lane (or its extracted script) with the PINNED external SLSA/signature verifier + pinned Cosign identity against a tampered-artifact fixture (INV-031/032/033), plus the determinism lane (PR1-built: .github/workflows/p3-determinism-lane.yml -> scripts/determinism-lane.sh) that drives two nested runs and emits a RunReceipt binding the observed platform identity (ProcessorCount / RID / arch / pinned OS label / kernel / SDK) to a derived closed-table (execution × comparison) status pair — comparison_status=equal iff every per-role deterministic projection agrees across the two runs, exit non-zero on different (INV-001/002/003/005 / P3). The PR2 reference-CI-provenance refresh (INV-022/023) reconciles this entry's handler + scope + invariant-group map and registers TB-007"
   scope:
     - ".github/workflows/**"
     - "gate/Corrected.Provenance/**"

@@ -132,6 +132,193 @@
       "status": "open",
       "deferred_at": "2026-07-22",
       "disposition": "deferred (round-2 mini-audit LOW; operator-hardening/honesty/latent \u2014 no verdict-integrity impact)"
+    },
+    {
+      "id": "DF-013",
+      "finding_id": "MA-RB-2",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "Determinism-lane fixture drives the two-nested-run lane via ManagedLauncher's hardcoded 600s cap",
+      "detail": "DeterminismLaneFixture (Launch.cs:182) uses a 600s launcher cap, 9x smaller than the 90-min job budget and the nested runs' own 1800s self-budget. Legit determinism taking >600s -> SIGKILL(137) -> Receipt null -> RequireReceipt Assert.True(ExitCode==0) fails ALL lane tests -> the sanctioned >=8-core lane can be permanently RED on WORKING determinism. Fix: raise/parameterize the lane fixture launcher timeout, coordinated with the job budget.",
+      "severity": "MEDIUM",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1, HIGH (tier-3, test-infra); PR1 not a current fail-open; CI-reliability pre-landing item (sibling of QA-003 / task #56)"
+    },
+    {
+      "id": "DF-014",
+      "finding_id": "MA-ID-001",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "The only executing end-to-end coverage for INV-001/002/005 lives on a non-required, unverified 8-core lane",
+      "detail": "INV-001/002/005 (incl the receipt-binds-to-real-artifacts test) execute only on the org-provisioned ubuntu-24.04-8core lane, which is NOT a required check, has no runner-existence verification, no fallback, and no red signal if it never runs. The from-clean lane STEP checks only exit code, not receipt content. 'Runs for real in CI' is asserted but not enforced/provable. Fix: runner-existence/floor assertion + make the lane a required check or loud-fail if the runner never materializes.",
+      "severity": "MEDIUM",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1, HIGH (tier-3, ci-config); CI-reliability pre-landing item (sibling of QA-003 / task #56)"
+    },
+    {
+      "id": "DF-015",
+      "finding_id": "MA-RB-1",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "Resource floor enforced only in the test fixture, not in production determinism-lane.sh",
+      "detail": "The core_floor (=8) is enforced only by Pr1DeterminismLaneTests.cs:47 (<8 skip), NOT production. determinism-lane.sh + the workflow record the core count but never compare/skip; Build can never emit resource_floor_skipped. Below-floor -> lane runs anyway -> CPU-flap mislabeled comparison_status=different (which INV-001 forbids for infra faults) instead of INV-004's resource_floor_skipped. Fail-closed (red, no false mint) but mislabels. RS-009 'default outcome completed' + all-skip alarm unimplemented.",
+      "severity": "MEDIUM",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-2, production-design); latent for PR1 (fail-closed, mislabels only)"
+    },
+    {
+      "id": "DF-016",
+      "finding_id": "MA-ID-002",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "INV-003 different->non-zero-exit chain has zero executing coverage above the pure classifier",
+      "detail": "All INV-003 tests use synthetic ReceiptStatus/hand-built evidence [unit]; no test drives RunCli/Build/determinism-lane.sh with a corpus yielding different. Real runs only ever produce equal, so the different branch is not CI-observed. Comment Pr1Inv003DisagreementTests.cs:76 'lane-covered (CI-observed)' is inaccurate for different. A regression swallowing Dispose's non-zero code ships green. Fix: an executing test (or force-flap seam) exercising the different branch end-to-end.",
+      "severity": "MEDIUM",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-2, test-coverage); PR1 not a current fail-open"
+    },
+    {
+      "id": "DF-017",
+      "finding_id": "MA-FC-001",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "campaign-rows.json head_sha are feature-branch-only; a squash-merge breaks the general-gate ancestry test",
+      "detail": "campaign-rows.json head_sha (be50f9a/95a0982/6d42cd2) are feature-branch-only, not reachable from origin/main. The ancestry test Pr1Inv004ResourceFloorTests.cs:47 has NO category trait -> runs in the GENERAL gate. On a SQUASH-merge these SHAs become main-unreachable -> git merge-base --is-ancestor exit 128 -> PlanPredatesRun false -> RED on main. Holds today (repo uses merge-commits) but undocumented; fails closed. Overlaps QA-003 (the PENDING placeholders will re-pin to main commits). Fix: re-pin head_sha to main-reachable OR document the non-squash requirement.",
+      "severity": "MEDIUM",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-3, from-clean); overlaps QA-003 / task #56 pre-landing campaign; fails closed"
+    },
+    {
+      "id": "DF-018",
+      "finding_id": "MA-FO-003",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "ResolveHeadCommit uncomputable-HEAD -> attested_commit='unknown' is not a hard failure (PR2/PR3)",
+      "detail": "DeterminismReceiptWriter.cs:325-340: an uncomputable HEAD yields attested_commit='unknown' (a string), not a hard failure; a (Completed,Equal) receipt with attested_commit=unknown is still exit0/MintEligible. Benign in PR1 (signs nothing) but must map to rejected when PR2/PR3 consume it (cf EA-007/INV-012 ancestry-uncomputable -> rejected).",
+      "severity": "MEDIUM",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-4, design-latent); PR2/PR3 activation seam"
+    },
+    {
+      "id": "DF-019",
+      "finding_id": "MA-HI-001",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "RunReceiptCodec.Parse reads execution/comparison independently, never checks pair legality",
+      "detail": "RunReceiptCodec.Parse (DeterminismStatusModel.cs:720) reads execution_status + comparison_status independently, never checks the pair vs IsLegalStatusPair or ValidateReport. A receipt {infrastructure_invalid, equal} parses cleanly (INV-001's named Violated-when). NOT exploitable in PR1 (Dispose whitelists (Completed,Equal)) but is the PR2/PR3 parse surface. Fix: post-parse IsLegalStatusPair reject.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-2, production-latent); PR2/PR3 parse surface, not exploitable in PR1"
+    },
+    {
+      "id": "DF-020",
+      "finding_id": "MA-HI-002",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "BuildRunEvidence/DeterministicProjection never runs ValidateReport on the r1/r2 role reports",
+      "detail": "DeterminismReceiptWriter.cs:256 projects r1/r2 role reports without EvidenceSchema.ValidateReport (the aggregator does, Program.cs:360). Projection only throws on present-but-unclassified fields; not required/type/enum. Two runtime reports sharing a schema defect project identically -> equal -> mint-eligible. Most 'live' seam (r1/r2 runtime-produced, no from-clean content test). Latent (PR1 mints nothing). Fix: ValidateReport before projecting.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-2, production-latent); latent, PR1 mints nothing"
+    },
+    {
+      "id": "DF-021",
+      "finding_id": "MA-HI-003",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "DeterminismComparison.Compare returns equal vacuously on an empty role/kind registry",
+      "detail": "Compare returns equal vacuously on an empty role/kind registry (empty SetEquals passes; the projection loop over empty leaves allProjectionsAgree=true). Only the external cardinality test (RoleRegistry_HasExactlyFiveRoles) guards the committed path, not a code-level assertion (AP-022/RS-016 empty-set-degeneracy). Fix: committedRoles.Count==0 || committedKinds.Count==0 -> NotEvaluated in Compare.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-2, production-latent); committed path guarded by the cardinality test"
+    },
+    {
+      "id": "DF-022",
+      "finding_id": "MA-ID-003",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "Lane fixture resolves the SDK only via the workflow-seeded out/cache/dotnet-root pointer",
+      "detail": "DeterminismLaneFixture resolves the SDK only via the workflow-seeded out/cache/dotnet-root pointer (empty env, no --dotnet-root). A bare 'dotnet test --filter Category=determinism-lane' from a fresh clone -> exit 3 -> RED for a provisioning gap. DOWNGRADED (MA-FC-002): the pointer is seeded within the same job in all passing paths, fail-closed, NOT leaked prior-run state -- an expected hidden coupling, not a from-clean hole. Fix: document the seeding coupling, or have the fixture seed / pass --dotnet-root.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-3, doc); downgraded to expected hidden coupling (fail-closed, not leaked state)"
+    },
+    {
+      "id": "DF-023",
+      "finding_id": "MA-UX-104",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "Lane exit table omits exit 30 (run-spike unhardened) and emitter exit 2 (unknown arg)",
+      "detail": "The lane exit table omits exit 30 (run-spike unhardened via set -e) and emitter exit 2 (unknown arg). Verified PRACTICALLY UNREACHABLE via the committed lane (bash -p hardened; env -i strips DETERMINISM_* before the non-allowlist assert; fixed emitter argv). Worth a table footnote, not urgent.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-4, doc); paths practically unreachable via the committed lane"
+    },
+    {
+      "id": "DF-024",
+      "finding_id": "MA-UX-105",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "p3-determinism-lane.yml 'floor-capable assertion' comment overstates -- the step only echoes cores",
+      "detail": "p3-determinism-lane.yml:68-79 'floor-capable assertion' comment overstates: the step only echoes core_floor/observed_cores, no if/exit. Real enforcement is the xUnit throw (indirect). On a mis-mapped runner the from-clean step can write a completed+equal receipt recording processor_count=4 + exit 0 (the job still reds later). Receipt not self-describing below-floor. Ties RS-009 / MA-RB-1. Fix: a real floor check at lane start and/or a below-floor marker in the receipt.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-4, ci-design); indirect enforcement holds today"
+    },
+    {
+      "id": "DF-025",
+      "finding_id": "MA-UC-102",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "projection_impl_digest _impl_pin_comment omits the schema as a hidden third input",
+      "detail": "projection_impl_digest = SHA256(DeterministicProjection(vector, SCHEMA)); DeterministicProjection reads the schema partition, so the schema is a hidden 3rd input. The map's _impl_pin_comment tells operators to recompute 'if the projection code or vector changes' -- OMITS the schema. A schema edit for an unrelated subsystem stales the pin -> Compare rejects every real receipt -> P3 unmintable until recomputed. Fail-loud (ProjectionImplDigest test), so fragility+doc-gap, not silent. Fix: add 'or the schema' to the comment; consider a P3-owned frozen vector.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-4, doc); fail-loud, doc-gap only"
+    },
+    {
+      "id": "DF-026",
+      "finding_id": "MA-UC-103",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "Receipt policy_version defaults to '1'; subject_manifest_digest defaults to the evidence-schema digest",
+      "detail": "Receipt policy_version defaults to literal '1' (DeterminismReceiptWriter.cs:45); subject_manifest_digest defaults to Sha256File(schemaPath) (the evidence-schema digest again, not a policy-map/subject-manifest digest). projection-policy-map.json has no version field. Mostly PR2-scoped (PR1 signs nothing). PR2 receipt-evolution note.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-4, design-latent); PR2 receipt-evolution"
+    },
+    {
+      "id": "DF-027",
+      "finding_id": "MA-UC-104",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "os_label degrades to a hardcoded 'ubuntu-24.04' instead of an honest 'unknown'",
+      "detail": "os_label degrades to hardcoded 'ubuntu-24.04' when --os-label/$DETERMINISM_OS_LABEL absent (DeterminismReceiptWriter.cs:298), unlike runner_image's honest 'local-dev-nonci-runner' marker. A workflow refactor dropping the label wiring silently records a plausible-but-wrong OS. Should degrade to an honest 'unknown' / fail-closed. (The stray-capital-I typo in the runner marker was fixed in f1319fc.)",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-4, production-latent); honesty hardening"
+    },
+    {
+      "id": "DF-028",
+      "finding_id": "MA-UC-105",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "RunReceipt has no receipt_schema_version discriminator; Codec.Parse has no migration path",
+      "detail": "RunReceipt (the future signed subject) has no receipt_schema_version discriminator; RunReceiptCodec.Parse is strict-required-key with no migration path (unknown keys tolerated, renamed/removed hard-throws). PR2/PR3 receipt-evolution note (PR1 signs/commits no receipts).",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-4, design-latent); PR2/PR3 receipt-evolution"
+    },
+    {
+      "id": "DF-029",
+      "finding_id": "MA-ID-004",
+      "source_file": ".correctless/artifacts/mini-audit-findings-p3-determinism-attestation.json",
+      "title": "CI-separation dry-run residual net rests on an unpinned ubuntu-latest < core_floor=8 assumption",
+      "detail": "The CI-separation dry-run residual net ('dropped filter -> lane tests throw below floor -> red') rests on an UNPINNED ubuntu-latest < core_floor=8 assumption. If GitHub bumps ubuntu-latest to >=8 vCPU, a dropped filter would run the heavyweight lane on the general gate instead of throwing -> the net weakens. Deepens QA-001..013. Fix: pin the general gate vCPU or assert nproc<core_floor at gate start.",
+      "severity": "LOW",
+      "status": "open",
+      "deferred_at": "2026-07-29",
+      "disposition": "mini-audit round 1 (tier-4, ci-latent); net holds under current runner sizing. (Pure-INFO items MA-FC-002 and MA-ID-005 intentionally NOT logged -- both explicitly 'not a hole / noted for completeness' in the mini-audit artifact.)"
     }
   ]
 }

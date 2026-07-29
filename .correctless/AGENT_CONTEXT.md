@@ -1,6 +1,6 @@
 # Agent Context — Corrected
 
-> Last updated: 2026-07-27
+> Last updated: 2026-07-29
 
 ## What This Project Does
 
@@ -15,7 +15,12 @@ build to land is the **Phase 0.0 package-compatibility spike** under
 `spikes/dafny-compat/`: permanent, non-production conformance infrastructure
 that validated Dafny 4.11.0 running in-process on a .NET 10 host (both
 integration routes COMPATIBLE). See `docs/features/dafny-compat-spike.md` and
-`docs/adr/ADR-0001-dafny-integration-boundary.md`.
+`docs/adr/ADR-0001-dafny-integration-boundary.md`. The spike now also hosts the
+**P3 determinism-attestation** lane (PR1 of a 3-PR arc): a dedicated ≥8-core CI job
+(`p3-determinism-lane.yml` → `scripts/determinism-lane.sh`) that runs the two-nested-run
+determinism check and emits a structured `(execution × comparison)` RunReceipt. It signs
+nothing and leaves **P3 `false`** (readiness stays BLOCKED) until PR2/PR3 land. See
+`docs/features/p3-determinism-attestation.md`.
 
 A second non-production build has since landed: the **readiness-gate carrier**
 under `gate/` — an isolated .NET 10 solution that homes the Phase-0.1 worker's
