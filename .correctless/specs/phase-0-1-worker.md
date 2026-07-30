@@ -1095,7 +1095,7 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
 ### INV-036: While BLOCKED, no production implementation may land — with an actionable message
 - **Type**: must-not
 - **Category**: security
-- **Statement**: while `implementation_readiness.status = BLOCKED`, the feature's
+- **Statement**: while `effective_lifecycle != ENTERED`, the feature's
   production implementation surface is absent/empty — the C# core worker and
   `corrected` CLI packages (§Packages Affected) carry NO production implementation
   of these invariants. "Production surface" is an explicit path set (the core/CLI
@@ -1113,13 +1113,17 @@ the entrypoint YAML exists at ARCHITECTURE.md:61 (since /carchitect 2026-07-24);
   ACTIONABLE message mirroring INV-002 (spec-review RS-038): it names
   `status: BLOCKED`, lists the unsatisfied preconditions, and points to the
   readiness block and the OQ-002 carrier. Landing production core/CLI code requires
-  `status = READY`, which INV-002 makes unreachable without P1/P2/P3 evidence.
+  `effective_lifecycle = ENTERED` — reached only via the signed phase-entry
+  activation, which itself requires `status = READY` (P1∧P2∧P3, which INV-002 makes
+  unreachable without P1/P2/P3 evidence). status=READY is thus NECESSARY but NOT
+  SUFFICIENT: production code lands only after the ENTERED activation.
 - **Violated when**: a production implementation file for this feature exists with
-  non-trivial content while `status = BLOCKED`; an implementation PR merges while
-  `status ≠ READY`; or the check fires without an actionable message.
+  non-trivial content while `effective_lifecycle != ENTERED`; an implementation PR
+  merges while `effective_lifecycle != ENTERED`; or the check fires without an
+  actionable message.
 - **Enforcement**: gate precondition — a path-scoped CI check on the feature's
   production packages (globs pinned by `/carchitect`, deny-by-default) that fails
-  the build/PR when `status = BLOCKED` and the production surface is non-empty,
+  the build/PR when `effective_lifecycle != ENTERED` and the production surface is non-empty,
   with a skeleton-only tree (must pass) AND a one-real-method tree (must fail) as
   fixtures. Complements INV-002: INV-002 stops a premature flip; INV-036 stops code
   landing under an honestly-BLOCKED flag.

@@ -40,8 +40,10 @@ public static class ReadinessGate
         ReadinessBlock block,
         IReadOnlyDictionary<PreconditionId, ProbeResult> probeResults)
     {
-        // status: indeterminate (unparseable, INV-002) -> Fail; the INV-011 ban
-        // stays active while status in {BLOCKED, indeterminate}.
+        // status: indeterminate (unparseable, INV-002) -> Fail. The INV-011/INV-036
+        // production-src ban is keyed off effective_lifecycle (it stays active while
+        // `effective_lifecycle != ENTERED`), NOT off this status; that fused ban+verdict
+        // decision lives in the impure LifecycleGate (INV-027), not in this pure kernel.
         if (block.Status == ReadinessStatus.Indeterminate)
         {
             return ReadinessVerdict.Fail(null);
@@ -83,6 +85,81 @@ public static class ReadinessGate
         }
 
         return ReadinessVerdict.Pass();
+    }
+
+    /// <summary>
+    /// INV-026 component #1: the PURE transition evaluator. PROPOSES a lifecycle
+    /// transition {stay-BLOCKED | propose-ENTER | honor-ENTERED} from the 3-tuple
+    /// (block, probeResults, entryIntegrity), minting/writing/signing NOTHING. Added
+    /// ALONGSIDE the retained 2-arg <see cref="EvaluateReadiness"/> (RS-022), not a
+    /// replacement. <paramref name="entryIntegrity"/> is a SUPPLIED enum (the impure
+    /// gate-side verifier does the crypto, INV-030) so this stays I/O-free (INV-004).
+    ///
+    /// State model (Group G tables A/B):
+    ///   * declared BLOCKED (at-activation): ProposeEnter IFF P1∧P2∧P3 all re-derive
+    ///     true from probeResults AND entryIntegrity==Verified; else StayBlocked.
+    ///   * declared ENTERED (established): HonorEntered — the declared latch is
+    ///     monotonic, so a transient/rejected/absent integrity still HonorsEntered from
+    ///     the EVALUATOR (the separate Pass/Fail verdict is the orchestrator's, 5c).
+    /// Safety-direction invariant (INV-026 enforcement): NO at-activation evaluation
+    /// with entryIntegrity != Verified EVER yields ProposeEnter.
+    /// </summary>
+    public static ProposedTransition EvaluateTransition(
+        ReadinessBlock block,
+        IReadOnlyDictionary<PreconditionId, ProbeResult> probeResults,
+        EntryIntegrity entryIntegrity)
+    {
+        // (B) established-ENTERED: the DECLARED lifecycle latch is monotonic, so a
+        // declared-ENTERED block HonorsEntered under EVERY entry_integrity AND every
+        // precondition shape — a transient Unavailable never reverts the latch, and a
+        // forged Rejected/Absent still yields HonorEntered FROM THIS EVALUATOR (the
+        // separate Pass/Fail verdict, computed by the orchestrator in 5c, is what fails
+        // the forgery — RS-022). This branch is INDEPENDENT of probeResults/integrity.
+        if (block.EffectiveLifecycle == LifecycleState.Entered)
+        {
+            return ProposedTransition.HonorEntered;
+        }
+
+        // (A) at-activation (declared BLOCKED): propose BLOCKED->ENTERED IFF every
+        // precondition re-derives true from probeResults AND entry_integrity==Verified.
+        // Safety direction (INV-026 / RS-001): compute the guard as a conjunction and
+        // deny-by-default — any missing/unsatisfied/unresolvable probe, or any integrity
+        // other than Verified, falls through to StayBlocked. Never fail open (AP-001).
+        if (entryIntegrity == EntryIntegrity.Verified && AllPreconditionsReDeriveTrue(block, probeResults))
+        {
+            return ProposedTransition.ProposeEnter;
+        }
+
+        return ProposedTransition.StayBlocked;
+    }
+
+    /// <summary>
+    /// True IFF every declared precondition {P1, P2, P3} "re-derives true" from the
+    /// supplied probe results — i.e. its ProbeResult is PRESENT, <c>Satisfied == true</c>,
+    /// AND <c>ReferenceResolution == Resolved</c>. A Satisfied-but-Unresolvable/Malformed
+    /// probe does NOT re-derive true: per the INV-005 total table a non-Resolved reference
+    /// is a hard fail, and a Satisfied+Unresolvable probe is exactly the fail-open shape
+    /// INV-026 guards. Missing or null probe rows are treated as not-satisfied (deny by
+    /// default). Pure and deterministic — no I/O, no ambient state.
+    /// </summary>
+    private static bool AllPreconditionsReDeriveTrue(
+        ReadinessBlock block,
+        IReadOnlyDictionary<PreconditionId, ProbeResult> probeResults)
+    {
+        foreach (var pc in block.Preconditions)
+        {
+            if (!probeResults.TryGetValue(pc.Id, out var probe) || probe is null)
+            {
+                return false;
+            }
+
+            if (!probe.Satisfied || probe.ReferenceResolution != ReferenceResolution.Resolved)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>The INV-005 per-precondition total-table cell. True == this cell fails.</summary>

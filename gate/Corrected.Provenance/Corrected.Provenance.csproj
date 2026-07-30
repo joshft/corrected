@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- INV-022 / TB-007: the NON-SHIPPED shared provenance substrate (5th gate
+       project). Homes the GENERIC in-toto Statement / subject / DSSE-envelope
+       contracts (reusable by INV-031/032/033 release provenance) AND the
+       P3-specific determinism RunReceipt + predicate schema. BCL-only
+       (System.Text.Json, System.Security.Cryptography ship in the framework) so
+       the from-clean locked-mode restore stays trivial: NO
+       PackageReference, so packages.lock.json is the empty-graph lock.
+       PRH-010: never referenced by a shipped src/Corrected.* binary. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Corrected.Provenance</RootNamespace>
+  </PropertyGroup>
+  <!-- Intentionally NO ItemGroup: no PackageReference, no ProjectReference. -->
+</Project>

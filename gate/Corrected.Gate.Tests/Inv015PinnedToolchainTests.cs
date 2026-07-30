@@ -8,7 +8,8 @@ namespace Corrected.Gate.Tests;
 
 /// <summary>
 /// INV-015: pinned + locked YAML parser AND analysis toolchain AND test toolchain;
-/// no Microsoft.Build.* PackageReference; the four-project restore-lock set; loaded-
+/// no Microsoft.Build.* PackageReference; the five-project restore-lock set (INV-022
+/// exact-four→five: Corrected.Provenance is the 5th, non-shipped substrate); loaded-
 /// version assertions; the version-skew parse fixture. [integration].
 /// </summary>
 public class Inv015PinnedToolchainTests
@@ -16,6 +17,7 @@ public class Inv015PinnedToolchainTests
     private static readonly string[] GateProjects =
     {
         "Corrected.Gate", "Corrected.Gate.Kernel", "Corrected.Gate.Tests", "Corrected.Gate.Lint",
+        "Corrected.Provenance",
     };
 
     // Tests INV-015 [integration]: YamlDotNet is pinned 18.1.0 with a LOADED-version
@@ -73,10 +75,10 @@ public class Inv015PinnedToolchainTests
     }
 
     // Tests INV-015 [integration]: the <AGGREGATOR> restore/lock set is EXACTLY the
-    // four gate projects (EXT7-05) — a membership meta-test. Genuine guard over the
-    // committed .slnx.
+    // five gate projects (EXT7-05; INV-022 exact-four→five) — a membership meta-test.
+    // Genuine guard over the committed .slnx.
     [Fact]
-    public void Aggregator_membership_is_exactly_the_four_projects()
+    public void Aggregator_membership_is_exactly_the_five_projects()
     {
         string slnx = File.ReadAllText(TestPaths.RepoFile("gate", "Corrected.Gate.slnx"));
         foreach (var proj in GateProjects)
@@ -84,7 +86,7 @@ public class Inv015PinnedToolchainTests
             Assert.Contains(proj + "/" + proj + ".csproj", slnx);
         }
         int projectCount = slnx.Split("<Project ").Length - 1;
-        Assert.Equal(4, projectCount);
+        Assert.Equal(5, projectCount);
     }
 
     // Tests INV-015 [integration]: each gate project has a committed packages.lock.json

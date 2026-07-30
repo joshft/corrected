@@ -1,10 +1,12 @@
 <Solution>
-  <!-- <AGGREGATOR> (INV-014): aggregates EXACTLY the four gate projects
-       (EXT8-07/EXT7-05). A membership meta-test (INV-015) asserts solution
-       membership equals {Corrected.Gate, Corrected.Gate.Kernel,
-       Corrected.Gate.Tests, Corrected.Gate.Lint}. -->
+  <!-- <AGGREGATOR> (INV-014): aggregates EXACTLY the five gate projects
+       (EXT8-07/EXT7-05; INV-022 exact-four→five: Corrected.Provenance is the
+       5th, non-shipped substrate). A membership meta-test (INV-015) asserts
+       solution membership equals {Corrected.Gate, Corrected.Gate.Kernel,
+       Corrected.Gate.Tests, Corrected.Gate.Lint, Corrected.Provenance}. -->
   <Project Path="Corrected.Gate.Kernel/Corrected.Gate.Kernel.csproj" />
   <Project Path="Corrected.Gate.Lint/Corrected.Gate.Lint.csproj" />
   <Project Path="Corrected.Gate/Corrected.Gate.csproj" />
+  <Project Path="Corrected.Provenance/Corrected.Provenance.csproj" />
   <Project Path="Corrected.Gate.Tests/Corrected.Gate.Tests.csproj" />
 </Solution>
