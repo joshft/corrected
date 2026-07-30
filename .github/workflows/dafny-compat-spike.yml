@@ -60,7 +60,13 @@ jobs:
           # (pipefail keeps the controller exit as the primary gate) for the
           # independent verify step below.
           rm -rf spikes/dafny-compat/out
-          env -i HOME="$HOME" bash -p spikes/dafny-compat/scripts/run-spike.sh 2>&1 | tee "$RUNNER_TEMP/controller.log"
+          # PR1/QA-001: this is the 4-vCPU general conformance gate. The
+          # determinism-lane xUnit tests throw a LOUD typed skip below the >=8-core
+          # floor, so they CANNOT pass here — exclude them by test Category (env -i
+          # strips env, so the exclusion is an ARG). They run for real on the
+          # dedicated floor-capable p3-determinism-lane.yml job; local
+          # run-spike.sh / commands.test (>=8 cores) still runs every category.
+          env -i HOME="$HOME" bash -p spikes/dafny-compat/scripts/run-spike.sh --exclude-category determinism-lane 2>&1 | tee "$RUNNER_TEMP/controller.log"
 
       - name: Independent suite-outcome check (defence-in-depth against a false-green)
         run: |

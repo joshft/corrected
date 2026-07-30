@@ -8,4 +8,10 @@
     <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
     <RootNamespace>Corrected.Spike.Contracts</RootNamespace>
   </PropertyGroup>
+  <!-- RLT-2/IB-003 (qa-r1): expose AtomicWrite + ReportRoleKeys to the single test
+       assembly (SpikeTests) so the temp-orphan cleanup and the role-set binding are
+       directly testable. Test-only visibility; no product surface change. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SpikeTests" />
+  </ItemGroup>
 </Project>

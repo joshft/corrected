@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "branch": "feature/p3-determinism-attestation",
+  "recommended_lenses": [
+    {
+      "lens_name": "attestation-fail-open-totality",
+      "rationale": "The security core is a set of closed tables and a 13-reason failure mapping whose safety depends on every cell/reason resolving in the fail-CLOSED direction; multiple reviewers found unenumerated or default-branch cells that fail open toward accept/neutral/ran-passed — a verbatim replay of the project's own AP-022 escaped bug (PMB-003).",
+      "focus_areas": [
+        "the post-entry readiness_verdict x entry_integrity table missing an is_activation_event dimension (RS-001)",
+        "INV-012 unclassified-cosign-fault default direction and trust-root-or-pin-mismatch conflation (RS-002)",
+        "the 13-reason totality derived from a committed enum vs a test literal, with real-fault induction (RS-010)",
+        "the transition_state x entry_integrity x health-severity cross-product precedence (RS-019)",
+        "ancestry-uncomputable mapping to rejected not unavailable (RS-013)"
+      ],
+      "severity_guidance": "CRITICAL: any unenumerated/default cell or unclassified fault resolves to a non-failing (accept/neutral/lifted-ban) outcome. HIGH: a reason set or legal-cell set derived from a test literal rather than a committed schema/enum artifact. MEDIUM: a renderer or diagnostic that falls through to 'unclassified'.",
+      "source_agent": "red-team,testability,design-contract",
+      "source_finding": "RS-001",
+      "source_finding_summary": "Forged-ENTERED + crafted-unavailable entry receipt yields a non-failing verdict that lifts the src/ ban (AP-022 table with an unrepresented safety dimension)."
+    },
+    {
+      "lens_name": "dead-accept-path-until-later-phase",
+      "rationale": "Every ACCEPT path in this feature — production-identity determinism verify, the mint path, and the entry-receipt accept — is driven only by fixture identities or hosts that do not exist in default CI/PR2, so an always-accept or misconfigured-always-reject verifier can ship green and is first exercised by the very PR that flips the flag.",
+      "focus_areas": [
+        "the production-identity verifier accept branch and the INV-011 SHA cross-check never positively exercised until PR3 (RS-006)",
+        "the entry-receipt verifier accept path + orchestrator propose-ENTER handoff driven only by synthetic fixtures (RS-011)",
+        "a PR2 negative signed under the PRODUCTION identity asserting rejection attributable to the SHA cross-check, not identity (AP-010 wrong-reason)",
+        "bidirectional predicate cross-rejection between the P3 and entry verifiers (RS-024)"
+      ],
+      "severity_guidance": "CRITICAL: an always-accept verifier (default/catch/typo'd identity string) passes 100% of the in-feature suite. HIGH: an accept path or a cross-check (SHA, predicate-type) that cannot be positively driven through the real cosign path within this feature. MEDIUM: a negative test that passes for the wrong reason (rejects on identity before reaching the constraint under test).",
+      "source_agent": "testability,red-team",
+      "source_finding": "RS-006",
+      "source_finding_summary": "Production-identity accept path + workflow-SHA cross-check are dead-and-green until PR3; the wrong-SHA negative rejects on identity first (AP-002/AP-010/AP-012)."
+    },
+    {
+      "lens_name": "from-clean-bootstrap-and-provisioning",
+      "rationale": "The gate is asserted verifiable 'from a clean checkout' and 'offline', but several paths cannot bootstrap from clean, deadlock, or silently degrade to a phantom on a fresh clone / off-RID / shallow / unprovisioned host — the AP-013/AP-021 classes that have escaped this project twice (PMB-001/002).",
+      "focus_areas": [
+        "the pre-ENTERED P3-refresh deadlock: no allowlist mode can restore P3 once staled before entry (RS-003, AP-021)",
+        "provision-cosign.sh not wired into gate/run-readiness-gate.sh or the from-clean CI job -> phantom real-cosign (RS-014)",
+        "linux-x64-only cosign vs the cross-platform documented gate command (RS-015)",
+        "fetch-depth:0 / historical-snapshot reachability as an executable preflight, not prose (RS-013)",
+        "the serial-lane operator surface as a committed extracted script executed verbatim, not inline YAML (RS-028)"
+      ],
+      "severity_guidance": "CRITICAL: a gate deadlocks from clean or can never restore/verify a precondition (circular gate). HIGH: the real security path is a phantom on a fresh clone / off-RID / shallow / unprovisioned host and degrades to a silent skip or unavailable. MEDIUM: an operator-surface test that reconstructs or greps rather than executing verbatim.",
+      "source_agent": "testability,upgrade-compat,assumptions",
+      "source_finding": "RS-003",
+      "source_finding_summary": "After PR3, a staled P3 pre-entry can never be restored (signing is main-push-only; no pre-entry re-mint mode) — phase entry deadlocks (AP-021)."
+    },
+    {
+      "lens_name": "cross-doc-migration-completeness",
+      "rationale": "This feature amends two parent specs, the carrier, ARCHITECTURE, committed tests, and the kernel, and migrates exact-four->five; reviewers found unamended status-keyed clauses that fail open, undercounted committed literals that go red from clean, stale handler YAML, and a boundary that keeps the wrong label — the AP-016 partial-migration class and the PR#6 test-name/guard/fixture consistency class.",
+      "focus_areas": [
+        "parent INV-036 + ARCHITECTURE:111 + kernel ban-predicate still status-keyed after the INV-027 amendment (RS-004)",
+        "the carrier's declared-vs-actual cross-check contradicting post-entry advisory staleness (RS-018)",
+        "exact-four->five undercount: Assert.Equal(4,...), the test-method name, comments, the new lockfile (RS-020)",
+        "ReadinessBlock.cs schema-v2 migration (RecognizedSchemaVersion const, 4-arg TryCreate, closed DTO) (RS-021)",
+        "stale ARCHITECTURE kernel-handler YAML + replace-vs-add ambiguity (RS-022)",
+        "Corrected.Provenance two-homes/two-roles + unnamed workflow file + carrier INV-010 TB-003 label (RS-023, RS-025, RS-033)",
+        "line anchors re-pinned by symbol not line number (RS-026)"
+      ],
+      "severity_guidance": "CRITICAL: an unamended clause creates two contradictory predicates for one invariant, one of which fails open (e.g. src/ permitted at READY+BLOCKED). HIGH: a committed literal/test/guard goes red from a clean checkout, or a trust boundary keeps the wrong label after 'made real'. MEDIUM: a stale line anchor, doc handler, or role table left inconsistent.",
+      "source_agent": "design-contract,upgrade-compat",
+      "source_finding": "RS-004",
+      "source_finding_summary": "The INV-027 amendment leaves parent INV-036 + ARCHITECTURE:111 + kernel status-keyed, permitting src/ at READY+BLOCKED (AP-016 + PAT-005 regression)."
+    },
+    {
+      "lens_name": "load-bearing-deferred-assumptions",
+      "rationale": "The spec defers several external facts to a PR2 transcript spike and a PR1 measurement campaign, but some are written as design FACTS the freeze depends on; if the empirical/crypto reality disproves them the freeze is unsatisfiable or P3 is unmintable on default CI.",
+      "focus_areas": [
+        "keyless cosign signed-timestamp attachment for offline-verify-after-cert-expiry (RS-007)",
+        "offline verification of the new protobuf bundle format at the pinned version + the --new-bundle-format=false contingency (RS-008)",
+        "the 4-vCPU runner vs the removed core-floor-8, and the larger-runner escape becoming routine (RS-009)",
+        "measurement-campaign completeness of the eligible run universe, not just per-row validity (RS-016)",
+        "producer recording the trigger SHA vs a branch-ref HEAD for the INV-011 cross-check (RS-031)"
+      ],
+      "severity_guidance": "HIGH: a PR1/PR2 assumption that, if false, makes the PR2 freeze unsatisfiable, makes P3 permanently unmintable on default CI, or lets a disagreement be cherry-picked out of the campaign. MEDIUM: an assumption that degrades availability (fail-closed) but not integrity.",
+      "source_agent": "assumptions,testability",
+      "source_finding": "RS-007",
+      "source_finding_summary": "INV-009 asserts a signed timestamp keyless cosign does not attach by default (no TSA in EA-001); if OQ-001 disproves it, PR2 cannot freeze and the committed fixture cannot offline-verify after cert expiry."
+    }
+  ]
+}

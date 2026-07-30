@@ -1,0 +1,11 @@
+{
+  "_comment": "PR1 / INV-001 — the CLOSED legal (execution_status, comparison_status) table the PURE TOTAL classifier is enforced against. The cross-product totality test (AP-022/PMB-003) derives its expected legal-cell set FROM THIS FILE, never from a test literal, so shrinking the table is a reviewable committed diff. Wire tokens are snake_case and map 1:1 to the C# ExecutionStatus/ComparisonStatus enum members (PascalCase). Every combination NOT listed in legal_pairs is schema-invalid; any infrastructure fault maps to infrastructure_invalid/not_evaluated, NEVER comparison_status=different.",
+  "execution_status_domain": ["completed", "resource_floor_skipped", "infrastructure_invalid"],
+  "comparison_status_domain": ["equal", "different", "not_evaluated"],
+  "legal_pairs": [
+    { "execution_status": "completed", "comparison_status": "equal" },
+    { "execution_status": "completed", "comparison_status": "different" },
+    { "execution_status": "resource_floor_skipped", "comparison_status": "not_evaluated" },
+    { "execution_status": "infrastructure_invalid", "comparison_status": "not_evaluated" }
+  ]
+}

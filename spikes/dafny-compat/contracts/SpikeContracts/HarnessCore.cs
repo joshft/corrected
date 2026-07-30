@@ -57,6 +57,11 @@ public static class HarnessCore
         public required string ReportPath;
         public string RunId = "";
         public string? SentinelNonce;
+        // The "probe:<tag>" ids this run's OWN sentinel stubs carry (one per
+        // sentinel probe). The ledger is SHARED across roles in a run root, so
+        // the deterministic invocation measure must scope to these — never to
+        // every tag present (which would borrow a sibling role's invocation).
+        public List<string> SentinelProbeTags = new();
         public List<ProbeResult> Results = new();
         public List<Dictionary<string, object?>> NodeTable = new();
         public List<Dictionary<string, object?>> AdjudicationRecords = new();
@@ -81,8 +86,8 @@ public static class HarnessCore
         public string? SolverConcreteRel;
         public string? HarnessTfm;
         public int LedgerEntriesBefore;
-        public int LedgerEntriesAfter;
         public int ForeignNonceEntries;
+        public int DistinctInvokedNonceTags;
         public (string Path, string Sha)? HostfxrIdentity;
         public (string Path, string Sha)? CorelibIdentity;
         public List<string> FamilySweepViolations = new();
@@ -274,6 +279,19 @@ public static class HarnessCore
         var decoyLog = Path.Combine(state.RunRoot, "sentinel", "decoy-invocations.log");
         var decoyInvocations = File.Exists(decoyLog) ? File.ReadAllLines(decoyLog).Count(l => l.Length > 0) : 0;
         state.DecoyInvocations = decoyInvocations;
+        // INV-003 determinism: measure the sentinel invocation as the DISTINCT
+        // probe-leg count (per-probe sub-nonce tags with >=1 real-binary entry),
+        // NOT the raw ledger entry count. Boogie restarts the deliberately-killed
+        // recording stub a TIMING-dependent number of times; each restart appends
+        // one entry under the SAME probe tag, so the raw count flapped (route-b
+        // 2-vs-1 -> comparison_status=different). Distinct legs collapse restarts
+        // to a structural count. The append-only ledger (MA-RB-3 no-drop armor) is
+        // untouched — only this emit-time derivation changes.
+        if (state.SentinelNonce is not null && state.SentinelLedgerPath is not null)
+        {
+            state.DistinctInvokedNonceTags =
+                DistinctInvokedNonceTagCount(state.SentinelLedgerPath, state.SentinelNonce, state.SentinelProbeTags);
+        }
         if (decoyInvocations > 0)
         {
             state.Results = state.Results
@@ -637,8 +655,6 @@ public static class HarnessCore
 
         var ledgerPath = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
         var (_, after, _, malformedAfter) = ReadLedger(ledgerPath, probeTag);
-        var (_, allNonceAfter, _, _) = ReadLedger(ledgerPath, null);
-        state.LedgerEntriesAfter = allNonceAfter;
         var delta = after - before;
         // MA-RB-3/MA-HI-2 declared contract: a malformed entry appearing in
         // this window can be a mangled RECORD of a genuine invocation — the
@@ -689,8 +705,6 @@ public static class HarnessCore
 
         var ledgerPath = Path.Combine(state.RunRoot, RunLayout.SentinelLedgerRelativePath.Replace('/', Path.DirectorySeparatorChar));
         var (_, after, foreign, malformedAfter) = ReadLedger(ledgerPath, probeTag);
-        var (_, allNonceEntries, _, _) = ReadLedger(ledgerPath, null);
-        state.LedgerEntriesAfter = allNonceEntries;
         var delta = after - beforeThisProbe;
         var malformedDelta = malformedAfter - malformedBefore;
         // RS-003d: only entries under THIS run's nonce count; a stale recording
@@ -1481,6 +1495,7 @@ public static class HarnessCore
         // own window — an abandoned earlier leg (e.g. a timed-out P05 prover)
         // can never leak entries into another probe's count.
         var stubPath = Path.Combine(state.RunRoot, "sentinel", $"sentinel-z3-{probeTag}");
+        state.SentinelProbeTags.Add($"probe:{probeTag}"); // this run's own leg (role-scoped invocation measure)
         File.WriteAllText(stubPath, SentinelStubScript(ledgerPath, nonce, probeTag));
         File.SetUnixFileMode(stubPath,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
@@ -1566,6 +1581,67 @@ public static class HarnessCore
             }
         }
         return entries;
+    }
+
+    /// <summary>
+    /// INV-003 determinism: the DISTINCT sentinel probe-leg count for THIS run — the
+    /// number of <paramref name="ownProbeTags"/> ("probe:&lt;tag&gt;", the stubs this run
+    /// wrote) carrying >=1 well-formed entry under <paramref name="nonce"/>. This is the
+    /// emit-time replacement for the RAW entry count in invocations_for_this_nonce: every
+    /// restart of one probe's deliberately-killed recording stub appends another entry
+    /// under that probe's SINGLE tag, so the raw count is timing-variable (the route-b
+    /// 2-vs-1 flap that flipped comparison_status to different) while a distinct-tag count
+    /// is structural.
+    ///
+    /// Scoping to <paramref name="ownProbeTags"/> is load-bearing: the ledger is SHARED
+    /// across roles in a run root (route-a and route-b write the same ledger under the
+    /// same nonce), so counting EVERY tag present would let a role borrow a sibling role's
+    /// invocation (route-b would read 2 = its own + route-a's) — order-dependent and
+    /// semantically wrong. Restricting to this run's own stub tags yields each role's true
+    /// distinct-leg count. Foreign-nonce and malformed entries never contribute. The
+    /// append-only ledger and its MA-RB-3 no-drop armor are read-only here — nothing is
+    /// deduped on disk. Public so tests can prove restart-multiplicity invariance and the
+    /// cross-role scoping.
+    /// </summary>
+    public static int DistinctInvokedNonceTagCount(string ledgerPath, string nonce, IReadOnlyCollection<string> ownProbeTags)
+    {
+        var own = new HashSet<string>(ownProbeTags, StringComparer.Ordinal);
+        var fired = new HashSet<string>(StringComparer.Ordinal);
+        using (var doc = JsonDocument.Parse(File.ReadAllText(ledgerPath)))
+        {
+            if (doc.RootElement.TryGetProperty("entries", out var embedded) && embedded.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in embedded.EnumerateArray())
+                {
+                    if (entry.GetProperty("nonce").GetString() != nonce)
+                    {
+                        continue;
+                    }
+                    var argv = entry.GetProperty("argv");
+                    var first = argv.GetArrayLength() > 0 ? argv[0].GetString() : null;
+                    if (first is not null && own.Contains(first))
+                    {
+                        fired.Add(first);
+                    }
+                }
+            }
+        }
+        foreach (var line in EnumerateEntryLines(ledgerPath))
+        {
+            if (!TryDecodeEntryLine(line, out var entry))
+            {
+                continue;
+            }
+            if (entry!.Nonce != nonce)
+            {
+                continue;
+            }
+            if (own.Contains(entry.ProbeTag))
+            {
+                fired.Add(entry.ProbeTag);
+            }
+        }
+        return fired.Count;
     }
 
     private static (string Nonce, int EntriesForNonce, int ForeignEntries, int MalformedEntries) ReadLedger(string ledgerPath, string? probeTag)
@@ -1966,7 +2042,15 @@ public static class HarnessCore
         if (state.SentinelNonce is not null)
         {
             ledgerOutcomes["nonce"] = state.SentinelNonce;
-            ledgerOutcomes["invocations_for_this_nonce"] = state.LedgerEntriesAfter - state.LedgerEntriesBefore;
+            // Determinism-stable measure (INV-003): the count of THIS run's own
+            // sentinel probe-legs that fired the real binary — invariant to Boogie's
+            // timing-dependent prover-restart multiplicity that made the raw entry
+            // count flap, and scoped to own stub tags so a role never borrows a
+            // sibling's invocation from the shared ledger. Anti-decoy strength is
+            // preserved: a leg firing the real binary still yields >=1, and
+            // decoy_invocations / invocations_for_foreign_nonces_counted (the actual
+            // spoof signals) remain exact counts below.
+            ledgerOutcomes["invocations_for_this_nonce"] = state.DistinctInvokedNonceTags;
             ledgerOutcomes["ledger_pre_created_at_zero"] = state.LedgerEntriesBefore == 0;
             ledgerOutcomes["invocations_for_foreign_nonces_counted"] = state.ForeignNonceEntries;
         }

@@ -221,6 +221,26 @@ public class ProhibitionTests
         }
     }
 
+    // Tests PRH-004 [unit] (QA-007 — allowlist drift, class-fix): a DEDICATED,
+    // explicit assertion that the PR1 serial-lane script's ALLOWLIST=() array is
+    // set-equal to BootstrapAllowlist.Commands — belt-and-suspenders alongside the
+    // per-script theory above, so the lane script's bootstrap allowlist can NEVER
+    // silently drift from the committed constant even if the theory's MemberData
+    // enumeration is ever narrowed. FAILS if determinism-lane.sh adds/removes a command.
+    [Fact]
+    public void Prh004_DeterminismLaneScript_AllowlistIsSetEqualToBootstrap()
+    {
+        var script = File.ReadAllText(SpikePaths.P("scripts", "determinism-lane.sh"));
+        var arrayMatch = Regex.Match(script, @"^ALLOWLIST=\(([^)]*)\)", RegexOptions.Multiline);
+        Assert.True(arrayMatch.Success, "determinism-lane.sh has no ALLOWLIST=() bash array (QA-007/TA-B8)");
+        var declared = arrayMatch.Groups[1].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .OrderBy(c => c, StringComparer.Ordinal).ToList();
+        var expected = BootstrapAllowlist.Commands.OrderBy(c => c, StringComparer.Ordinal).ToList();
+        Assert.Equal(expected, declared);
+        Assert.True(Regex.IsMatch(script, @"^run_cmd\(\)\s*\{", RegexOptions.Multiline),
+            "determinism-lane.sh has no run_cmd() dispatch function (QA-007/TA-B8)");
+    }
+
     // Tests PRH-004 [integration] (codex R4-08, TA-B9): BASH_ENV poisoning with
     // a launch that GENUINELY lets BASH_ENV fire — no -p flag (simulating a
     // careless operator). The committed contract: the controller re-execs under

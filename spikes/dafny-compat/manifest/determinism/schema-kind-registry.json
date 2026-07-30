@@ -1,0 +1,4 @@
+{
+  "_comment": "PR1 / INV-002 (RS-020/AP-022) — the committed schema report-KIND registry the equal-derivation kind-set-equality is checked against. A set-equality against a hand-written in-test Dictionary cannot detect a registry that silently shrank; this committed file is the single source. It MUST stay set-equal to the report `kind` enum in spikes/dafny-compat/schema/evidence-schema.json (Pr1Inv002ComparisonTests cross-checks that).",
+  "kinds": ["run-report", "route-report", "control-report"]
+}

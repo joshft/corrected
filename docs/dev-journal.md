@@ -177,3 +177,60 @@ residual can only produce a false-FAIL, never a forged READY). `P1.evidence` is 
 mechanically pinned to a specific string (the kernel checks non-null + probe agreement,
 not the string content), so it names the registered gate test that re-derives P1's
 discharge, per INV-002 ("test-id / gate / manifest path; never prose").
+
+## 2026-07-29 — P3 Determinism Attestation (PR1, Group A)
+
+PR1 is the first of three PRs that turn the Phase-0.0 determinism check (Inv010, "one
+spike run's evidence projects deterministically") into a tamper-evident, CI-attested
+**capability baseline** the readiness gate will eventually carry as a real fail-closed
+**P3** probe (replacing the `validator-deferred` stub). PR1 is spike-side and **signs
+nothing**: it builds the determinism status model, the serial CI lane, and a
+measurement-campaign scaffold, and it flips no readiness precondition — P3 stays `false`,
+readiness stays BLOCKED. PR2 adds the frozen `Corrected.Provenance` (cosign/DSSE)
+mechanism; PR3 activates P3 on evidence only.
+
+The core lives in `contracts/SpikeContracts/DeterminismStatusModel.cs` (the total
+classifier, `DeterminismComparison`, the campaign ancestry check via real
+`git merge-base --is-ancestor`, the receipt privacy scan, and `RunReceiptCodec`) and
+`DeterminismReceiptWriter.cs` (`RunCli`, which emits a `RunReceipt` fail-closed). The
+shipped receipt-status mapping in `Build` is single-sourced through
+`DeterminismClassifier.Classify` (via `MapComparisonToReceiptStatus`) so the AP-022
+exhaustiveness/totality tests constrain the *shipped* path, not a dead surrogate
+(mini-audit MA-CC-001). `Compare` runs six ordered checks over committed registries —
+role uniqueness, role set-equality, kind set-equality, role→kind totality, the
+projection-policy pin (both the projection **impl** digest and `Sha256File` of the
+evidence schema), then projection equality — so `comparison_status = equal` only when
+every one of the five roles projects identically across the two runs. The lane is an
+**extracted** script (`scripts/determinism-lane.sh`) the CI job runs verbatim
+(AP-020/PMB-001, never inline YAML a grep can't exercise): it drives two nested
+`run-spike.sh` runs into `<root>/r1` and `<root>/r2`, then reuses the already-built
+aggregator host (`SpikeAggregator --emit-determinism-receipt`, no new project — MA-UC-4)
+to emit the receipt and exit non-zero on `different` (INV-003).
+
+Two conventions dominate. **CI separation:** the heavyweight lane tests carry
+`[Trait("Category","determinism-lane")]`; the 4-vCPU general gate opts into
+`run-spike.sh --exclude-category determinism-lane` (an *argument*, because the hardened
+`env -i` invocation strips env vars), and a dedicated ≥8-core lane runs them for real.
+The QA-001→013 saga hardened this to an *execution* proof: `build_inner_args` and
+`build_suite_cmd` single-source the outer→inner argv forward and the actual `dotnet test`
+command, and a `--print-inner-filter` dry-run test is bound to those same constructors —
+so a mutation of the real line reds the test (the PMB-001/AP-020 parallel-path trap).
+**In-tree run root (TB-004 / PRH-005):** the `/cverify` BLOCKING-1 fix. `SpikeRunRootRel`
+is contractually SPIKE-relative (`Directory.Build.props`), so an out-of-tree run root
+(the CI lane's original `$RUNNER_TEMP`) made MSBuild write build outputs in-tree while the
+DD-008 completeness check resolved the true absolute root — a silent INCOMPLETE — and
+would have leaked an absolute host path into the recorded build argv. `run-spike.sh`
+(`require_in_tree_run_root`, both `RUN_DIR_REL` sites) and `determinism-lane.sh` now refuse
+an out-of-tree `--run-root` fail-closed before any build; the CI lane uses an in-tree
+`out/determinism-lane`.
+
+A few decisions aren't obvious from the code. The measurement-campaign `run_id`s are
+deliberate `PENDING-CI-NETWORK-ASSOCIATION` placeholders (spec-sanctioned RS-016
+CI-network deferral, QA-003) — real floor-capable-lane run_ids are a **hard pre-landing**
+requirement, not deferrable to PR2. BLOCKING-1 was fixed as **Option A** (in-tree +
+fail-closed) rather than "make out-of-tree work," because an out-of-tree root fundamentally
+violates the SPIKE-relative / PRH-005 argv contract. And a subtle test bug surfaced only
+under the *full* from-clean suite: inside a controller run `TMPDIR` is redirected under the
+in-tree run root, so `Path.GetTempPath()` returned an in-tree path and the lane legitimately
+accepted it, masking the defect — the boundary test now anchors at a TMPDIR-independent
+`/tmp` with a self-check that it is genuinely out-of-tree.

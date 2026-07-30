@@ -24,109 +24,47 @@ public class Inv010DeterminismTests
         Assert.Contains("loaded_assembly_identities", class2);
     }
 
-    // Tests INV-010 [integration]: run-twice-and-diff — two consecutive harness
-    // runs on the same tree produce IDENTICAL deterministic projections (class 2
-    // of INV-009's committed partition); binding and volatile fields are
-    // excluded by construction. An observed flap is a blocking finding, never a
-    // retry-until-green (RS-020).
-    [Fact]
-    public void RunTwice_DeterministicProjectionsIdentical()
-    {
-        // Resource floor (INV-010): this test spawns TWO full nested controller
-        // runs (each a complete provision+restore+build+verify) and asserts their
-        // deterministic projections are bit-identical. On a resource-constrained
-        // host the two nested runs compete with the parallel suite for CPU, and
-        // Z3 verification / sentinel recording can flap (a route-level projection
-        // difference) — a FALSE nondeterminism signal, since the canonical single
-        // run is always deterministic and COMPATIBLE here. Skip below the floor;
-        // the determinism guarantee still runs locally and on adequately-resourced
-        // CI. (Raise the floor if a runner at/above it still flaps.)
-        // xUnit 2.9 has no dynamic Assert.Skip; a guarded early return (with a
-        // prominent logged reason) is the dependency-free equivalent. The check
-        // still runs on adequately-resourced hosts (local, >= coreFloor-CPU CI).
-        // GitHub public-repo standard runners are 4-vCPU, and even 4 cores can't
-        // run the two parallel nested pipelines without flap — so the floor sits
-        // above that (needs a genuinely multi-core host; local dev is 24). Tighten
-        // toward the true threshold once a mid-range host is measured.
-        const int coreFloor = 8;
-        if (Environment.ProcessorCount < coreFloor)
-        {
-            Console.Error.WriteLine(
-                $"INV-010 SKIPPED (resource floor): the cross-run determinism check runs TWO nested full-pipeline " +
-                $"controller runs and needs >= {coreFloor} CPUs to do so without contention-induced flap; host reports " +
-                $"{Environment.ProcessorCount}. The canonical single run remains COMPATIBLE here (see its run-report); " +
-                "raise coreFloor if a runner at/above it still flaps.");
-            return;
-        }
+    // The run-twice-and-diff [integration] determinism guarantee (INV-010) now lives
+    // in PRODUCTION — the extracted serial lane scripts/determinism-lane.sh drives the
+    // two nested runs and emits the per-run/per-role receipt — exercised by
+    // Pr1DeterminismLaneTests (which binds all 5 roles across the two runs). The old
+    // in-test RunTwice_DeterministicProjectionsIdentical (with its silent
+    // resource-floor early-return) is therefore REMOVED; the lane test carries a LOUD
+    // TYPED floor skip instead. The cross-run-consumer completeness guarantee is
+    // preserved and re-pointed below.
 
-        using var scope = SpikePaths.TransientScratch("inv010-run-twice");
-        var scratch = scope.Root;
-        var root1 = Path.Combine(scratch, "r1");
-        var root2 = Path.Combine(scratch, "r2");
-        var first = Path.Combine(scratch, "run1.json");
-        var second = Path.Combine(scratch, "run2.json");
-
-        var r1 = Launch.Script("scripts/run-spike.sh", null, "--run-root", root1, "--out", first);
-        Assert.True(r1.ExitCode == 0, $"first run failed: {r1.StdErr}");
-        var r2 = Launch.Script("scripts/run-spike.sh", null, "--run-root", root2, "--out", second);
-        Assert.True(r2.ExitCode == 0, $"second run failed: {r2.StdErr}");
-
-        var schemaPath = SpikePaths.P("schema", "evidence-schema.json");
-        var p1 = EvidenceSchema.DeterministicProjection(File.ReadAllText(first), schemaPath);
-        var p2 = EvidenceSchema.DeterministicProjection(File.ReadAllText(second), schemaPath);
-        Assert.True(p1 == p2,
-            "deterministic projections differ between consecutive runs — a flap is a BLOCKING finding to investigate; " +
-            "moving a flapping field to volatile requires a spec change (INV-010/RS-005)");
-
-        // MA-ED-1: the class-2 equality domain covers EVERY schema-declared
-        // report kind, not just the run report — ROUTE reports carry most
-        // class-2 fields (node_table, canary observations, closure/target sets,
-        // solver outcome enums, sentinel ledger outcomes) and CONTROL reports
-        // carry the identity cells. Each kind's projection must be identical
-        // across the two consecutive runs.
-        foreach (var rel in new[] { "route-a.json", "route-b.json", "control-a.json", "control-b.json" })
-        {
-            var f1 = Path.Combine(root1, "reports", rel);
-            var f2 = Path.Combine(root2, "reports", rel);
-            Assert.True(File.Exists(f1), $"first run emitted no {rel} — every schema-declared kind needs a cross-run equality consumer (MA-ED-1)");
-            Assert.True(File.Exists(f2), $"second run emitted no {rel} (MA-ED-1)");
-            var q1 = EvidenceSchema.DeterministicProjection(File.ReadAllText(f1), schemaPath);
-            var q2 = EvidenceSchema.DeterministicProjection(File.ReadAllText(f2), schemaPath);
-            Assert.True(q1 == q2,
-                $"{rel}: deterministic projections differ between consecutive runs — a route/control-level flap is a BLOCKING finding (INV-010/RS-005/MA-ED-1)");
-        }
-
-        scope.Commit(); // both runs passed — reclaim ~1.2GB of run roots
-    }
-
-    // Tests INV-010/MA-ED-1 [unit] (class fix): EVERY report kind the schema
-    // declares has a cross-run projection-equality consumer — this committed
-    // kind->consumer map is anchored to the schema digest, so declaring a new
-    // kind without wiring an equality consumer fails here.
+    // Tests INV-010/INV-002/MA-ED-1 [unit] (class fix, re-pointed to the PR1 lane):
+    // EVERY schema-declared report KIND has a CROSS-RUN projection-equality consumer.
+    // The committed role registry maps each ROLE to its kind; every declared kind must
+    // be covered by a role, and the determinism-lane consumer (Pr1DeterminismLaneTests)
+    // must reference EVERY role AND bind BOTH runs' evidence + projection — so
+    // declaring a new kind, dropping a role's cross-run projection check, or deleting
+    // the consumer's two-run binding fails here. Anchored to the schema digest
+    // (RS-005 — derived against THIS schema; registries are committed, never in-test
+    // literals — RS-020).
     [Fact]
     public void EveryDeclaredReportKind_HasCrossRunEqualityConsumer()
     {
         Assert.Equal(SpecConstants.EvidenceSchemaSha256,
-            SpikePaths.Sha256File(SpikePaths.P("schema", "evidence-schema.json"))); // map written against THIS schema
+            SpikePaths.Sha256File(SpikePaths.P("schema", "evidence-schema.json"))); // derived against THIS schema
         using var doc = SpikePaths.Json(SpikePaths.P("schema", "evidence-schema.json"));
         var declaredKinds = doc.RootElement.GetProperty("report_schema").GetProperty("properties")
             .GetProperty("kind").GetProperty("enum").EnumerateArray().Select(k => k.GetString()!).ToHashSet();
 
-        // Committed map: report kind -> the artifacts RunTwice projects for it.
-        var consumers = new Dictionary<string, string[]>
-        {
-            ["run-report"] = new[] { "run1.json", "run2.json" },
-            ["route-report"] = new[] { "route-a.json", "route-b.json" },
-            ["control-report"] = new[] { "control-a.json", "control-b.json" },
-        };
-        Assert.Equal(declaredKinds, consumers.Keys.ToHashSet());
+        // Every declared KIND is covered by a ROLE in the committed role registry (a
+        // kind with no role would have no cross-run consumer).
+        var roleToKind = DeterminismRegistries.RoleToKind(SpikePaths.P("manifest", "determinism", "role-registry.json"));
+        Assert.Equal(declaredKinds, roleToKind.Values.ToHashSet());
 
-        // The consumer names must actually appear in this test class's source —
-        // a deleted projection loop cannot leave the map green.
-        var source = File.ReadAllText(SpikePaths.P("tests", "SpikeTests", "Inv010DeterminismTests.cs"));
-        foreach (var artifact in consumers.Values.SelectMany(v => v))
+        // The cross-run consumer (the determinism-lane test) references EVERY role,
+        // binds BOTH runs' evidence, and computes the deterministic projection.
+        var consumer = File.ReadAllText(SpikePaths.P("tests", "SpikeTests", "Pr1DeterminismLaneTests.cs"));
+        foreach (var role in roleToKind.Keys)
         {
-            Assert.Contains(artifact, source);
+            Assert.Contains($"\"{role}\"", consumer);
         }
+        Assert.Contains("Run1Evidence", consumer);
+        Assert.Contains("Run2Evidence", consumer);
+        Assert.Contains("DeterministicProjection", consumer);
     }
 }

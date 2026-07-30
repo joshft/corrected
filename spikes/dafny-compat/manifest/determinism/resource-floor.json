@@ -1,0 +1,9 @@
+{
+  "_comment": "PR1 / INV-004 — the SINGLE-SOURCED core-floor constant plus the predeclared, commit-anchored measurement-campaign plan header. The floor is defined HERE and NOWHERE ELSE (Pr1Inv004ResourceFloorTests single-source scan asserts the old hardcoded `const int coreFloor = 8` is gone from Inv010DeterminismTests.cs). plan_commit predates every retained campaign run (Pr1Inv004 asserts plan_commit is an ANCESTOR of each row's head_sha); plan_digest binds the committed plan parameters. The eligible run SEQUENCE is predefined (set-equality vs the authoritative GitHub run listing is CI-network scope, out of the from-clean subset). plan_commit 125aaf9 is the PR#10 merge (2026-07-27), committed BEFORE every retained head_sha in campaign-rows.json; every retained row head_sha is a real descendant commit of it (verified by `git merge-base --is-ancestor`). plan_digest = sha256 of the canonical plan-parameter line 'core_floor=8;plan_commit=125aaf9881d96ef0798ced92515783e32de1dee0;n=3;rule=first-N-attempt-1-runs-after-plan-commit-on-pinned-serial-lane'.",
+  "core_floor": 8,
+  "plan_commit": "125aaf9881d96ef0798ced92515783e32de1dee0",
+  "plan_digest": "50e5326919aeaabfabe896cf924b4709bcb62c5b05904ebe1b3bfdc87b6e9214",
+  "eligible_run_sequence_rule": "the first N qualifying attempt-1 run ids after plan_commit on the pinned serial-lane runner class (CI-network set-equality — RS-016 — is out of the from-clean subset)",
+  "n": 3,
+  "rows_file": "manifest/determinism/campaign-rows.json"
+}

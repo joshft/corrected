@@ -1,0 +1,26 @@
+{
+  "_comment": "PR1 / INV-004 — the RETAINED measurement-campaign rows: REAL floor-capable serial-lane runs (QA-003 substantiation, 2026-07-29), replacing the earlier PENDING-CI-NETWORK-ASSOCIATION placeholders. Each row records {run_id, run_attempt, head_sha, plan_commit, plan_digest}. The three run_ids are REAL GitHub Actions runs of .github/workflows/p3-determinism-lane.yml on a floor-capable self-hosted runner (8 vCPU, Ubuntu 24.04, linux-x64) registered with the pinned ubuntu-24.04-8core label, all conclusion=success, all attempt-1, all at head_sha 05d4d85 (a real descendant of plan_commit 125aaf9), the two-nested-run controller reaching completed with comparison_status=equal. FROM-CLEAN assertions (Pr1Inv004ResourceFloorTests): every row.run_attempt==1, plan_commit is an ANCESTOR of row.head_sha (real `git merge-base --is-ancestor`), each row.plan_commit == the plan header's plan_commit, all rows retained (no cherry-picking). The run_id<->head_sha association is a live GitHub Actions API fact (CI-network scope, RS-016) — these run_ids are now REAL, no longer placeholders.",
+  "rows": [
+    {
+      "run_id": "30496625144",
+      "run_attempt": 1,
+      "head_sha": "05d4d85ac0bc6052618be122c5102588b7c4f52d",
+      "plan_commit": "125aaf9881d96ef0798ced92515783e32de1dee0",
+      "plan_digest": "50e5326919aeaabfabe896cf924b4709bcb62c5b05904ebe1b3bfdc87b6e9214"
+    },
+    {
+      "run_id": "30496917073",
+      "run_attempt": 1,
+      "head_sha": "05d4d85ac0bc6052618be122c5102588b7c4f52d",
+      "plan_commit": "125aaf9881d96ef0798ced92515783e32de1dee0",
+      "plan_digest": "50e5326919aeaabfabe896cf924b4709bcb62c5b05904ebe1b3bfdc87b6e9214"
+    },
+    {
+      "run_id": "30497128325",
+      "run_attempt": 1,
+      "head_sha": "05d4d85ac0bc6052618be122c5102588b7c4f52d",
+      "plan_commit": "125aaf9881d96ef0798ced92515783e32de1dee0",
+      "plan_digest": "50e5326919aeaabfabe896cf924b4709bcb62c5b05904ebe1b3bfdc87b6e9214"
+    }
+  ]
+}

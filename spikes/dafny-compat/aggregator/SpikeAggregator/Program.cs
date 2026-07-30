@@ -12,6 +12,21 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Corrected.Spike.Contracts;
 
+// PR1 (P3 determinism-attestation) — the extracted serial-lane script
+// (scripts/determinism-lane.sh) invokes THIS host with --emit-determinism-receipt
+// to compute the per-run/per-role comparison + emit the RunReceipt, reusing the
+// already-built aggregator so the spike's pinned project set is unchanged
+// (MiniAudit MA-UC-4). It is a self-contained mode: it never touches the normal
+// aggregation flow below.
+if (args.Length > 0 && args[0] == "--emit-determinism-receipt")
+{
+    return DeterminismReceiptWriter.RunCli(args.Skip(1).ToArray());
+}
+if (args.Length > 0 && args[0] == "--print-projection-impl-digest")
+{
+    return DeterminismReceiptWriter.PrintProjectionImplDigestCli(args.Skip(1).ToArray());
+}
+
 var manifestPath = "";
 var schemaPath = "";
 var registryPath = "";
