@@ -83,6 +83,28 @@ before any build, and `rm -d`s the just-created empty dir on refusal so nothing 
 (RLT-1/AUDIT-ARCH-1). `Pr1RunRootBoundaryTests` exercises the real scripts with an out-of-tree
 root in the general from-clean gate, asserting both the refusal and the no-orphan cleanup.
 
+### Sentinel invocation measure (route-b determinism fix)
+
+`deterministic.sentinel_ledger_outcomes.invocations_for_this_nonce` records **how many
+distinct sentinel probe-legs fired the real binary** for the run's nonce — **not** the raw
+ledger entry count. The P05 anti-spoof probe verifies against a recording z3 stub that dies
+mid-protocol by design; Boogie then restarts the "crashed" prover a **timing-dependent**
+number of times, and each restart appends another entry under that probe's single sub-nonce
+tag. The raw count therefore flapped (the P3 lane caught `route-b` at `2` vs `1`, flipping the
+route-b projection SHA → `comparison_status = different`). The exact restart count is
+prover-retry noise, not a compatibility claim — P05's own invariant is `delta ≥ 1`
+(count-insensitive). The receipt derives the field from `HarnessCore.DistinctInvokedNonceTagCount`
+— the count of **this run's own** stub tags (one per sentinel probe) that carry ≥1 entry —
+which collapses restarts to a structural count and is stable across timing. Scoping to the
+run's own tags is load-bearing: route-a and route-b **share one ledger under one nonce** in a
+run root, so an unscoped tag count would let a role borrow a sibling's invocation (route-b would
+read 2 = its own + route-a's, order-dependent). The **append-only ledger and its MA-RB-3 no-drop
+armor are untouched** — only
+the emit-time derivation changed; `decoy_invocations` and `invocations_for_foreign_nonces_counted`
+(the real spoof/contamination signals) remain exact counts. Covered by
+`Pr1SentinelInvocationDeterminismTests` (restart-multiplicity invariance, distinct-leg scaling,
+foreign-nonce exclusion).
+
 ## How to run
 
 ```bash
