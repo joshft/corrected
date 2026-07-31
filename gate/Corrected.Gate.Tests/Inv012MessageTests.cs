@@ -12,6 +12,7 @@ namespace Corrected.Gate.Tests;
 /// INV-012: actionable, host-clean, valence-correct blocker/status message, visible
 /// on the GREEN path (stdout of the documented command). unit + integration.
 /// </summary>
+[Collection("Subprocess")]
 public class Inv012MessageTests
 {
     private static ReadinessVerdict PassVerdict()

@@ -18,6 +18,7 @@ namespace Corrected.Gate.Tests;
 /// allowlist, and build-extension/build-asset presence policy are all exercised.
 /// [integration] — several tests really shell out to <c>dotnet build</c>; timings prove it.
 /// </summary>
+[Collection("Subprocess")]
 public class Inv011ProductionSurfaceTests
 {
     private static readonly string[] NoDefines = Array.Empty<string>();

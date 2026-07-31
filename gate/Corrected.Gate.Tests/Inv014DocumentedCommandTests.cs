@@ -19,6 +19,7 @@ namespace Corrected.Gate.Tests;
 /// reconciling EXT7-02 (script-level wrapper self-tests) with INV-017 ("no in-suite
 /// xUnit test ever executes <GATE-SCRIPT>"). The doc-home tests COMPARE BYTES only.
 /// </summary>
+[Collection("Subprocess")]
 public class Inv014DocumentedCommandTests
 {
     private static (int Code, string Stdout, string Stderr) RunBash(string script, string args, IDictionary<string, string>? env = null)
