@@ -1,0 +1,127 @@
+# P3 determinism-attestation — the TWO-JOB signing workflow (INV-007/008/009/024).
+#
+# Job split (INV-007): an UNPRIVILEGED `producer` runs the determinism lane and
+# emits the RunReceipt + subject manifest as SAME-RUN @actions/artifact outputs
+# (the runtime-token transfer, RS-032/EA-010 — never a cross-run REST download),
+# and a MINIMAL `signer` (needs: producer) re-checks that hand-off and signs it.
+# The producer holds NO OIDC privilege; the signing token lives ONLY in the signer.
+#
+# There is deliberately NO workflow-level (column-0) permissions block: each job
+# declares its OWN least-privilege set, so the producer can never INHERIT a hoisted
+# grant (the inheritance hole the audit caught — a job that declares no own block
+# inherits the top-level one, which would silently hand the producer OIDC write).
+#
+# Third-party Actions are pinned by 40-hex commit SHA (never a floating @vN tag).
+# Signs ONLY a protected-main push (+ manual dispatch); never a PR-triggered event.
+name: p3-determinism-sign
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  producer:
+    name: determinism producer (unprivileged; emits the receipt hand-off)
+    runs-on: ubuntu-24.04-8core
+    timeout-minutes: 90
+    # Least privilege: read-only. NO OIDC token here — the signer owns signing.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact trigger commit (full history; creds NOT persisted)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install the pinned .NET SDK to $HOME/.dotnet (spike global.json)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --jsonfile spikes/dafny-compat/global.json --install-dir "$HOME/.dotnet"
+
+      - name: Produce the determinism RunReceipt (extracted lane script, verbatim)
+        env:
+          DETERMINISM_OS_LABEL: ubuntu-24.04
+        run: |
+          set -o pipefail
+          rm -rf spikes/dafny-compat/out
+          DETERMINISM_RESOLVED_SDK="$("$HOME/.dotnet/dotnet" --version)"
+          export DETERMINISM_RESOLVED_SDK
+          ( cd spikes/dafny-compat \
+            && env -i HOME="$HOME" DETERMINISM_OS_LABEL="$DETERMINISM_OS_LABEL" DETERMINISM_RESOLVED_SDK="$DETERMINISM_RESOLVED_SDK" \
+               bash -p scripts/determinism-lane.sh --run-root out/determinism-lane --dotnet-root "$HOME/.dotnet" )
+
+      - name: Assemble the same-run signer hand-off (RunReceipt + declared digest + subject manifest)
+        run: |
+          set -o pipefail
+          mkdir -p handoff
+          # The versioned determinism-subject manifest whose digest is bound into the
+          # signed receipt (INV-006/018). Emitted deterministically by the producer.
+          cat > handoff/determinism-subject-manifest.json <<'JSON'
+          {"determinism_subject_manifest":"v1","policy_version":"v1","roles":["run","route-a","route-b","control-a","control-b"]}
+          JSON
+          manifest_digest="$(sha256sum handoff/determinism-subject-manifest.json | cut -d' ' -f1)"
+          # Stamp the CI-context binding fields the signer re-validates (INV-007):
+          # attested_commit = the pinned trigger SHA; run_id/run_attempt from THIS run.
+          jq -n \
+            --arg schema "corrected/determinism-runreceipt@v1" \
+            --arg commit "${{ github.sha }}" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg attempt "${{ github.run_attempt }}" \
+            --arg manifest_digest "$manifest_digest" \
+            --slurpfile lane spikes/dafny-compat/out/determinism-lane/receipts/determinism-receipt.json \
+            '{schema_version:$schema, attested_commit:$commit, run_id:$run_id, run_attempt:$attempt, producing_job_result:"success", execution_status:"completed", comparison_status:"equal", subject_manifest_digest:$manifest_digest, policy_version:"v1", lane_receipt:$lane[0]}' \
+            > handoff/determinism-receipt.json
+          sha256sum handoff/determinism-receipt.json | cut -d' ' -f1 > handoff/receipt.sha256
+
+      - name: Upload the same-run hand-off artifact (runtime-token transfer)
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: determinism-handoff
+          path: handoff
+
+  signer:
+    name: minimal signer (re-checks the hand-off, then signs it)
+    needs: producer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # EXACTLY the two-permission minimal set — OIDC write + repo read. The read
+    # scope is what lets the signer inspect the commit; nothing broader is granted
+    # (a cross-run REST hand-off would need a further read grant — forbidden here).
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout the pinned trigger commit (hardened; creds NOT persisted)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download the SAME-RUN producer hand-off (no cross-run download)
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: determinism-handoff
+          path: handoff
+
+      - name: Provision the pinned cosign binary (digest-validated bootstrap)
+        run: |
+          bash gate/tools/provision-cosign.sh linux-x64 "$RUNNER_TEMP/cosign"
+
+      - name: Re-check the producer hand-off and sign (frozen surface, verbatim)
+        env:
+          COSIGN_BIN: ${{ runner.temp }}/cosign
+        run: |
+          bash gate/tools/sign-determinism.sh \
+            --artifacts-dir handoff \
+            --manifest handoff/determinism-subject-manifest.json \
+            --out handoff/determinism.sigstore.json
+
+      - name: Publish the signed determinism bundle
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: determinism-bundle
+          path: handoff/determinism.sigstore.json
