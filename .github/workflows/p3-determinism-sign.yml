@@ -89,22 +89,21 @@ jobs:
             '{run_id:$run_id, run_attempt:$run_attempt, producing_job_result:"success"}' \
             > handoff/ci-context.json
 
-      # DEFERRED real-run wiring (T4 boundary): the Corrected in-toto Statement builder
-      # (DeterminismAttestation.SerializeStatementJson) is C#, so writing
-      # handoff/determinism-statement.json needs a runnable emitter HOST (bash -> Corrected).
-      # No gate project is an Exe today and this slice must NOT add/convert one, so the
-      # runnable host is a separate REAL-RUN task. This seam is the wiring point; until the
-      # host lands it does NOT produce determinism-statement.json, and the signer's class-7
-      # re-check (statement ABSENT => REFUSE, before any cosign) fails CLOSED — a
-      # missing/wrong Statement can never be signed. This is the only safe interim state.
-      - name: (DEFERRED real-run wiring) emit the Corrected-built determinism-statement.json
+      # Emit the Corrected-built determinism-statement.json through the runnable test-host
+      # emitter (DeterminismStatementEmitter, driven by the EmitDeterminismStatement [Fact]).
+      # The step env injects ABSOLUTE, space-free hand-off paths, so the fact runs in CI
+      # producer mode and writes the Statement through the ONE canonical byte-source
+      # (DeterminismAttestation.SerializeStatementJson) INTO the hand-off the upload step
+      # bundles and the signer re-checks (class-7) and signs. The CONTAINS-form filter (`~`)
+      # binds the exact host fact; an exact `=` form would match zero tests (a silent no-op).
+      - name: Emit the Corrected-built determinism-statement.json (runnable host, CI mode)
+        env:
+          EMIT_STATEMENT_RECEIPT: ${{github.workspace}}/handoff/determinism-receipt.json
+          EMIT_STATEMENT_OUT: ${{github.workspace}}/handoff/determinism-statement.json
         run: |
           set -o pipefail
-          echo "[producer] DEFERRED: handoff/determinism-statement.json is written by the Corrected"
-          echo "[producer] builder (DeterminismAttestation.SerializeStatementJson) once the runnable"
-          echo "[producer] emitter host is wired. Until then the signer fails closed on the absent"
-          echo "[producer] determinism-statement.json (INV-007 class-7) — a missing/wrong Statement"
-          echo "[producer] can never be signed."
+          export DOTNET_ROOT=$HOME/.dotnet; export PATH=$HOME/.dotnet:$PATH
+          dotnet test gate/Corrected.Gate.slnx --filter 'FullyQualifiedName~EmitDeterminismStatement'
 
       - name: Upload the same-run hand-off artifact (runtime-token transfer)
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882

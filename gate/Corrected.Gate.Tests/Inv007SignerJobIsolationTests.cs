@@ -369,9 +369,12 @@ public class Inv007SignerJobIsolationTests
 
     // ==================================================================================
     // The reconciled hand-off carries ci-context.json + the Corrected-built statement.
-    // STATIC SCAN ONLY (does NOT require the producer step to RUN — the runnable emitter
-    // HOST is a deferred REAL-RUN task; the signer's class-7 fail-closed check is the real
-    // guard). These encode that the producer's hand-off now includes the two new artifacts.
+    // STATIC SCAN ONLY (this class does NOT run the producer step). The runnable emitter
+    // HOST now lands (the EmitDeterminismStatement [Fact], driven by dotnet test --filter);
+    // its full end-state wiring — a real emit step binding EMIT_STATEMENT_OUT before
+    // upload-artifact, deferred placeholder deleted — is asserted by
+    // DeterminismStatementEmitterWorkflowWiringTests. These cells only encode that the
+    // producer's hand-off names the two new artifacts.
     // ==================================================================================
 
     // Tests INV-007 [integration] (reconciled hand-off): the producer emits ci-context.json — the
@@ -384,11 +387,12 @@ public class Inv007SignerJobIsolationTests
         Assert.Contains("ci-context.json", ReadWorkflow());
     }
 
-    // Tests INV-007 / INV-006 [integration] (reconciled hand-off): the producer emits the
+    // Tests INV-007 / INV-006 [integration] (reconciled hand-off): the producer hand-off NAMES the
     // Corrected-built determinism-statement.json (the signer signs it; it NEVER builds its own).
-    // RED now (the current producer emits only the receipt + declared digest + manifest); GREEN
-    // emits the Corrected-built Statement (its runnable emitter HOST may be a deferred-labeled step
-    // — this scan asserts the artifact is part of the hand-off, not that the step executes live).
+    // The producer now REALLY emits it through the runnable host (EmitDeterminismStatement) — the
+    // deferred echo is gone. This isolation cell only asserts the artifact is part of the hand-off;
+    // the real emit-step wiring (dotnet test --filter, EMIT_STATEMENT_OUT before upload, no deferred
+    // marker) is asserted by DeterminismStatementEmitterWorkflowWiringTests.
     [Fact]
     public void Producer_handoff_emits_the_corrected_built_determinism_statement_json()
     {
