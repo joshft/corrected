@@ -27,5 +27,9 @@
   <ItemGroup>
     <ProjectReference Include="../Corrected.Gate.Kernel/Corrected.Gate.Kernel.csproj" />
     <ProjectReference Include="../Corrected.Gate.Lint/Corrected.Gate.Lint.csproj" />
+    <!-- INV-022-legal (the referrer is gate/-prefixed): the DeterminismVerifier reconstructs
+         the in-toto Statement + parses the RunReceipt from the non-shipped Corrected.Provenance
+         substrate (SerializeStatementJson / RunReceipt / DsseEnvelope). -->
+    <ProjectReference Include="../Corrected.Provenance/Corrected.Provenance.csproj" />
   </ItemGroup>
 </Project>

@@ -36,6 +36,9 @@
       },
       "corrected.gate.lint": {
         "type": "Project"
+      },
+      "corrected.provenance": {
+        "type": "Project"
       }
     }
   }

@@ -37,6 +37,15 @@ fi
 DEST="${2:-${HOME}/.cache/cosign/${VERSION}/${ASSET}}"
 mkdir -p "$(dirname "${DEST}")"
 
+# Cache short-circuit (RS-014 fast repeat runs): if the pinned asset is already present in the
+# cache AND its sha256 matches the reviewed hard-coded digest, skip the network fetch. Integrity
+# is still established SOLELY by the sha256 comparison — never a self-check with the signing tool.
+if [ -f "${DEST}" ] && printf '%s  %s\n' "${EXPECTED_SHA}" "${DEST}" | sha256sum --check --status; then
+  chmod +x "${DEST}"
+  echo "[provision-cosign] OK (cached): ${ASSET} pinned ${VERSION} integrity confirmed via sha256sum"
+  exit 0
+fi
+
 # Fetch the exact pinned asset from the authenticated release host.
 curl -fsSL -o "${DEST}" "${URL}"
 
@@ -44,5 +53,10 @@ curl -fsSL -o "${DEST}" "${URL}"
 # reviewed hard-coded digest. This hash comparison is the ONLY trust anchor for the
 # binary — no signature self-check of the tool against itself.
 printf '%s  %s\n' "${EXPECTED_SHA}" "${DEST}" | sha256sum --check --status
+
+# Make the provisioned binary runnable — ONLY after the sha256 integrity check confirmed the
+# digest. Never make an unverified asset executable; integrity precedes runnability. Without this
+# the curl -o'd asset has no execute bit and a real cosign invoke hits "Permission denied".
+chmod +x "${DEST}"
 
 echo "[provision-cosign] OK: ${ASSET} pinned ${VERSION} integrity confirmed via sha256sum"

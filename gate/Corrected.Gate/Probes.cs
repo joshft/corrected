@@ -22,6 +22,12 @@ public static class ProbeReasons
     public const string ValidatorDeferred = "validator-deferred";
     public const string EvidenceSchemaMismatch = "evidence-schema-mismatch";
     public const string EvidenceSchemaNewerThanPinned = "evidence-schema-newer-than-pinned; bump the gate pin";
+
+    /// <summary>
+    /// P3 zero-state (INV-010/012 RS-035): the committed determinism-attestation pointer does not
+    /// exist yet (pre-PR3). Rendered distinctly but classified fail-closed — P3 stays false.
+    /// </summary>
+    public const string P3NotYetActivated = "p3-not-yet-activated";
 }
 
 /// <summary>
@@ -517,13 +523,52 @@ public sealed class P2Probe : IEvidenceProbe
         => ProbeResult.TryCreate(false, ProbeReasons.ValidatorDeferred, ReferenceResolution.Resolved)!;
 }
 
-/// <summary>P3 probe — fail-closed validator-deferred unconditionally (INV-010).</summary>
+/// <summary>
+/// P3 probe — the REAL fail-closed determinism-attestation verifier (INV-010/012, RS-025). It
+/// resolves the pinned durable pointer <see cref="ProbeOrchestrator.P3AttestationPath"/> under
+/// <c>context.RepoRoot</c>: an ABSENT pointer is the expected pre-PR3 zero-state
+/// (<c>p3-not-yet-activated</c>, satisfied:false); a PRESENT pointer is routed into the verifier's
+/// parse/verify path — a malformed pointer fails closed with a <c>malformed-*</c> reason. The
+/// production pointer is ABSENT in the repo, so the real gate keeps P3 false / readiness BLOCKED.
+/// </summary>
 public sealed class P3Probe : IEvidenceProbe
 {
     public PreconditionId Id => PreconditionId.P3;
 
     public ProbeResult Evaluate(GateContext context)
-        => ProbeResult.TryCreate(false, ProbeReasons.ValidatorDeferred, ReferenceResolution.Resolved)!;
+    {
+        // Resolve the pinned pointer under the injected repo root (never the dotnet test cwd).
+        string pointer = Path.Combine(
+            context.RepoRoot, Path.Combine(ProbeOrchestrator.P3AttestationPath.Split('/')));
+
+        // ABSENT pointer = the expected pre-PR3 zero-state. Fail closed (satisfied:false) with the
+        // distinct p3-not-yet-activated reason — NOT the old validator-deferred stub.
+        if (!File.Exists(pointer))
+        {
+            return ProbeResult.TryCreate(
+                false, ProbeReasons.P3NotYetActivated, ReferenceResolution.Resolved)!;
+        }
+
+        // PRESENT pointer -> route into the verifier's parse path. A malformed pointer cannot be
+        // resolved into a receipt/bundle graph -> fail closed with a malformed-* reason (mapped
+        // through the verifier boundary so the reason is a typed carrier token, not a free string).
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllBytes(pointer));
+        }
+        catch (Exception)
+        {
+            return DeterminismVerifier.ToProbeResult(new DeterminismVerifyResult(
+                DeterminismVerifyOutcome.Rejected, DeterminismVerifyReason.MalformedBundle));
+        }
+
+        // T3b: a present-and-VALID pointer parses to the committed {receipt, bundle} paths, which
+        // are handed to DeterminismVerifier.Verify (real cosign verify + decoded-payload
+        // byte-equality + cert-SHA cross-check) and bridged via ToProbeResult. In T3a this branch
+        // is unreached by the gate (the production pointer is absent) and stays fail-closed.
+        return DeterminismVerifier.ToProbeResult(new DeterminismVerifyResult(
+            DeterminismVerifyOutcome.Rejected, DeterminismVerifyReason.P3NotYetActivated));
+    }
 }
 
 /// <summary>

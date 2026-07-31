@@ -1,0 +1,10 @@
+{
+  "_note": "Pinned Sigstore trusted-root digest (P3 determinism-attestation INV-016/INV-017 / EA-008). The offline verify anchors to a FROZEN, versioned, immutable trusted_root.json via cosign --trusted-root; this pin is the reviewed hard-coded sha256 of that exact root file. COMMIT-vs-FETCH decision (GREEN): the frozen root BYTES are committed at gate/tools/trusted_root.json (INV-016 versioned immutable) so the gate stays offline for the root and is byte-reproducible; only the cosign binary needs network (provision-cosign.sh). The gate verifies the committed root's sha256 == this pin before exporting TRUSTED_ROOT. Obtained via `cosign initialize` (TUF) -> ~/.sigstore/root/tuf-repo-cdn.sigstore.dev/targets/trusted_root.json, 6787 bytes.",
+  "version": "v1",
+  "trustedRoot": {
+    "fileName": "trusted_root.json",
+    "sha256": "6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66",
+    "sizeBytes": 6787,
+    "source": "cosign initialize (TUF sigstore.dev), targets/trusted_root.json"
+  }
+}
