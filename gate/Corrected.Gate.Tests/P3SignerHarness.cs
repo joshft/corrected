@@ -6,59 +6,74 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Corrected.Provenance.Determinism;
 using Xunit;
 
 namespace Corrected.Gate.Tests;
 
 /// <summary>
-/// Shared test harness for the P3 determinism-attestation T4 SIGNER slice (INV-007/008/009/024).
-/// This is test infrastructure (real helper logic — NOT a production stub, so no STUB:TDD marker),
-/// mirroring the fake-cosign subprocess pattern in <see cref="CosignSubprocessSeamTests"/>.
+/// Shared test harness for the P3 determinism-attestation T4 SIGNER slice (INV-007/008/009/024)
+/// AFTER the Statement-builder reconciliation. This is test infrastructure (real helper logic —
+/// NOT a production stub, so no STUB:TDD marker), mirroring the fake-cosign subprocess pattern in
+/// <see cref="CosignSubprocessSeamTests"/>.
 ///
 /// It defines — and therefore PINS, as the RED-phase contract GREEN must implement — the operator
-/// interface of the not-yet-existent extracted signer script
-/// <c>gate/tools/sign-determinism.sh</c>:
+/// interface of the extracted signer script <c>gate/tools/sign-determinism.sh</c>:
 ///
 ///   DOCUMENTED INVOCATION (run from the repo root, argv[0] is the RELATIVE path, AP-020):
 ///     GITHUB_SHA=&lt;40hex&gt; GITHUB_RUN_ID=&lt;digits&gt; GITHUB_RUN_ATTEMPT=1 COSIGN_BIN=&lt;abs cosign&gt; \
 ///       bash gate/tools/sign-determinism.sh \
 ///         --artifacts-dir &lt;DIR&gt; --manifest &lt;MANIFEST_FILE&gt; --out &lt;BUNDLE_OUT&gt;
 ///
-///   PRODUCER HAND-OFF (&lt;DIR&gt;, same-run @actions/artifact contents — RS-032/EA-010):
-///     * determinism-receipt.json — the RunReceipt / in-toto subject-statement input, string fields:
-///         schema_version, attested_commit (40hex), run_id, run_attempt, producing_job_result,
-///         execution_status ("completed"), comparison_status ("equal"),
-///         subject_manifest_digest (lowercase 64-hex SHA-256 of the manifest file bytes).
-///     * receipt.sha256 — the producer-DECLARED digest (bare lowercase 64-hex) of
-///         determinism-receipt.json; the signer recomputes SHA-256 of the receipt bytes and
-///         REFUSES on mismatch (tamper re-check).
+///   PRODUCER HAND-OFF (&lt;DIR&gt;, same-run @actions/artifact contents — RS-032/EA-010). The SIGNED
+///   SUBJECT is now the REAL determinism RunReceipt, and the Statement is CORRECTED-BUILT (never
+///   hand-rolled by the signer):
+///     * determinism-receipt.json   — the determinism RunReceipt (the SIGNED SUBJECT: a REAL
+///         RunReceipt — execution_status / comparison_status / attested_commit /
+///         subject_manifest_digest / policy_version / platform / run1_evidence / run2_evidence).
+///         The base bytes are the committed PR1 fixture; only the CI-binding fields (attested_commit)
+///         + the subject-manifest digest are re-homed to the trusted env + THIS run's manifest.
+///     * receipt.sha256             — the producer-DECLARED SHA-256 of the receipt bytes.
+///     * determinism-statement.json — the Corrected-built in-toto Statement =
+///         DeterminismAttestation.SerializeStatementJson(receiptBytes, RunReceipt.FromJson(bytes)).
+///         The HARNESS produces this (it is C#); the signer NEVER builds it and signs THIS file.
+///     * ci-context.json            — { run_id, run_attempt, producing_job_result:"success" }: the
+///         CI-run metadata that is NOT part of a RunReceipt (run_id / run_attempt / job result).
+///     * determinism-subject-manifest.json — the subject manifest passed via --manifest.
 ///
-///   RE-CHECK CONTRACT (INV-007): before ANY cosign call the signer REFUSES (non-zero exit,
-///   a line containing "REFUSE" on stderr, NO cosign invocation) when ANY of these disagree
-///   with the trusted source:
-///     digest        receipt.sha256 != actual SHA-256(determinism-receipt.json)
-///     schema        receipt.schema_version != the pinned RunReceipt schema id (ReceiptSchemaId)
-///     attested_commit  receipt.attested_commit != $GITHUB_SHA
-///     run_id           receipt.run_id != $GITHUB_RUN_ID
-///     producing-job    receipt.producing_job_result != "success"
-///     manifest         receipt.subject_manifest_digest != SHA-256(&lt;MANIFEST_FILE&gt;)
+///   RE-CHECK CONTRACT (INV-007): before ANY cosign call the signer REFUSES (non-zero exit, a line
+///   containing "REFUSE" on stderr, NO cosign invocation) when ANY of these disagree — each class
+///   INDEPENDENTLY, over a fixture in which exactly ONE field deviates (the declared digest is
+///   recomputed AFTER a receipt mutation so only the intended field is "wrong"):
+///     digest          receipt.sha256 != actual SHA-256(determinism-receipt.json)
+///     schema          the receipt does not parse as a determinism RunReceipt (a missing
+///                     subject_manifest_digest / policy_version fails the shape)
+///     attested_commit receipt.attested_commit != $GITHUB_SHA
+///     run_id          ci-context.run_id != $GITHUB_RUN_ID
+///     producing-job   ci-context.producing_job_result != "success"
+///     manifest        receipt.subject_manifest_digest != SHA-256(&lt;MANIFEST_FILE&gt;)
+///     statement       determinism-statement.json is ABSENT, OR its subject sha256 != actual
+///                     SHA-256(receipt bytes), OR its predicateType != the frozen URI, OR its
+///                     subject name != "determinism-run-receipt"  (the NEW class-7 binding check —
+///                     the signer FAILS CLOSED if the Corrected-built Statement is missing/tampered)
 ///
-///   ATTEMPT GUARD (INV-008): $GITHUB_RUN_ATTEMPT must be exactly "1" (and receipt.run_attempt
-///   must agree); a missing/empty/&gt;1 attempt REFUSES fail-closed with a message naming
-///   "re-runs never mint" / "push a new reviewed commit" (RS-036).
+///   ATTEMPT GUARD (INV-008): $GITHUB_RUN_ATTEMPT must be exactly "1" AND ci-context.run_attempt
+///   must agree; a missing/empty/&gt;1 attempt REFUSES fail-closed with the RS-036 wording
+///   ("re-runs never mint" / "push a new reviewed commit").
 ///
 ///   SIGNING SEAM (INV-009): on all checks passing the signer invokes the pinned cosign
-///     $COSIGN_BIN attest-blob --statement &lt;stmt&gt; --bundle &lt;out&gt; --new-bundle-format=true --yes &lt;blob&gt;
-///   The cosign executable is resolved from an injectable env override COSIGN_BIN (the test seam):
-///   when COSIGN_BIN is set the signer uses it VERBATIM (no per-RID digest check on the injected
-///   double — the digest pin governs the DEFAULT provisioned binary path only). The pinned
-///   cosign version/digest are single-sourced from gate/tools/cosign-pin.json (never a divergent
-///   in-script literal), and the --new-bundle-format=false contingency is NOT taken (DD-002).
+///     $COSIGN_BIN attest-blob --statement &lt;DIR&gt;/determinism-statement.json --bundle &lt;out&gt; \
+///        --new-bundle-format=true --yes &lt;DIR&gt;/determinism-receipt.json
+///   i.e. it signs the CORRECTED-BUILT Statement (subject name determinism-run-receipt), NOT a
+///   signer-synthesized one. COSIGN_BIN injects the fake double; the version/digest are single-
+///   sourced from gate/tools/cosign-pin.json; --new-bundle-format=false is NOT taken (DD-002).
 ///
-/// NOTE: everything here is the RED contract. The five subprocess test classes exercise it; the
-/// script does not exist yet, so every behavioral assertion is RED against its ABSENCE (each
-/// runner first asserts the script exists, so a RED failure reads as "missing script", never a
-/// vacuous 127 that masquerades as a refusal — AP-010).
+/// NOTE: everything here is the RED contract. Against the CURRENT placeholder signer (which reads
+/// run_id/run_attempt from the RECEIPT — now absent — and BUILDS its own Statement), the positive
+/// controls fail (cosign never reached) and the class-7 statement checks are unmet — exactly the
+/// RED signal. Each runner first asserts the script exists, so a RED failure reads as "missing
+/// script"/"refused", never a vacuous 127 masquerading as a refusal (AP-010).
 /// </summary>
 internal static class P3SignerHarness
 {
@@ -66,14 +81,18 @@ internal static class P3SignerHarness
     internal const string TrustedSha = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
     internal const string TrustedRunId = "30511722581";
 
-    // The pinned RunReceipt schema id the signer's `schema` re-check (INV-007) validates against.
-    // GREEN pins the expected schema to EXACTLY this value; an off-contract schema_version refuses.
-    internal const string ReceiptSchemaId = "corrected/determinism-runreceipt@v1";
+    // The frozen Corrected determinism contract literals the class-7 statement check binds to.
+    internal const string PredicateTypeUri = "https://correctless.org/attestations/determinism/v1";
+    internal const string CanonicalSubjectName = "determinism-run-receipt";
 
     internal static string SignerScriptRepoRelPath => "gate/tools/sign-determinism.sh";
 
     internal static string SignerScriptAbsPath()
         => TestPaths.RepoFile("gate", "tools", "sign-determinism.sh");
+
+    /// <summary>The committed REAL PR1 determinism RunReceipt fixture — the base SIGNED SUBJECT bytes.</summary>
+    internal static string FixtureReceiptPath()
+        => TestPaths.Fixture("provenance", "determinism-receipt.sample.json");
 
     /// <summary>The committed cosign version pin, read from cosign-pin.json (single source of truth).</summary>
     internal static string PinnedCosignVersion()
@@ -208,21 +227,36 @@ internal static class P3SignerHarness
         internal required string Sha { get; init; }
         internal required string RunId { get; init; }
         internal required string Attempt { get; init; }
+
+        internal string ReceiptPath => System.IO.Path.Combine(ArtifactsDir, "determinism-receipt.json");
+        internal string StatementPath => System.IO.Path.Combine(ArtifactsDir, "determinism-statement.json");
+        internal string CiContextPath => System.IO.Path.Combine(ArtifactsDir, "ci-context.json");
+        internal string DeclaredDigestPath => System.IO.Path.Combine(ArtifactsDir, "receipt.sha256");
     }
 
     /// <summary>
-    /// Build a fully-VALID producer hand-off, then optionally corrupt exactly one field via
-    /// <paramref name="receiptMutator"/> (applied BEFORE the declared digest is recomputed, so the
-    /// receipt stays self-consistent and only the intended field is "wrong" relative to the
-    /// trusted source — this is what makes each mismatch class INDEPENDENTLY catchable) and/or
-    /// corrupt the declared artifact digest via <paramref name="corruptDeclaredDigest"/>.
+    /// Build a fully-VALID producer hand-off (the 5-file contract above), then optionally deviate
+    /// in EXACTLY ONE place so a class of the re-check is independently catchable:
+    ///   * <paramref name="receiptMutator"/> — mutate the RunReceipt SUBJECT (attested_commit,
+    ///     subject_manifest_digest, or drop a required field for the schema class). Applied BEFORE
+    ///     the declared digest + the Corrected-built Statement are (re)computed, so both stay bound
+    ///     to the actual receipt bytes and only the intended field is "wrong".
+    ///   * <paramref name="ciContextMutator"/> — mutate ci-context.json (run_id / run_attempt /
+    ///     producing_job_result), the CI-run metadata NOT carried in the RunReceipt.
+    ///   * <paramref name="statementTransform"/> — tamper the Corrected-built Statement (returns a
+    ///     replacement JSON, or null to DELETE the statement file — the class-7 "absent" case).
+    ///   * <paramref name="corruptDeclaredDigest"/> — write a wrong receipt.sha256.
+    /// The base receipt is the committed REAL PR1 RunReceipt fixture with attested_commit re-homed
+    /// to <paramref name="sha"/> and subject_manifest_digest re-homed to THIS run's manifest digest.
     /// </summary>
     internal static Artifacts BuildArtifacts(
         string root,
         string sha = TrustedSha,
         string runId = TrustedRunId,
         string attempt = "1",
-        Action<Dictionary<string, object>>? receiptMutator = null,
+        Action<JsonObject>? receiptMutator = null,
+        Action<JsonObject>? ciContextMutator = null,
+        Func<string, string?>? statementTransform = null,
         bool corruptDeclaredDigest = false)
     {
         string artifactsDir = System.IO.Path.Combine(root, "artifacts");
@@ -238,28 +272,62 @@ internal static class P3SignerHarness
             "[\"run\",\"route-a\",\"route-b\",\"control-a\",\"control-b\"]}");
         string manifestDigest = Sha256File(manifestFile);
 
-        var receipt = new Dictionary<string, object>
+        // Base = the committed REAL determinism RunReceipt (full platform + run1/run2 evidence),
+        // with the CI-binding fields re-homed so a fully-valid hand-off is internally consistent
+        // with the trusted env + this run's manifest.
+        var receipt = (JsonObject)JsonNode.Parse(File.ReadAllBytes(FixtureReceiptPath()))!;
+        receipt["attested_commit"] = sha;
+        receipt["subject_manifest_digest"] = manifestDigest;
+        receiptMutator?.Invoke(receipt);
+
+        // Write the receipt bytes, then bind the declared digest + the Corrected-built Statement
+        // to THOSE EXACT bytes (the declared digest is recomputed AFTER the mutation).
+        byte[] receiptBytes = Encoding.UTF8.GetBytes(
+            receipt.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        string receiptPath = System.IO.Path.Combine(artifactsDir, "determinism-receipt.json");
+        File.WriteAllBytes(receiptPath, receiptBytes);
+
+        string actualDigest = Sha256Bytes(receiptBytes);
+        string declared = corruptDeclaredDigest ? new string('0', 64) : actualDigest;
+        File.WriteAllText(System.IO.Path.Combine(artifactsDir, "receipt.sha256"), declared);
+
+        // The Corrected-built Statement — the SINGLE canonical byte-source shared with the (future
+        // T3) verifier. The signer signs THIS file and NEVER builds its own. At RED
+        // SerializeStatementJson is STUB:TDD and returns "" (the CURRENT signer ignores the file);
+        // at GREEN it is the real canonical JSON the class-7 check validates.
+        string statementPath = System.IO.Path.Combine(artifactsDir, "determinism-statement.json");
+        string statementJson = DeterminismAttestation.SerializeStatementJson(
+            receiptBytes, RunReceipt.FromJson(receiptBytes));
+
+        if (statementTransform is null)
         {
-            ["schema_version"] = ReceiptSchemaId,
-            ["attested_commit"] = sha,
+            File.WriteAllText(statementPath, statementJson);
+        }
+        else
+        {
+            string? replacement = statementTransform(statementJson);
+            if (replacement is null)
+            {
+                if (File.Exists(statementPath))
+                {
+                    File.Delete(statementPath); // class-7 "statement absent" — fail closed.
+                }
+            }
+            else
+            {
+                File.WriteAllText(statementPath, replacement);
+            }
+        }
+
+        // ci-context.json — the run metadata that is NOT part of a RunReceipt.
+        var ci = new JsonObject
+        {
             ["run_id"] = runId,
             ["run_attempt"] = attempt,
             ["producing_job_result"] = "success",
-            ["execution_status"] = "completed",
-            ["comparison_status"] = "equal",
-            ["subject_manifest_digest"] = manifestDigest,
-            ["policy_version"] = "v1",
         };
-        receiptMutator?.Invoke(receipt);
-
-        string receiptPath = System.IO.Path.Combine(artifactsDir, "determinism-receipt.json");
-        File.WriteAllText(
-            receiptPath,
-            JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }));
-
-        string actualDigest = Sha256File(receiptPath);
-        string declared = corruptDeclaredDigest ? new string('0', 64) : actualDigest;
-        File.WriteAllText(System.IO.Path.Combine(artifactsDir, "receipt.sha256"), declared);
+        ciContextMutator?.Invoke(ci);
+        File.WriteAllText(System.IO.Path.Combine(artifactsDir, "ci-context.json"), ci.ToJsonString());
 
         return new Artifacts
         {
@@ -281,6 +349,73 @@ internal static class P3SignerHarness
             ["COSIGN_BIN"] = fake.Path,
         };
 
+    // ---- class-7 Statement tampers (operate on the Corrected-built Statement JSON) ----------
+    //
+    // At GREEN these mutate the REAL SerializeStatementJson output (correct subject digest + name
+    // + predicate-type), deviating EXACTLY ONE bound field so the class is independently catchable.
+    // At RED SerializeStatementJson returns "" (the signer ignores the file anyway); the helpers
+    // fall back to a baseline so they never throw during harness setup.
+
+    /// <summary>Delete the Corrected-built Statement entirely (class-7 "absent" — fail closed).</summary>
+    internal static readonly Func<string, string?> DeleteStatement = _ => null;
+
+    /// <summary>Tamper the subject sha256 so it no longer binds the receipt bytes.</summary>
+    internal static string? StatementWithWrongSubjectDigest(string json)
+        => MutateStatement(json, o => SetSubjectSha256(o, new string('0', 64)));
+
+    /// <summary>Tamper the predicateType off the frozen determinism URI.</summary>
+    internal static string? StatementWithWrongPredicateType(string json)
+        => MutateStatement(json, o => o["predicateType"] = "https://correctless.org/attestations/WRONG/v9");
+
+    /// <summary>Tamper the subject name back to the OLD placeholder ("determinism-receipt.json").</summary>
+    internal static string? StatementWithWrongSubjectName(string json)
+        => MutateStatement(json, o => SetSubjectName(o, "determinism-receipt.json"));
+
+    private static string MutateStatement(string json, Action<JsonObject> mutate)
+    {
+        JsonObject o = ParseStatementOrBaseline(json);
+        mutate(o);
+        return o.ToJsonString();
+    }
+
+    private static JsonObject ParseStatementOrBaseline(string json)
+    {
+        if (!string.IsNullOrWhiteSpace(json))
+        {
+            try
+            {
+                if (JsonNode.Parse(json) is JsonObject parsed && parsed["subject"] is JsonArray)
+                {
+                    return parsed;
+                }
+            }
+            catch (JsonException)
+            {
+                // fall through to the baseline (RED: SerializeStatementJson returned "").
+            }
+        }
+        return (JsonObject)JsonNode.Parse(BaselineStatementJson)!;
+    }
+
+    private const string BaselineStatementJson =
+        "{\"_type\":\"https://in-toto.io/Statement/v1\"," +
+        "\"subject\":[{\"name\":\"determinism-run-receipt\",\"digest\":{\"sha256\":" +
+        "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}]," +
+        "\"predicateType\":\"https://correctless.org/attestations/determinism/v1\"," +
+        "\"predicate\":{\"receiptDigest\":\"aaaaaaaa\",\"projectionFacts\":[]}}";
+
+    private static void SetSubjectSha256(JsonObject o, string sha)
+    {
+        var subject = (JsonObject)((JsonArray)o["subject"]!)[0]!;
+        ((JsonObject)subject["digest"]!)["sha256"] = sha;
+    }
+
+    private static void SetSubjectName(JsonObject o, string name)
+    {
+        var subject = (JsonObject)((JsonArray)o["subject"]!)[0]!;
+        subject["name"] = name;
+    }
+
     // ---- misc helpers ---------------------------------------------------------------------
 
     internal static string Sha256File(string path)
@@ -289,6 +424,9 @@ internal static class P3SignerHarness
         using FileStream fs = File.OpenRead(path);
         return Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
     }
+
+    internal static string Sha256Bytes(byte[] bytes)
+        => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
     internal static string NewTempDir()
     {

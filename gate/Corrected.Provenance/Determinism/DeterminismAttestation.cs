@@ -105,6 +105,28 @@ public static class DeterminismAttestation
     }
 
     /// <summary>
+    /// The SINGLE canonical byte-source for the determinism in-toto Statement JSON
+    /// (INV-006/010): <c>SerializeStatement(BuildStatement(receiptBytes, receipt))</c>.
+    /// BOTH the T4 signer-emit path (the producer writes <c>determinism-statement.json</c>
+    /// through this method; the signer signs THAT file) AND the future T3 INV-010 verifier
+    /// (which reconstructs the Statement from the committed receipt and requires
+    /// BYTE-EQUALITY with the signed payload) MUST serialize through THIS method — so the
+    /// signed payload and the verifier's reconstruction are byte-identical. A bash-hand-rolled
+    /// Statement (a divergent serializer) would drift by a byte and break INV-010.
+    /// </summary>
+    public static string SerializeStatementJson(byte[] receiptBytes, RunReceipt receipt)
+    {
+        ArgumentNullException.ThrowIfNull(receiptBytes);
+        ArgumentNullException.ThrowIfNull(receipt);
+
+        // The single canonical byte-source: the SAME private serializer BuildDsseEnvelope wraps,
+        // applied to the SAME BuildStatement graph — so the emitted determinism-statement.json and
+        // the (future T3) verifier's reconstruction are byte-identical (INV-006/010). The private
+        // SerializeStatement's byte shape / escaping is unchanged; this only makes it reachable.
+        return SerializeStatement(BuildStatement(receiptBytes, receipt));
+    }
+
+    /// <summary>
     /// Wrap a Statement as a DSSE envelope: pinned in-toto payload media type + base64
     /// of the exact Statement JSON. Signatures are empty here — real signing is a later
     /// track (INV-007/009).

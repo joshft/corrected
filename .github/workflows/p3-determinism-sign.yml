@@ -53,7 +53,7 @@ jobs:
             && env -i HOME="$HOME" DETERMINISM_OS_LABEL="$DETERMINISM_OS_LABEL" DETERMINISM_RESOLVED_SDK="$DETERMINISM_RESOLVED_SDK" \
                bash -p scripts/determinism-lane.sh --run-root out/determinism-lane --dotnet-root "$HOME/.dotnet" )
 
-      - name: Assemble the same-run signer hand-off (RunReceipt + declared digest + subject manifest)
+      - name: Assemble the same-run signer hand-off (RunReceipt subject + declared digest + subject manifest)
         run: |
           set -o pipefail
           mkdir -p handoff
@@ -63,18 +63,48 @@ jobs:
           {"determinism_subject_manifest":"v1","policy_version":"v1","roles":["run","route-a","route-b","control-a","control-b"]}
           JSON
           manifest_digest="$(sha256sum handoff/determinism-subject-manifest.json | cut -d' ' -f1)"
-          # Stamp the CI-context binding fields the signer re-validates (INV-007):
-          # attested_commit = the pinned trigger SHA; run_id/run_attempt from THIS run.
-          jq -n \
-            --arg schema "corrected/determinism-runreceipt@v1" \
+          # The SIGNED SUBJECT is the determinism RunReceipt itself (execution_status /
+          # comparison_status / platform / run1_evidence / run2_evidence). Re-home ONLY the
+          # subject-bound CI fields the signer re-validates (INV-006/007): attested_commit =
+          # the pinned trigger SHA; subject_manifest_digest = THIS run's manifest; policy_version.
+          # The CI-run metadata (run_id / run_attempt / producing_job_result) is NOT part of a
+          # RunReceipt — it now lives in ci-context.json below.
+          jq \
             --arg commit "${{ github.sha }}" \
-            --arg run_id "${{ github.run_id }}" \
-            --arg attempt "${{ github.run_attempt }}" \
             --arg manifest_digest "$manifest_digest" \
-            --slurpfile lane spikes/dafny-compat/out/determinism-lane/receipts/determinism-receipt.json \
-            '{schema_version:$schema, attested_commit:$commit, run_id:$run_id, run_attempt:$attempt, producing_job_result:"success", execution_status:"completed", comparison_status:"equal", subject_manifest_digest:$manifest_digest, policy_version:"v1", lane_receipt:$lane[0]}' \
+            '. + {attested_commit:$commit, subject_manifest_digest:$manifest_digest, policy_version:"v1"}' \
+            spikes/dafny-compat/out/determinism-lane/receipts/determinism-receipt.json \
             > handoff/determinism-receipt.json
           sha256sum handoff/determinism-receipt.json | cut -d' ' -f1 > handoff/receipt.sha256
+
+      - name: Emit the CI-run context hand-off (run_id / run_attempt / producing_job_result)
+        run: |
+          set -o pipefail
+          mkdir -p handoff
+          # The CI-run metadata the signer re-checks (INV-007), now SEPARATE from the
+          # RunReceipt subject. Emitted FULLY here from the GitHub run context.
+          jq -n \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_attempt "${{ github.run_attempt }}" \
+            '{run_id:$run_id, run_attempt:$run_attempt, producing_job_result:"success"}' \
+            > handoff/ci-context.json
+
+      # DEFERRED real-run wiring (T4 boundary): the Corrected in-toto Statement builder
+      # (DeterminismAttestation.SerializeStatementJson) is C#, so writing
+      # handoff/determinism-statement.json needs a runnable emitter HOST (bash -> Corrected).
+      # No gate project is an Exe today and this slice must NOT add/convert one, so the
+      # runnable host is a separate REAL-RUN task. This seam is the wiring point; until the
+      # host lands it does NOT produce determinism-statement.json, and the signer's class-7
+      # re-check (statement ABSENT => REFUSE, before any cosign) fails CLOSED — a
+      # missing/wrong Statement can never be signed. This is the only safe interim state.
+      - name: (DEFERRED real-run wiring) emit the Corrected-built determinism-statement.json
+        run: |
+          set -o pipefail
+          echo "[producer] DEFERRED: handoff/determinism-statement.json is written by the Corrected"
+          echo "[producer] builder (DeterminismAttestation.SerializeStatementJson) once the runnable"
+          echo "[producer] emitter host is wired. Until then the signer fails closed on the absent"
+          echo "[producer] determinism-statement.json (INV-007 class-7) — a missing/wrong Statement"
+          echo "[producer] can never be signed."
 
       - name: Upload the same-run hand-off artifact (runtime-token transfer)
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Xunit;
 
@@ -46,7 +47,10 @@ public class Inv009SignerArgvPinTests
     // --statement` ... frozen signing argv"): on the happy path the signer invokes cosign with the
     // frozen argv — verb `attest-blob` first, then --statement, --bundle, --new-bundle-format=true,
     // --yes, and a trailing positional blob, in that order. The `--new-bundle-format=false`
-    // contingency is NOT present (DD-002 / RS-008 resolved).
+    // contingency is NOT present (DD-002 / RS-008 resolved). The --statement points at the
+    // CORRECTED-BUILT determinism-statement.json (subject name determinism-run-receipt), and the
+    // trailing blob is the receipt (determinism-receipt.json) — the signer signs the Corrected
+    // Statement, NEVER one it hand-rolled.
     [Fact]
     public void Recorded_cosign_argv_is_the_transcript_frozen_attest_blob_form_integration()
     {
@@ -105,6 +109,22 @@ public class Inv009SignerArgvPinTests
             // A trailing positional blob follows --yes (the receipt bytes being attested).
             Assert.True(iYes + 1 < argv.Length && !argv[iYes + 1].StartsWith("--", StringComparison.Ordinal),
                 "INV-009: a trailing positional blob must follow --yes.");
+
+            // The --statement is the CORRECTED-BUILT Statement file, and the blob is the receipt.
+            string stmtPath = argv[iStmt + 1];
+            string blobPath = argv[iYes + 1];
+            Assert.Equal("determinism-statement.json", Path.GetFileName(stmtPath));
+            Assert.Equal("determinism-receipt.json", Path.GetFileName(blobPath));
+
+            // BINDING: read the exact file cosign was pointed at and assert its subject name is the
+            // canonical `determinism-run-receipt` — NOT the old placeholder `determinism-receipt.json`
+            // the CURRENT signer hand-rolls. This is the reconciliation's load-bearing assertion: the
+            // signer signs a Corrected-built Statement, not one it synthesized.
+            Assert.True(File.Exists(stmtPath),
+                "INV-009: the --statement path must be the Corrected-built determinism-statement.json.");
+            using JsonDocument stmtDoc = JsonDocument.Parse(File.ReadAllBytes(stmtPath));
+            string subjectName = stmtDoc.RootElement.GetProperty("subject")[0].GetProperty("name").GetString()!;
+            Assert.Equal("determinism-run-receipt", subjectName);
         }
         finally { P3SignerHarness.Cleanup(dir); }
     }
@@ -170,5 +190,22 @@ public class Inv009SignerArgvPinTests
 
         Assert.Contains("attest-blob", src);
         Assert.Contains("--statement", src);
+    }
+
+    // Tests INV-009 / INV-006 [integration] (the reconciliation's static landing): the signer signs
+    // the CORRECTED-BUILT determinism-statement.json and must NOT synthesize an in-toto subject
+    // itself. The CURRENT placeholder signer hand-rolls `"name":"determinism-receipt.json"` (the
+    // wrong subject name, no predicateType, no predicate); the reconciled signer carries NO such
+    // hand-rolled subject-name literal. RED now (the placeholder has it); GREEN after (it consumes
+    // the Corrected-built Statement instead). Scoped to the exact JSON subject-name construction so
+    // the legitimate `${DIR}/determinism-receipt.json` RECEIPT path reference does not false-fail.
+    [Fact]
+    public void Signer_source_does_not_hand_roll_its_own_statement_subject_name()
+    {
+        Assert.True(File.Exists(P3SignerHarness.SignerScriptAbsPath()),
+            "INV-009: gate/tools/sign-determinism.sh must exist (GREEN deliverable).");
+        string src = File.ReadAllText(P3SignerHarness.SignerScriptAbsPath());
+
+        Assert.DoesNotMatch(new Regex("\"name\"\\s*:\\s*\"determinism-receipt\\.json\""), src);
     }
 }

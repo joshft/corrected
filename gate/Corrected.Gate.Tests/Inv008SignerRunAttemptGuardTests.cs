@@ -10,13 +10,16 @@ namespace Corrected.Gate.Tests;
 /// REFUSES to sign unless it is exactly "1"; a re-run mints NOTHING and a new reviewed commit
 /// (a fresh attempt-1 run) is required. This is the reversible / no-real-bundle slice: it drives
 /// the extracted gate/tools/sign-determinism.sh with a fake cosign (injected via COSIGN_BIN) and
-/// asserts the attempt GUARD gates the cosign call.
+/// asserts the attempt GUARD gates the cosign call. After the Statement-builder reconciliation the
+/// attempt is carried by the CI-run metadata (ci-context.json run_attempt), NOT the RunReceipt
+/// subject; the env $GITHUB_RUN_ATTEMPT and ci-context.run_attempt must AGREE (both == 1).
 ///
 /// [Collection("Subprocess")] is REQUIRED (real fork/exec).
 ///
-/// RED NOW: the script does not exist; RequireSignerScript() fails first (clean "missing script"),
-/// never a vacuous bash-127. The attempt==1 POSITIVE cell (reaches the fake cosign) proves the
-/// negative cells refuse for the attempt reason and not because the fixture is always-reject.
+/// RED NOW: against the CURRENT placeholder signer the attempt==1 POSITIVE cell cannot reach cosign
+/// (the signer reads run_id from the receipt — re-homed to ci-context — and refuses first); that
+/// failing positive control is the RED signal AND is what keeps the negative cells honest at GREEN
+/// (they must refuse for the attempt reason, not because the fixture is always-reject — AP-010).
 ///
 /// AP-031: NOT triggered — synthetic hand-off fixtures, not another shipped tool's parsed output.
 /// </summary>
@@ -34,8 +37,8 @@ public class Inv008SignerRunAttemptGuardTests
         try
         {
             P3SignerHarness.FakeCosign fake = P3SignerHarness.MakeFakeCosign(dir);
-            // The receipt records attempt "2" AND the env presents GITHUB_RUN_ATTEMPT=2, so this is
-            // a genuine rerun, not a producer/env disagreement.
+            // ci-context.run_attempt = "2" AND the env presents GITHUB_RUN_ATTEMPT=2, so this is a
+            // genuine rerun, not a ci-context/env disagreement.
             P3SignerHarness.Artifacts art = P3SignerHarness.BuildArtifacts(dir, attempt: "2");
 
             P3SignerHarness.RunResult r = RunSign(art, fake, attempt: "2");
@@ -96,27 +99,27 @@ public class Inv008SignerRunAttemptGuardTests
     }
 
     // Tests INV-008 [integration] ("the signer records GITHUB_RUN_ATTEMPT ... refuses to sign
-    // unless it is 1" — the receipt half): env GITHUB_RUN_ATTEMPT=1 but the producer receipt
-    // records run_attempt=2 (an env↔receipt DISAGREEMENT) must refuse, no cosign. A GREEN that
-    // checks ONLY the env var (not that the recorded receipt attempt also == 1) passes here — so
-    // this cell has independent value. The run_id is shared (same-run carried-over receipt), so
-    // INV-007's run_id check does NOT cover this.
+    // unless it is 1" — the ci-context half): env GITHUB_RUN_ATTEMPT=1 but ci-context.run_attempt=2
+    // (an env↔ci-context DISAGREEMENT) must refuse, no cosign. A GREEN that checks ONLY the env var
+    // (not that the recorded ci-context attempt also == 1) passes here — so this cell has
+    // independent value. The run_id is shared (same-run ci-context), so INV-007's run_id check does
+    // NOT cover this.
     [Fact]
-    public void Env_attempt_1_but_receipt_attempt_2_disagreement_refuses_integration()
+    public void Env_attempt_1_but_ci_context_attempt_2_disagreement_refuses_integration()
     {
         P3SignerHarness.RequireSignerScript();
         string dir = P3SignerHarness.NewTempDir();
         try
         {
             P3SignerHarness.FakeCosign fake = P3SignerHarness.MakeFakeCosign(dir);
-            // receipt.run_attempt = "2" (via the fixture), but the ENV presents attempt = "1".
-            // Every other field (run_id, attested_commit, digest, manifest) stays valid.
+            // ci-context.run_attempt = "2" (via the fixture), but the ENV presents attempt = "1".
+            // Every other field (run_id, attested_commit, digest, manifest, statement) stays valid.
             P3SignerHarness.Artifacts art = P3SignerHarness.BuildArtifacts(dir, attempt: "2");
 
             P3SignerHarness.RunResult r = RunSign(art, fake, attempt: "1");
 
             Assert.False(fake.WasCalled(),
-                "INV-008: env attempt=1 but receipt.run_attempt=2 disagreement must refuse — cosign was invoked.");
+                "INV-008: env attempt=1 but ci-context.run_attempt=2 disagreement must refuse — cosign was invoked.");
             Assert.NotEqual(0, r.ExitCode);
         }
         finally { P3SignerHarness.Cleanup(dir); }
@@ -149,8 +152,9 @@ public class Inv008SignerRunAttemptGuardTests
         try
         {
             P3SignerHarness.FakeCosign fake = P3SignerHarness.MakeFakeCosign(dir);
-            // The receipt itself is a valid attempt-1 producer artifact; only the ENV attempt is
-            // absent/empty, isolating the "env attempt not treated as 1" defensive contract.
+            // The hand-off itself is a valid attempt-1 producer artifact (ci-context.run_attempt=1);
+            // only the ENV attempt is absent/empty, isolating the "env attempt not treated as 1"
+            // defensive contract.
             P3SignerHarness.Artifacts art = P3SignerHarness.BuildArtifacts(dir, attempt: "1");
 
             P3SignerHarness.RunResult r = RunSign(art, fake, attempt: attempt);

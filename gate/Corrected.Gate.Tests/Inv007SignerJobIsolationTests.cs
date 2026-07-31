@@ -367,6 +367,34 @@ public class Inv007SignerJobIsolationTests
         Assert.Contains("download-artifact", wf);
     }
 
+    // ==================================================================================
+    // The reconciled hand-off carries ci-context.json + the Corrected-built statement.
+    // STATIC SCAN ONLY (does NOT require the producer step to RUN — the runnable emitter
+    // HOST is a deferred REAL-RUN task; the signer's class-7 fail-closed check is the real
+    // guard). These encode that the producer's hand-off now includes the two new artifacts.
+    // ==================================================================================
+
+    // Tests INV-007 [integration] (reconciled hand-off): the producer emits ci-context.json — the
+    // CI-run metadata (run_id / run_attempt / producing_job_result) the signer re-checks, now
+    // SEPARATE from the RunReceipt subject. RED now (the current producer folds these into the
+    // receipt); GREEN emits ci-context.json.
+    [Fact]
+    public void Producer_handoff_emits_ci_context_json()
+    {
+        Assert.Contains("ci-context.json", ReadWorkflow());
+    }
+
+    // Tests INV-007 / INV-006 [integration] (reconciled hand-off): the producer emits the
+    // Corrected-built determinism-statement.json (the signer signs it; it NEVER builds its own).
+    // RED now (the current producer emits only the receipt + declared digest + manifest); GREEN
+    // emits the Corrected-built Statement (its runnable emitter HOST may be a deferred-labeled step
+    // — this scan asserts the artifact is part of the hand-off, not that the step executes live).
+    [Fact]
+    public void Producer_handoff_emits_the_corrected_built_determinism_statement_json()
+    {
+        Assert.Contains("determinism-statement.json", ReadWorkflow());
+    }
+
     // Tests INV-007 [integration] ("no Artifacts REST / cross-run `run-id` / `gh run download`,
     // which would need actions: read"): the workflow uses NONE of the cross-run download paths.
     // This is the RS-032 fail-open seam guard — a cross-run path silently breaks the minimal set.
