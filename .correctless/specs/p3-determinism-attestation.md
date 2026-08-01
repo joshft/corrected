@@ -472,11 +472,16 @@ manifest **plus** `attested_commit` ancestor-of-HEAD — never a stored field in
     positively identified as one of the two transient faults above**: `{evidence-absent, p3-not-yet-activated`
     (RS-035 — the expected pre-PR3 zero-state; rendered distinctly by INV-021 but classified fail-closed)`,
     malformed-receipt, malformed-bundle, signature-invalid, identity-mismatch, predicate-type-mismatch,
-    subject-digest-mismatch, projection-policy-mismatch` (RS-005)`, stale-subject-manifest,
-    attested-commit-not-ancestor, ancestry-uncomputable` (RS-013 — a shallow-clone/absent-`X` ancestry that cannot
-    be computed is `rejected`, **never** `unavailable`)`, rid-platform-mismatch, non-pass-outcome,
-    trust-root-or-pin-mismatch` (a root/binary **digest MISMATCH** — distinct from the *unreadable* fault above)`,
-    unclassified-verifier-fault}`. **`unclassified-verifier-fault` is the pinned DEFAULT branch**: any cosign
+    subject-digest-mismatch, statement-reconstruction-mismatch` (RS-006 / INV-010 — the decoded SIGNED Statement
+    does not byte-equal the Statement Corrected reconstructs from the committed receipt EVEN WHEN `sha256(receipt)`
+    matches; cosign `--check-claims` never verifies predicate CONTENT, so this is DISTINCT from
+    `subject-digest-mismatch`)`, projection-policy-mismatch` (RS-005)`, stale-subject-manifest,
+    attested-commit-not-ancestor, cert-workflow-sha-mismatch` (RS-006 / INV-011 — the certificate's workflow-SHA
+    does not equal the receipt's `attested_commit`; the Corrected-side binding check reached only AFTER cosign
+    accepts the identity, so this is DISTINCT from `identity-mismatch`)`, ancestry-uncomputable` (RS-013 — a
+    shallow-clone/absent-`X` ancestry that cannot be computed is `rejected`, **never** `unavailable`)`,
+    rid-platform-mismatch, non-pass-outcome, trust-root-or-pin-mismatch` (a root/binary **digest MISMATCH** —
+    distinct from the *unreadable* fault above)`, unclassified-verifier-fault}`. **`unclassified-verifier-fault` is the pinned DEFAULT branch**: any cosign
     crash / SIGSEGV / unknown non-zero exit / timeout / output the INV-014 exit-code taxonomy does not positively
     match → **`rejected`** (fail-closed). Treating an unclassified cosign fault as `unavailable` (the earlier broad
     "verifier/tool faults → unavailable") is the fail-open seam that **armed the RS-001 forged-ENTERED bypass** (a

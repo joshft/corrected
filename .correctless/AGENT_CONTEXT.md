@@ -1,6 +1,6 @@
 # Agent Context — Corrected
 
-> Last updated: 2026-07-29
+> Last updated: 2026-08-01
 
 ## What This Project Does
 
@@ -18,8 +18,15 @@ integration routes COMPATIBLE). See `docs/features/dafny-compat-spike.md` and
 `docs/adr/ADR-0001-dafny-integration-boundary.md`. The spike now also hosts the
 **P3 determinism-attestation** lane (PR1 of a 3-PR arc): a dedicated ≥8-core CI job
 (`p3-determinism-lane.yml` → `scripts/determinism-lane.sh`) that runs the two-nested-run
-determinism check and emits a structured `(execution × comparison)` RunReceipt. It signs
-nothing and leaves **P3 `false`** (readiness stays BLOCKED) until PR2/PR3 land. See
+determinism check and emits a structured `(execution × comparison)` RunReceipt. **PR2 has since
+landed** on `feature/p3-provenance-mechanism`: the frozen `gate/Corrected.Provenance/` provenance
+substrate (BCL-only, in-toto/DSSE + the determinism/entry predicate/receipt schemas — the 5th
+project in `Corrected.Gate.slnx`, INV-022), the cosign toolchain (`gate/tools/provision-cosign.sh`
+pinned to v3.1.2 + `sign-determinism.sh` + digest-pinned `trusted_root.json`), the **live** P3
+verify/render layer (`P3Probe` → `DeterminismVerifier.Verify`, fail-closed to typed reasons +
+`StatusRenderer`), and the Group G entry-receipt lifecycle (`EntryVerifier` +
+`EntryIntegrityProbe`, INV-030). PR2 commits **no production-identity bundle**, so **P3 stays
+`false`** and readiness stays BLOCKED; PR3 activates the evidence. See
 `docs/features/p3-determinism-attestation.md`.
 
 A second non-production build has since landed: the **readiness-gate carrier**
@@ -73,13 +80,19 @@ its `README.md`) and the `gate/` readiness-gate carrier (see
   must run via `bash gate/run-readiness-gate.sh`. A bare `dotnet test` on the
   gate solution swallows the INV-012 status banner and runs no out-of-suite
   executed-count guard (INV-014), so a zero-discovery run reads as green.
+- **Assuming the real cosign layer-2 tests ran under a bare `dotnet test`**: the
+  P3/entry layer-2 verify tests only invoke real cosign when the gate script has
+  exported `COSIGN_BIN` + `TRUSTED_ROOT` (it provisions cosign v3.1.2 first). A
+  bare `dotnet test` leaves both unset, so those cells take an honest
+  `unavailable` fallback and never exercise the real crypto. Run the whole
+  P3/entry cosign path via `bash gate/run-readiness-gate.sh`.
 
 ## Quick Reference
 
 | Need to... | Do this |
 |------------|---------|
 | Run the spike suite (canonical, only reliable gate) | `env -i HOME="$HOME" bash -p spikes/dafny-compat/scripts/run-spike.sh` (~13–15 min) |
-| Run the readiness gate (carrier) | `bash gate/run-readiness-gate.sh` (from a clean checkout; `commands.test`) |
+| Run the readiness gate (carrier) | `bash gate/run-readiness-gate.sh` (from a clean checkout; `commands.test`; provisions cosign v3.1.2 + exports `COSIGN_BIN`/`TRUSTED_ROOT` for the real P3/entry layer-2 tests) |
 | Run spike tests directly | `cd spikes/dafny-compat && dotnet test DafnyCompatSpike.sln -noAutoResponse` (needs a prior canonical run) |
 | Build the spike | `dotnet build spikes/dafny-compat -noAutoResponse` |
 | Lint | (not configured) |

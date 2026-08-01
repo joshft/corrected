@@ -16,7 +16,7 @@ proof patch, rejects unapproved proof shortcuts, and emits reproducible evidence
 |------|-------|
 | [`DESIGN.md`](DESIGN.md) | Authoritative design (v1.13): architecture, delivery model, phased plan. |
 | [`spikes/dafny-compat/`](spikes/dafny-compat/) | **Phase 0.0 package-compatibility spike** — permanent, non-production conformance harness proving Dafny 4.11.0 runs in-process on .NET 10. Both integration routes **COMPATIBLE**. See its [README](spikes/dafny-compat/README.md) and [feature doc](docs/features/dafny-compat-spike.md). |
-| P3 determinism attestation (PR1) | Spike-side **determinism-attestation lane** — a dedicated ≥8-core CI job emitting a structured `(execution × comparison)` RunReceipt. **PR1 of a 3-PR arc; signs nothing, P3 stays `false` and readiness stays BLOCKED.** See [feature doc](docs/features/p3-determinism-attestation.md). |
+| P3 determinism attestation (PR1 + PR2) | **PR1:** the spike-side determinism lane — a ≥8-core CI job emitting a structured `(execution × comparison)` RunReceipt. **PR2:** the frozen `gate/Corrected.Provenance/` cosign/DSSE signing and verification mechanism, the **live** P3 verify/render layer (`P3Probe → DeterminismVerifier`), and the Group G entry-receipt lifecycle. **3-PR arc; no production-identity bundle is committed, so P3 stays `false` and readiness stays BLOCKED** (PR3 activates the evidence). See [feature doc](docs/features/p3-determinism-attestation.md). |
 | [`docs/adr/ADR-0001`](docs/adr/ADR-0001-dafny-integration-boundary.md) | The Dafny integration-boundary decision — **accepted** (Route A selected; promoted 2026-07-24 via DF-002). |
 | `src/` | Empty — the production worker begins in Phase 0.1, informed by ADR-0001. |
 
