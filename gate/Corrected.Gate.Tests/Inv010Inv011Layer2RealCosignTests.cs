@@ -600,7 +600,10 @@ public class Inv010Inv011Layer2RealCosignTests
     public void No_committed_fixture_carries_the_production_identity()
     {
         string root = TestPaths.RepoFile("test", "attestations");
-        var bundles = Directory.EnumerateFiles(root, "*.sigstore.json", SearchOption.AllDirectories).ToList();
+        // Scope to the DETERMINISM bundles by name: since MA-C the tree also holds entry.sigstore.json
+        // bundles (a DISTINCT fixture identity, p3-entry-fixture-sign.yml) which this determinism-
+        // identity assertion does not govern — their own guard is Inv030EntryLayer2RealCosignTests.
+        var bundles = Directory.EnumerateFiles(root, "determinism.sigstore.json", SearchOption.AllDirectories).ToList();
         Assert.NotEmpty(bundles); // AP-010: the scan is not vacuously over an empty set.
 
         const string productionSanToken = "p3-determinism-sign.yml";

@@ -68,6 +68,17 @@ public sealed record EntryVerifyIdentity(
     public const string FixtureCertificateIdentity =
         "https://github.com/joshft/corrected/.github/workflows/p3-entry-fixture-sign.yml@refs/heads/fixture/p3-entry-bundle";
 
+    /// <summary>
+    /// The FIXTURE entry cert workflow-SHA — the commit the fixture-signing run executed at. Equals
+    /// the POS entry receipt's commit-X (so POS verifies AND cross-checks positive) but NOT SHANEG's
+    /// (<c>0000…</c>) — that is the 2b cross-check negative. Used as the fixture-ACCEPTING
+    /// <c>--certificate-github-workflow-sha</c> value so cosign accepts SHANEG's genuine crypto,
+    /// after which Corrected's cross-check fails on the receipt commit-X binding. Minted 2026-08-01
+    /// (run 30707624686 on the throwaway branch <c>fixture/p3-entry-bundle</c>, since torn down; the
+    /// commit SHA + the 2 public Rekor entries persist).
+    /// </summary>
+    public const string FixtureCertWorkflowSha = "25db9a3cca316e6afd1d33df98f5596ea0cb2dba";
+
     /// <summary>The committed PRODUCTION entry identity (default for a verify request).</summary>
     public static EntryVerifyIdentity Production { get; } = new(
         ProductionCertificateIdentity,

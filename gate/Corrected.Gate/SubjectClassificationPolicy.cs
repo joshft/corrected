@@ -90,6 +90,13 @@ public static class SubjectClassificationPolicy
         "gate/Corrected.Gate/ActivationValidator.cs",
         "gate/Corrected.Gate/AdrLintBlock.cs",
         "gate/Corrected.Gate/ClosureBuildRunner.cs",
+        // The entry-receipt verifier (Group G / INV-030, MA-C) is a SEPARATE verify surface from the
+        // determinism subject set — changing it does NOT stale a determinism attestation — so it is a
+        // non-(determinism-)verify gate file here, alongside its entry consumers ActivationValidator /
+        // LifecycleGate. (The entry attestation has its OWN subject set; it is not INV-018's.)
+        "gate/Corrected.Gate/EntryVerifier.cs",
+        "gate/Corrected.Gate/EntryVerifyIdentity.cs",
+        "gate/Corrected.Gate/EntryVerifyReason.cs",
         "gate/Corrected.Gate/LifecycleGate.cs",
         "gate/Corrected.Gate/MigrationManifest.cs",
         "gate/Corrected.Gate/P1EvidenceAnchors.cs",
