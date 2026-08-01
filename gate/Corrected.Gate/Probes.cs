@@ -738,4 +738,12 @@ public static class ProbeOrchestrator
 
     /// <summary>The pinned P3 determinism-attestation path (DD-002).</summary>
     public const string P3AttestationPath = "test/attestations/inv010-determinism.json";
+
+    /// <summary>
+    /// The pinned durable ENTRY-ACTIVATION pointer path (INV-030 / Group G, MA-C part e). ABSENT in
+    /// PR2 (Group G dormant, the committed readiness block is v1) so <see cref="EntryIntegrityProbe"/>
+    /// resolves the pre-entry zero-state <see cref="EntryIntegrity.Absent"/> — the src/ ban stays
+    /// active and readiness stays BLOCKED. A P2 activation would emit this pointer at the entry commit.
+    /// </summary>
+    public const string EntryActivationPointerPath = "test/attestations/entry-activation.json";
 }

@@ -94,6 +94,7 @@ public static class SubjectClassificationPolicy
         // determinism subject set — changing it does NOT stale a determinism attestation — so it is a
         // non-(determinism-)verify gate file here, alongside its entry consumers ActivationValidator /
         // LifecycleGate. (The entry attestation has its OWN subject set; it is not INV-018's.)
+        "gate/Corrected.Gate/EntryIntegrityProbe.cs",
         "gate/Corrected.Gate/EntryVerifier.cs",
         "gate/Corrected.Gate/EntryVerifyIdentity.cs",
         "gate/Corrected.Gate/EntryVerifyReason.cs",
