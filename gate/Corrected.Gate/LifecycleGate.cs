@@ -127,11 +127,14 @@ public static class LifecycleGate
             banActive = true;
         }
 
-        // Ban-scan component: only meaningful while the ban is active. Any content (Fail)
-        // OR an uncomputable closure (fail-closed, distinct from empty) while banned is a
-        // violation -> hard-red. VacuousPass/Pass (empty surface) never trips the ban.
+        // Ban-scan component: only meaningful while the ban is active. Enumerate the SAFE outcomes
+        // (fail-closed on accept, QA-010/PMB-003): the ban is satisfied ONLY by VacuousPass (empty
+        // surface) or Pass (a non-empty but deliberately DECLARATION-ONLY closure, permitted
+        // pre-entry by the scanner's ContainsOnlyDeclarations design). Every other outcome — content
+        // (Fail), an uncomputable closure (ClosureUncomputable), OR any future ScanOutcome member —
+        // trips the ban -> hard-red.
         bool banViolated = banActive
-            && (srcScan == ScanOutcome.Fail || srcScan == ScanOutcome.ClosureUncomputable);
+            && !(srcScan == ScanOutcome.VacuousPass || srcScan == ScanOutcome.Pass);
 
         // entry_integrity / activation verdict component (state tables (A)/(B)).
         LifecycleVerdict integrityVerdict = transitionContext switch
@@ -152,7 +155,11 @@ public static class LifecycleGate
                 : LifecycleVerdict.HardRedFailure,
 
             // Plain pre-entry BLOCKED: no activation attempt; the verdict rests on the ban scan.
-            _ => LifecycleVerdict.Success,
+            TransitionContext.EstablishedBlocked => LifecycleVerdict.Success,
+
+            // Fail-closed default (QA-011/PMB-003): an unknown / cast / future TransitionContext can
+            // never yield the accepting Success verdict — it hard-fails.
+            _ => LifecycleVerdict.HardRedFailure,
         };
 
         // Fuse: hard-red always wins the fold (RS-019); else neutral over success.

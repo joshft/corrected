@@ -146,6 +146,9 @@ public static class CosignRunner
             WorkingDirectory = options.WorkingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // MA-J: redirect (and immediately close, post-launch) stdin so a child that reads stdin
+            // sees EOF at once instead of inheriting the parent's stdin and blocking until the timeout.
+            RedirectStandardInput = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
@@ -192,6 +195,10 @@ public static class CosignRunner
         using (proc)
         using (var cts = new CancellationTokenSource())
         {
+            // MA-J: hand the child an empty stdin (immediate EOF). cosign never reads stdin, but a
+            // stdin-reading binary at the pinned path would otherwise block until the timeout tree-kill.
+            try { proc.StandardInput.Close(); } catch { /* child already gone: nothing to close */ }
+
             // Start the BOUNDED reads BEFORE waiting so the child never blocks on a full pipe
             // (draining concurrently), and so a spew never accumulates unbounded in memory: each
             // read stores at most its cap and only tracks the total to flag an overflow.
@@ -257,6 +264,64 @@ public static class CosignRunner
 
     private static CosignRunResult Rejected(string reason)
         => new(CosignOutcome.InputRejected, null, string.Empty, string.Empty, false, reason);
+
+    /// <summary>
+    /// Public reuse of the seam's no-symlink / regular-file / size-cap file-input policy for
+    /// orchestrators (e.g. <c>DeterminismVerifier</c>) that read a receipt/bundle directly, ahead
+    /// of <see cref="Run"/>'s own pre-launch FileInputs validation (INV-014 / AP-007). Returns a
+    /// non-null reject reason on any violation, or <c>null</c> for a valid in-bounds regular file.
+    /// </summary>
+    public static string? ValidateRegularFileWithinCap(string path, long inputCap = 67_108_864)
+        => ValidateFileInput(path, inputCap);
+
+    /// <summary>
+    /// Read a receipt/bundle/root file into memory BOUNDED by the size cap (INV-014, MA-E). Runs the
+    /// no-symlink / regular-file / stat-size pre-flight (<see cref="ValidateFileInput"/>) and then
+    /// reads through a stream storing AT MOST <paramref name="inputCap"/> bytes: if the stream yields
+    /// strictly MORE — a length-0 special file (e.g. <c>/dev/zero</c>) whose stat size is a lie, or a
+    /// file that grew past the cap after the stat — it is REJECTED, never read unbounded into an OOM.
+    /// The stat-size check trusts <c>st_size</c>, which a character device / FIFO reports as 0; this
+    /// bounded read is the real cap that a special file cannot defeat. Returns the exact bytes on
+    /// success (<paramref name="reason"/> = null), else null with a non-null attributed reason.
+    /// </summary>
+    public static byte[]? ReadRegularFileWithinCap(string path, out string? reason, long inputCap = 67_108_864)
+    {
+        reason = ValidateFileInput(path, inputCap);
+        if (reason is not null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var captured = new MemoryStream();
+            byte[] buffer = new byte[ReadChunkBytes];
+            long total = 0;
+            int n;
+            while ((n = fs.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                total += n;
+                if (total > inputCap)
+                {
+                    // A special file (e.g. /dev/zero) or a file that grew past the cap after the stat
+                    // check: stop BEFORE the unbounded read exhausts memory. `> inputCap` mirrors the
+                    // stat-size gate: content exactly at the cap is accepted, one byte more is rejected.
+                    reason = "file input exceeds the maximum input size cap of " + inputCap + " bytes: " + Safe(path);
+                    return null;
+                }
+
+                captured.Write(buffer, 0, n);
+            }
+
+            return captured.ToArray();
+        }
+        catch
+        {
+            reason = "file input is not a regular readable file: " + Safe(path);
+            return null;
+        }
+    }
 
     /// <summary>
     /// Validate one file input against the no-symlink / regular-file / size-cap policy. Returns a
@@ -342,7 +407,7 @@ public static class CosignRunner
         try
         {
             int n;
-            while ((n = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct).ConfigureAwait(false)) > 0)
+            while ((n = await stream.ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false)) > 0)
             {
                 total += n;
                 long remaining = cap - captured.Length;

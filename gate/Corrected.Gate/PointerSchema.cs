@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace Corrected.Gate;
 
@@ -79,6 +80,74 @@ public sealed record PointerValidation(bool Valid, string Reason)
 /// </summary>
 public static class PointerSchema
 {
+    /// <summary>
+    /// The minimal on-disk P3 active-baseline pointer document (maintainer-selected 4-field shape,
+    /// 2026-07-31). The <c>receipt</c>/<c>bundle</c> are repo-relative paths under the family fixed
+    /// root <c>test/attestations/inv010/&lt;commit&gt;/</c>; everything else (subject-manifest digest,
+    /// trust-root id) is carried by the signed receipt, not duplicated here.
+    /// </summary>
+    public sealed record PointerDocument(string Family, string Receipt, string Bundle, string AttestedCommit);
+
+    /// <summary>The public accessor for a family's fixed repo-relative root (or null for unknown).</summary>
+    public static string? FixedRoot(PointerFamily family) => FixedRootOf(family);
+
+    /// <summary>Map the on-disk <c>family</c> wire string to a <see cref="PointerFamily"/>, or null (unknown, fail-closed).</summary>
+    public static PointerFamily? FamilyFromWire(string? wire) => wire switch
+    {
+        "p3-active-baseline" => PointerFamily.P3ActiveBaseline,
+        "entry-evidence" => PointerFamily.EntryEvidence,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Parse the minimal on-disk pointer JSON, fail-closed. Returns the typed
+    /// <see cref="PointerDocument"/> on success, else <c>(null, error)</c> for malformed JSON, a
+    /// non-object root, or any missing / non-string / empty required field. Never throws.
+    /// </summary>
+    public static (PointerDocument? Document, string? Error) ParsePointerJson(byte[] bytes)
+    {
+        if (bytes is null)
+        {
+            return (null, "null pointer bytes");
+        }
+
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(bytes);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return (null, "pointer root is not a JSON object");
+            }
+
+            string? family = RequiredString(doc.RootElement, "family");
+            string? receipt = RequiredString(doc.RootElement, "receipt");
+            string? bundle = RequiredString(doc.RootElement, "bundle");
+            string? attested = RequiredString(doc.RootElement, "attested_commit");
+
+            if (family is null || receipt is null || bundle is null || attested is null)
+            {
+                return (null, "pointer missing a required field (family/receipt/bundle/attested_commit)");
+            }
+
+            return (new PointerDocument(family, receipt, bundle, attested), null);
+        }
+        catch (JsonException)
+        {
+            return (null, "pointer is not parseable JSON");
+        }
+    }
+
+    /// <summary>A required non-empty string field, or null when absent / wrong-typed / empty.</summary>
+    private static string? RequiredString(JsonElement obj, string name)
+    {
+        if (!obj.TryGetProperty(name, out JsonElement value) || value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+        string? s = value.GetString();
+        return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+
     /// <summary>
     /// Validate a parsed pointer descriptor against the committed-path set. Pure over the supplied
     /// inputs (no I/O — <paramref name="committedPaths"/> and <see cref="PointerDescriptor.TargetIsSymlink"/>

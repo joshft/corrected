@@ -1,0 +1,113 @@
+# P3 phase-entry attestation — the TWO-JOB signing workflow (INV-030 / Group G / MA-C).
+# The entry analog of p3-determinism-sign.yml.
+#
+# DORMANT SKELETON: a phase entry only occurs at ACTIVATION (the first BLOCKED->ENTERED
+# transition), which is P2+ scope; until then no protected-main push carries an entry
+# activation. This workflow is the committed mechanism skeleton the gate-side EntryVerifier
+# pairs with. The per-activation REAL evidence-gather (assembling the P1/P2/P3 closures at
+# the entry commit X) lands with P2; today the producer emits the entry Statement from the
+# committed synthetic entry-receipt spec so the skeleton is runnable + workflow<->script sync
+# is exercised (Inv030SignEntrySurfaceTests).
+#
+# Job split: an UNPRIVILEGED `producer` builds the entry hand-off (entry-statement.json +
+# the commit-X blob) as SAME-RUN @actions/artifact outputs (RS-032/EA-010 — never a cross-run
+# REST download), and a MINIMAL `signer` (needs: producer) re-checks that hand-off and signs
+# it. The producer holds NO OIDC privilege; the signing token lives ONLY in the signer.
+#
+# There is deliberately NO workflow-level (column-0) permissions block: each job declares its
+# OWN least-privilege set, so the producer can never INHERIT a hoisted grant.
+#
+# Third-party Actions are pinned by 40-hex commit SHA (never a floating @vN tag). Signs ONLY a
+# protected-main push (+ manual dispatch); never a PR-triggered event.
+name: p3-entry-sign
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  producer:
+    name: entry producer (unprivileged; emits the entry statement hand-off)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Least privilege: read-only. NO OIDC token here — the signer owns signing.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact trigger commit (full history; creds NOT persisted)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install the pinned .NET SDK to $HOME/.dotnet (spike global.json)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --jsonfile spikes/dafny-compat/global.json --install-dir "$HOME/.dotnet"
+
+      # Emit the Corrected-built entry-statement.json + the commit-X blob through the runnable
+      # test-host emitter (EntryStatementEmitter, driven by the EmitEntryStatement [Fact]). The
+      # step env injects ABSOLUTE, space-free paths, so the fact runs in CI producer mode and
+      # writes the Statement through the ONE canonical byte-source
+      # (EntryStatementCodec.SerializeEntryStatementJson) INTO the hand-off the upload step
+      # bundles and the signer re-checks + signs. The CONTAINS-form filter (`~`) binds the exact
+      # host fact; an exact `=` form would match zero tests (a silent no-op).
+      - name: Emit the Corrected-built entry-statement.json + commit-X blob (runnable host, CI mode)
+        env:
+          EMIT_ENTRY_SPEC: ${{ github.workspace }}/gate/Corrected.Gate.Tests/fixtures/provenance/entry-receipt.sample.json
+          EMIT_ENTRY_STATEMENT_OUT: ${{ github.workspace }}/handoff/entry-statement.json
+          EMIT_ENTRY_BLOB_OUT: ${{ github.workspace }}/handoff/entry-commit.blob
+        run: |
+          set -o pipefail
+          mkdir -p handoff
+          export DOTNET_ROOT=$HOME/.dotnet; export PATH=$HOME/.dotnet:$PATH
+          dotnet test gate/Corrected.Gate.slnx --filter 'FullyQualifiedName~EmitEntryStatement'
+
+      - name: Upload the same-run signer hand-off artifact (runtime-token transfer)
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: entry-handoff
+          path: handoff
+
+  signer:
+    name: minimal signer (re-checks the hand-off, then signs it)
+    needs: producer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # EXACTLY the two-permission minimal set — OIDC write + repo read.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout the pinned trigger commit (hardened; creds NOT persisted)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download the SAME-RUN producer hand-off (no cross-run download)
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: entry-handoff
+          path: handoff
+
+      - name: Provision the pinned cosign binary (digest-validated bootstrap)
+        run: |
+          bash gate/tools/provision-cosign.sh linux-x64 "$RUNNER_TEMP/cosign"
+
+      - name: Re-check the producer hand-off and sign (frozen surface, verbatim)
+        env:
+          COSIGN_BIN: ${{ runner.temp }}/cosign
+        run: |
+          bash gate/tools/sign-entry.sh \
+            --artifacts-dir handoff \
+            --out handoff/entry.sigstore.json
+
+      - name: Publish the signed entry bundle
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: entry-bundle
+          path: handoff/entry.sigstore.json

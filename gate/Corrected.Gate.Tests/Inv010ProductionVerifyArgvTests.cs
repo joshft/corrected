@@ -81,6 +81,38 @@ public class Inv010ProductionVerifyArgvTests
         Assert.Equal(DeterminismVerifyIdentity.DeterminismPredicateTypeUri, argv[typeIdx + 1]);
     }
 
+    // Tests INV-011 [integration] (MA-A — the REAL enforcer binding, DERIVED path): when the request
+    // supplies NO explicit CertWorkflowSha (the production path), the argv's
+    // --certificate-github-workflow-sha is DERIVED from the committed receipt's attested_commit. cosign
+    // then binds the certificate's workflow-SHA to that value — this ARGV FLAG is the INV-011 enforcer
+    // (the in-code cross-check is a tautology on this path, since it compares attested_commit to
+    // itself). This guard asserts the binding is emitted with the receipt's attested_commit, so a
+    // future edit that drops the flag or its value is a red diff — the AP-004 removal trap the
+    // tautological runtime compare could not catch.
+    [Fact]
+    public void Build_verify_argv_derives_workflow_sha_from_receipt_when_request_supplies_none()
+    {
+        string receiptPath = TestPaths.RepoFile("test", "attestations", "fixtures", "pos", "determinism-receipt.json");
+        var req = new DeterminismVerifyRequest
+        {
+            CosignBinPath = "/abs/cosign",
+            BundlePath = "/abs/work/determinism.sigstore.json",
+            ReceiptPath = receiptPath,
+            TrustRootPath = "/abs/work/trusted_root.json",
+            WorkingDirectory = "/abs/work",
+            ExpectedRid = "linux-x64",
+            Identity = DeterminismVerifyIdentity.Production,
+            CertWorkflowSha = null, // production path -> the SHA is derived from the receipt
+        };
+
+        IReadOnlyList<string> argv = DeterminismVerifier.BuildVerifyArgv(req);
+
+        int idx = argv.ToList().IndexOf("--certificate-github-workflow-sha");
+        Assert.True(idx >= 0 && idx + 1 < argv.Count, "argv must carry --certificate-github-workflow-sha <sha>");
+        Assert.Equal(KnownSha, argv[idx + 1]); // == the POS receipt's attested_commit (README-frozen)
+        Assert.NotEqual(string.Empty, argv[idx + 1]);
+    }
+
     // Tests PRH-001 [integration] (never insecure / over-broad): the frozen argv contains NONE of the
     // insecure/over-broad flags — --check-claims=false, --insecure-ignore-tlog, --insecure-ignore-sct,
     // --certificate-identity-regexp, --certificate-oidc-issuer-regexp — and the identity/issuer are

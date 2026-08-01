@@ -77,20 +77,25 @@ public sealed class DeterminismVerifyRequest
     /// </summary>
     public string? CertWorkflowSha { get; init; }
 
-    /// <summary>The <c>attested_commit</c>-vs-HEAD ancestry status (INV-012/019).</summary>
-    public AncestryStatus AttestedCommitAncestry { get; init; } = AncestryStatus.Ancestor;
+    /// <summary>
+    /// The <c>attested_commit</c>-vs-HEAD ancestry status (INV-012/019). Defaults to the SAFE
+    /// direction <see cref="AncestryStatus.Uncomputable"/> (fail-closed): a caller that omits this
+    /// input is rejected, never accepted. The layer-2 fixture positive sets <c>Ancestor</c>
+    /// explicitly, so the accept path is proven by an explicit input, not a permissive default (QA-001).
+    /// </summary>
+    public AncestryStatus AttestedCommitAncestry { get; init; } = AncestryStatus.Uncomputable;
 
     /// <summary>
     /// The subject-manifest staleness input (INV-018/019), supplied as a typed gate-side fact —
-    /// NOT recomputed here against a moving HEAD. A3 resolution (deliberate): the committed fixture
-    /// verifies its manifest against its OWN frozen manifest context (the receipt's
-    /// <c>subject_manifest_digest</c> is frozen at commit <c>14701a9</c>), so a moving HEAD does not
-    /// block the fixture positive; a real HEAD-relative staleness gate supplies <c>true</c> here via
-    /// the probe orchestrator (INV-018). Staleness stays ENFORCEABLE (a caller passing <c>true</c>
-    /// gets <see cref="DeterminismVerifyReason.StaleSubjectManifest"/>) — it is never silently
-    /// disabled. Defaults non-stale for the fixture verification the layer-2 tests drive.
+    /// NOT recomputed here against a moving HEAD. Defaults to the SAFE direction <c>true</c>
+    /// (stale =&gt; fail-closed): a caller that omits this input is rejected with
+    /// <see cref="DeterminismVerifyReason.StaleSubjectManifest"/>, never accepted (QA-001). The
+    /// committed fixture verifies its manifest against its OWN frozen manifest context (the
+    /// receipt's <c>subject_manifest_digest</c> is frozen at commit <c>14701a9</c>), so the layer-2
+    /// fixture positive sets <c>false</c> EXPLICITLY; a real HEAD-relative staleness gate supplies
+    /// the value via the probe orchestrator (INV-018). Staleness is never silently disabled.
     /// </summary>
-    public bool ManifestStale { get; init; }
+    public bool ManifestStale { get; init; } = true;
 
     /// <summary>Bounded process timeout for the cosign verify subprocess.</summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
@@ -190,14 +195,30 @@ public static class DeterminismVerifier
                 return Reject(DeterminismVerifyReason.EvidenceAbsent);
             }
 
+            // INV-014 / AP-007 / MA-E / MA-G: read the receipt AND bundle ONCE, each BOUNDED by the
+            // size cap, BEFORE cosign. The single in-memory buffers are reused for the parse, the
+            // INV-010 reconstruction, the DSSE decode, and the argv SHA derivation — so (a) an
+            // oversize OR a length-0 special file (e.g. /dev/zero, whose stat size is a lie) is
+            // rejected here, never read unbounded into an OOM (a plain stat-size check cannot catch a
+            // special file), and (b) the bytes Corrected classifies cannot diverge from the bytes it
+            // verified through a later re-read (the TOCTOU the multi-read seam left open).
+            byte[]? bundleBytes = CosignRunner.ReadRegularFileWithinCap(request.BundlePath, out _);
+            if (bundleBytes is null)
+            {
+                return Reject(DeterminismVerifyReason.MalformedBundle);
+            }
+            byte[]? receiptBytes = CosignRunner.ReadRegularFileWithinCap(request.ReceiptPath, out _);
+            if (receiptBytes is null)
+            {
+                return Reject(DeterminismVerifyReason.MalformedReceipt);
+            }
+
             // The committed receipt (the signed subject bytes) must parse. An unparseable receipt is
             // not a valid signed subject -> malformed-receipt. The parsed bytes + DTO are retained
             // for the cosign-Ok byte-equality reconstruction and the INV-011 cert-SHA cross-check.
-            byte[] receiptBytes;
             RunReceipt receipt;
             try
             {
-                receiptBytes = File.ReadAllBytes(request.ReceiptPath);
                 receipt = RunReceipt.FromJson(receiptBytes);
             }
             catch (Exception)
@@ -208,7 +229,7 @@ public static class DeterminismVerifier
             // The bundle must parse as JSON; an unparseable bundle -> malformed-bundle.
             try
             {
-                using JsonDocument bundleDoc = JsonDocument.Parse(File.ReadAllBytes(request.BundlePath));
+                using JsonDocument bundleDoc = JsonDocument.Parse(bundleBytes);
             }
             catch (Exception)
             {
@@ -222,15 +243,14 @@ public static class DeterminismVerifier
             //      reaches cosign, which fails to load it (-> trust-root-or-pin-mismatch, below). ----
             if (FilePresentButUnreadable(request.TrustRootPath) || FilePresentButUnreadable(request.CosignBinPath))
             {
-                return new DeterminismVerifyResult(
-                    DeterminismVerifyOutcome.Unavailable, DeterminismVerifyReason.TrustRootOrToolUnreadable);
+                return Classified(DeterminismVerifyReason.TrustRootOrToolUnreadable);
             }
 
             // ---- run the pinned cosign verify seam (CosignRunner, INV-014) out-of-process ----
             CosignRunResult run = CosignRunner.Run(new CosignRunOptions
             {
                 ExecutablePath = request.CosignBinPath,
-                Argv = BuildVerifyArgv(request),
+                Argv = BuildVerifyArgv(request, receipt),
                 WorkingDirectory = request.WorkingDirectory,
                 FileInputs = new[] { request.BundlePath, request.ReceiptPath, request.TrustRootPath },
                 Timeout = request.Timeout,
@@ -238,9 +258,9 @@ public static class DeterminismVerifier
 
             return run.Outcome switch
             {
-                // A missing / unexecutable cosign binary is a transient (unavailable) cell (EA-008).
-                CosignOutcome.LaunchFailed => new DeterminismVerifyResult(
-                    DeterminismVerifyOutcome.Unavailable, DeterminismVerifyReason.VerifierUnavailable),
+                // A missing / unexecutable cosign binary is a transient (unavailable) cell (EA-008),
+                // classified via the committed INV-012 severity map (QA-002).
+                CosignOutcome.LaunchFailed => Classified(DeterminismVerifyReason.VerifierUnavailable),
 
                 // A bare timeout / oversize spew / pre-launch input rejection the taxonomy does not
                 // positively classify maps to the pinned default unclassified-verifier-fault —
@@ -257,7 +277,7 @@ public static class DeterminismVerifier
                 // On cosign Ok: base64-decode .dsseEnvelope.payload, require it byte-equal the
                 // Corrected-reconstructed Statement [INV-010], cross-check cert-SHA==attested_commit
                 // [INV-011], then apply the layer-1 claim policy -> Verified only if all hold.
-                CosignOutcome.Ok => VerifyCosignOk(request, receiptBytes, receipt),
+                CosignOutcome.Ok => VerifyCosignOk(request, receiptBytes, receipt, bundleBytes),
 
                 _ => Reject(DeterminismVerifyReason.UnclassifiedVerifierFault),
             };
@@ -337,17 +357,18 @@ public static class DeterminismVerifier
     /// failure is a SPECIFIC typed reject (fail-closed).
     /// </summary>
     private static DeterminismVerifyResult VerifyCosignOk(
-        DeterminismVerifyRequest request, byte[] receiptBytes, RunReceipt receipt)
+        DeterminismVerifyRequest request, byte[] receiptBytes, RunReceipt receipt, byte[] bundleBytes)
     {
         // INV-010: decode the SIGNED DSSE payload and require it BYTE-EQUAL the Statement Corrected
         // reconstructs from the committed receipt through the SINGLE canonical serializer. cosign's
         // --check-claims verifies the subject DIGEST but never the predicate CONTENT, so a mutated
         // predicate that keeps sha256(receipt) is caught ONLY here. A payload that cannot be decoded
-        // on the Ok path is fail-closed to the reconstruction-mismatch reject.
+        // on the Ok path is fail-closed to the reconstruction-mismatch reject. The bundle bytes are
+        // the SAME buffer read (bounded) before cosign — never re-read (MA-G TOCTOU).
         byte[] decodedPayload;
         try
         {
-            using JsonDocument bundleDoc = JsonDocument.Parse(File.ReadAllBytes(request.BundlePath));
+            using JsonDocument bundleDoc = JsonDocument.Parse(bundleBytes);
             string payloadB64 = bundleDoc.RootElement
                 .GetProperty("dsseEnvelope").GetProperty("payload").GetString()
                 ?? throw new InvalidOperationException("bundle dsseEnvelope.payload is absent");
@@ -366,10 +387,16 @@ public static class DeterminismVerifier
             return Reject(DeterminismVerifyReason.StatementReconstructionMismatch);
         }
 
-        // INV-011: the certificate's workflow-SHA (the argv value, or the receipt's attested_commit
-        // when the request supplies none) must EQUAL the receipt's attested_commit. This is the
-        // Corrected-SIDE binding check reached only once identity has passed (distinct from the
-        // cosign identity check) — the 2b negative.
+        // INV-011 (MA-A — honest layering): on the PRODUCTION path the certificate's workflow-SHA is
+        // bound to the receipt's attested_commit CRYPTOGRAPHICALLY BY COSIGN, via the frozen argv flag
+        // `--certificate-github-workflow-sha <attested_commit>` (BuildVerifyArgv) — cosign rejects any
+        // cert whose workflow_sha claim differs, so that binding is the real enforcer. When the request
+        // supplies no explicit CertWorkflowSha, ResolveCertWorkflowSha returns attested_commit and the
+        // compare below is `attested_commit == attested_commit` by construction (redundant, not a
+        // defense). The compare does REAL work only on the FIXTURE 2b path, where an explicit
+        // request.CertWorkflowSha may differ from the receipt's attested_commit -> reject. The AP-004
+        // removal trap (a future edit dropping the argv flag) is guarded by the argv structural test
+        // (Inv011 argv contract), NOT by this runtime compare.
         string certWorkflowSha = ResolveCertWorkflowSha(request, receipt);
         if (!string.Equals(certWorkflowSha, receipt.AttestedCommit, StringComparison.Ordinal))
         {
@@ -465,8 +492,22 @@ public static class DeterminismVerifier
             ? token
             : ReasonTokens[DeterminismVerifyReason.UnclassifiedVerifierFault];
 
+    // Every non-verified result's Rejected-vs-Unavailable OUTCOME is derived from the committed
+    // INV-012 severity map (DeterminismVerifyReasonMap) — the single production source of truth, so
+    // re-pointing a reason's [VerifySeverity] annotation changes Verify's outcome and the negatives
+    // catch it (QA-002: the map is no longer parallel dead code). Reject is retained as the call-site
+    // name for the (rejected-severity) policy/crypto reasons.
     private static DeterminismVerifyResult Reject(DeterminismVerifyReason reason)
-        => new(DeterminismVerifyOutcome.Rejected, reason);
+        => Classified(reason);
+
+    // Build the typed result whose outcome is the map's severity for the reason (Unavailable ONLY
+    // for the closed two-member transient-fault set; every other reason + the default -> Rejected).
+    private static DeterminismVerifyResult Classified(DeterminismVerifyReason reason)
+        => new(
+            DeterminismVerifyReasonMap.Classify(reason) == VerifySeverity.Unavailable
+                ? DeterminismVerifyOutcome.Unavailable
+                : DeterminismVerifyOutcome.Rejected,
+            reason);
 
     /// <summary>
     /// Build the cosign verify argv (INV-010/011 / DD-002 / PRH-001). GREEN freezes the EXACT
@@ -491,8 +532,22 @@ public static class DeterminismVerifier
         ArgumentNullException.ThrowIfNull(request);
 
         string certWorkflowSha = request.CertWorkflowSha ?? DeriveWorkflowShaFromReceipt(request.ReceiptPath);
+        return BuildVerifyArgvWithSha(request, certWorkflowSha);
+    }
 
-        return new[]
+    /// <summary>
+    /// In-<see cref="Verify"/> overload (MA-G): reuses the ALREADY-READ + already-parsed receipt DTO
+    /// for the workflow-SHA, so the receipt file is NOT re-read a second time on the verify path (the
+    /// uncapped/​TOCTOU re-read the resource-bounds audit flagged). Identical argv, one fewer disk read.
+    /// </summary>
+    internal static IReadOnlyList<string> BuildVerifyArgv(DeterminismVerifyRequest request, RunReceipt receipt)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return BuildVerifyArgvWithSha(request, ResolveCertWorkflowSha(request, receipt));
+    }
+
+    private static IReadOnlyList<string> BuildVerifyArgvWithSha(DeterminismVerifyRequest request, string certWorkflowSha)
+        => new[]
         {
             "verify-blob-attestation",
             "--check-claims=true",
@@ -505,19 +560,20 @@ public static class DeterminismVerifier
             "--bundle", request.BundlePath,
             request.ReceiptPath,
         };
-    }
 
     /// <summary>
     /// Derive the <c>--certificate-github-workflow-sha</c> from the committed receipt's
     /// <c>attested_commit</c> (the production real path, when the request supplies no explicit
-    /// value). An unreadable/unparseable receipt yields the empty string — the argv still forms and
-    /// cosign fails closed on the empty SHA constraint (never a silent accept).
+    /// value). The receipt is read through the BOUNDED regular-file reader (MA-E) so an oversize or
+    /// special-file receipt path cannot OOM here either. An unreadable/unparseable receipt yields the
+    /// empty string — the argv still forms and cosign fails closed on the empty SHA constraint.
     /// </summary>
     private static string DeriveWorkflowShaFromReceipt(string receiptPath)
     {
         try
         {
-            return RunReceipt.FromJson(File.ReadAllBytes(receiptPath)).AttestedCommit;
+            byte[]? bytes = CosignRunner.ReadRegularFileWithinCap(receiptPath, out _);
+            return bytes is null ? string.Empty : RunReceipt.FromJson(bytes).AttestedCommit;
         }
         catch (Exception)
         {

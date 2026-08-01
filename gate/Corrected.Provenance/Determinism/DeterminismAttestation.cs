@@ -3,7 +3,6 @@
 //   receipt bytes -> SHA-256 subject digest -> versioned determinism predicate
 //   -> Statement/v1 (one subject) -> DSSE payload.
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;

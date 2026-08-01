@@ -324,8 +324,11 @@ public static class ReadinessBlockParser
         {
             // v1 PROHIBITS both v2 wire keys. Presence of EITHER key (regardless of value —
             // even an unrecognized lifecycle value the typed DTO would drop to null) is a
-            // fail-closed. Detect via the raw key-presence bits, never the typed DTO. Defense
-            // in depth: TryCreate ALSO rejects a non-null lifecycle/pointer for direct callers.
+            // fail-closed. Detect via the raw key-presence bits, never the typed DTO. The 4-arg
+            // TryCreate below carries no lifecycle/pointer, so on the parser path the raw
+            // key-presence probe is the SOLE prohibition mechanism (QA-015 — pinned by the v1/v2
+            // key-prohibition parser tests). TryCreate's own v1 key-rejection only backstops
+            // DIRECT callers of the lifecycle/pointer overload, not this path.
             if (lifecycleKeyPresent || pointerKeyPresent)
             {
                 return ReadinessBlock.Indeterminate();

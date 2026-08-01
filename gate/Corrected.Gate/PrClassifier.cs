@@ -293,12 +293,22 @@ public static class PrClassifier
         public bool HeadSat;
         public string? BaseEv;
         public string? HeadEv;
+        public string BaseName = "";
+        public string HeadName = "";
+        public IReadOnlyList<string> BaseDischarges = Array.Empty<string>();
+        public IReadOnlyList<string> HeadDischarges = Array.Empty<string>();
 
         public bool SatChanged => BaseSat != HeadSat;
 
         public bool EvChanged => !string.Equals(BaseEv, HeadEv, StringComparison.Ordinal);
 
-        public bool Unchanged => !SatChanged && !EvChanged;
+        // QA-014: Name / Discharges complete the readiness-block-field allowlist so NoBlockFieldChange
+        // is literally true over EVERY precondition field, not just Sat+Ev (the 'NOTHING else' claim).
+        public bool NameChanged => !string.Equals(BaseName, HeadName, StringComparison.Ordinal);
+
+        public bool DischargesChanged => !BaseDischarges.SequenceEqual(HeadDischarges, StringComparer.Ordinal);
+
+        public bool Unchanged => !SatChanged && !EvChanged && !NameChanged && !DischargesChanged;
 
         /// <summary>satisfied:false→true IN LOCKSTEP with evidence:null→&lt;reference&gt;.</summary>
         public bool CleanActivation => !BaseSat && HeadSat && BaseEv is null && HeadEv is not null;
@@ -346,6 +356,10 @@ public static class PrClassifier
                 HeadSat = ph.Satisfied,
                 BaseEv = pb.Evidence,
                 HeadEv = ph.Evidence,
+                BaseName = pb.Name,
+                HeadName = ph.Name,
+                BaseDischarges = pb.Discharges,
+                HeadDischarges = ph.Discharges,
             };
         }
 

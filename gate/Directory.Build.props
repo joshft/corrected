@@ -12,7 +12,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <!-- NuGet downgrade warnings are errors (supply-chain hygiene, INV-015). -->
-    <WarningsAsErrors>$(WarningsAsErrors);NU1605</WarningsAsErrors>
+    <!-- NuGet downgrade warnings are errors (supply-chain hygiene, INV-015). CS8509 (a switch
+         expression does not handle all values) is an error too (MA-I): a new enum member added to a
+         no-default fail-closed switch (e.g. PostEntryHealth) is then a COMPILE stop, not a silent
+         warning that ships and throws at runtime. -->
+    <WarningsAsErrors>$(WarningsAsErrors);NU1605;CS8509</WarningsAsErrors>
   </PropertyGroup>
 </Project>

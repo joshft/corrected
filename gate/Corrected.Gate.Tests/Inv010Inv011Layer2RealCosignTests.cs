@@ -273,6 +273,226 @@ public class Inv010Inv011Layer2RealCosignTests
         finally { fx.Dispose(); }
     }
 
+    // ============ section E2 — QA-001: staleness/ancestry safety inputs are fail-closed ============
+    // The staleness (INV-018/019) and ancestry (INV-012/019) inputs to DeterminismVerifyRequest default
+    // to the SAFE direction. These cells drive them THROUGH the full Verify cosign-Ok policy branch
+    // (a fake-exit-0 cosign + the real byte-equal POS statement + the matching cert-SHA), proving the
+    // gate fires INSIDE Verify, not only in the isolated layer-1 unit. Not gated on Provisioned.
+
+    // A request that OMITS both safety inputs inherits the fail-closed defaults (stale=true,
+    // ancestry=Uncomputable) and is REJECTED, never Verified — so a future caller that forgets them
+    // fails closed, not open (the QA-001 fail-open-by-default this closes). Staleness is checked first.
+    [Fact]
+    public void Verify_omitting_staleness_and_ancestry_fails_closed_by_default()
+    {
+        FixtureCopy fx = FixtureCopy.Of("pos");
+        try
+        {
+            var req = new DeterminismVerifyRequest
+            {
+                CosignBinPath = MakeExitZeroFakeCosign(fx.Dir), // exits 0 -> reaches the layer-1 policy
+                BundlePath = fx.BundlePath,                     // real POS bundle -> byte-equal payload
+                ReceiptPath = fx.ReceiptPath,                   // real POS receipt (reconstruction source)
+                TrustRootPath = WriteMinimalRoot(fx.Dir),
+                WorkingDirectory = fx.Dir,
+                ExpectedRid = "linux-x64",
+                Identity = DeterminismVerifyIdentity.Fixture,
+                CertWorkflowSha = FixtureAttestedCommit,
+                Timeout = TimeSpan.FromSeconds(30),
+                // ManifestStale / AttestedCommitAncestry DELIBERATELY omitted -> the safe defaults.
+            };
+
+            DeterminismVerifyResult r = DeterminismVerifier.Verify(req);
+
+            Assert.NotEqual(DeterminismVerifyOutcome.Verified, r.Outcome);
+            Assert.Equal(DeterminismVerifyOutcome.Rejected, r.Outcome);
+            Assert.Equal(DeterminismVerifyReason.StaleSubjectManifest, r.Reason);
+        }
+        finally { fx.Dispose(); }
+    }
+
+    // ManifestStale=true (ancestry accept) -> StaleSubjectManifest, INSIDE Verify's cosign-Ok branch.
+    [Fact]
+    public void Verify_rejects_stale_manifest_through_cosign_ok_policy()
+    {
+        FixtureCopy fx = FixtureCopy.Of("pos");
+        try
+        {
+            DeterminismVerifyResult r = DeterminismVerifier.Verify(
+                FakeOkPolicyRequest(fx, manifestStale: true, ancestry: AncestryStatus.Ancestor));
+            Assert.Equal(DeterminismVerifyOutcome.Rejected, r.Outcome);
+            Assert.Equal(DeterminismVerifyReason.StaleSubjectManifest, r.Reason);
+        }
+        finally { fx.Dispose(); }
+    }
+
+    // AttestedCommitAncestry=NotAncestor (non-stale) -> AttestedCommitNotAncestor.
+    [Fact]
+    public void Verify_rejects_non_ancestor_attested_commit_through_cosign_ok_policy()
+    {
+        FixtureCopy fx = FixtureCopy.Of("pos");
+        try
+        {
+            DeterminismVerifyResult r = DeterminismVerifier.Verify(
+                FakeOkPolicyRequest(fx, manifestStale: false, ancestry: AncestryStatus.NotAncestor));
+            Assert.Equal(DeterminismVerifyOutcome.Rejected, r.Outcome);
+            Assert.Equal(DeterminismVerifyReason.AttestedCommitNotAncestor, r.Reason);
+        }
+        finally { fx.Dispose(); }
+    }
+
+    // AttestedCommitAncestry=Uncomputable (a shallow clone / absent commit) -> AncestryUncomputable,
+    // REJECTED, never unavailable (RS-013).
+    [Fact]
+    public void Verify_rejects_uncomputable_ancestry_through_cosign_ok_policy()
+    {
+        FixtureCopy fx = FixtureCopy.Of("pos");
+        try
+        {
+            DeterminismVerifyResult r = DeterminismVerifier.Verify(
+                FakeOkPolicyRequest(fx, manifestStale: false, ancestry: AncestryStatus.Uncomputable));
+            Assert.Equal(DeterminismVerifyOutcome.Rejected, r.Outcome);
+            Assert.Equal(DeterminismVerifyReason.AncestryUncomputable, r.Reason);
+        }
+        finally { fx.Dispose(); }
+    }
+
+    // Shared builder: the real byte-equal POS fixture through a fake-exit-0 cosign, so Verify reaches
+    // the layer-1 claim policy with the supplied staleness/ancestry inputs (QA-001 class fix).
+    private static DeterminismVerifyRequest FakeOkPolicyRequest(
+        FixtureCopy fx, bool manifestStale, AncestryStatus ancestry) => new()
+        {
+            CosignBinPath = MakeExitZeroFakeCosign(fx.Dir),
+            BundlePath = fx.BundlePath,
+            ReceiptPath = fx.ReceiptPath,
+            TrustRootPath = WriteMinimalRoot(fx.Dir),
+            WorkingDirectory = fx.Dir,
+            ExpectedRid = "linux-x64",
+            Identity = DeterminismVerifyIdentity.Fixture,
+            CertWorkflowSha = FixtureAttestedCommit,
+            ManifestStale = manifestStale,
+            AttestedCommitAncestry = ancestry,
+            Timeout = TimeSpan.FromSeconds(30),
+        };
+
+    // ============ section E3 — QA-004: orchestrator input hardening (INV-014 / AP-007) ============
+    // DeterminismVerifier reads the receipt + bundle directly, AHEAD of the seam's own FileInputs
+    // validation. A symlinked or oversize input must be rejected as malformed BEFORE the orchestrator
+    // reads it — never followed, never read unbounded (OOM). Not gated on Provisioned.
+
+    [Fact]
+    public void Verify_rejects_symlinked_receipt_before_unbounded_read()
+    {
+        FixtureCopy fx = FixtureCopy.Of("pos");
+        try
+        {
+            // Replace the receipt with a SYMLINK to the real bytes: the no-symlink policy must reject
+            // it as malformed-receipt BEFORE File.ReadAllBytes would follow the link.
+            string realReceipt = fx.ReceiptPath + ".real";
+            File.Move(fx.ReceiptPath, realReceipt);
+            File.CreateSymbolicLink(fx.ReceiptPath, realReceipt);
+
+            DeterminismVerifyResult r = DeterminismVerifier.Verify(
+                FakeOkPolicyRequest(fx, manifestStale: false, ancestry: AncestryStatus.Ancestor));
+
+            Assert.Equal(DeterminismVerifyOutcome.Rejected, r.Outcome);
+            Assert.Equal(DeterminismVerifyReason.MalformedReceipt, r.Reason);
+        }
+        finally { fx.Dispose(); }
+    }
+
+    [Fact]
+    public void Verify_rejects_oversize_bundle_before_unbounded_read()
+    {
+        FixtureCopy fx = FixtureCopy.Of("pos");
+        try
+        {
+            // A bundle that is VALID JSON but exceeds the 64 MiB input cap. This is a GENUINE cap guard,
+            // not a vacuous one: WITHOUT the pre-read cap the bundle PARSES (valid JSON), reaches
+            // VerifyCosignOk, and fails with the DIFFERENT reason StatementReconstructionMismatch (it has
+            // no dsseEnvelope). So asserting MalformedBundle proves the pre-read size cap fired, never a
+            // downstream parse failure. (A sparse zero-file would be rejected by BOTH cap and parse -> the
+            // reason could not distinguish them.)
+            using (var w = new StreamWriter(fx.BundlePath, append: false))
+            {
+                w.Write("{}");
+                string pad = new string(' ', 1 << 20); // 1 MiB of JSON-legal trailing whitespace
+                for (int i = 0; i < 65; i++) // 65 MiB > 64 MiB cap
+                {
+                    w.Write(pad);
+                }
+            }
+
+            DeterminismVerifyResult r = DeterminismVerifier.Verify(
+                FakeOkPolicyRequest(fx, manifestStale: false, ancestry: AncestryStatus.Ancestor));
+
+            Assert.Equal(DeterminismVerifyOutcome.Rejected, r.Outcome);
+            Assert.Equal(DeterminismVerifyReason.MalformedBundle, r.Reason);
+        }
+        finally { fx.Dispose(); }
+    }
+
+    // MA-E: the stat-size cap trusts st_size, which a character device / FIFO reports as 0. The
+    // bounded read is the real cap: an infinite special file yields more than the cap and is rejected,
+    // never read unbounded into an OOM.
+    [Fact]
+    public void ReadRegularFileWithinCap_bounds_an_infinite_special_file()
+    {
+        if (!File.Exists("/dev/zero")) { return; } // Linux special file; skip elsewhere
+        byte[]? bytes = CosignRunner.ReadRegularFileWithinCap("/dev/zero", out string? reason, inputCap: 4096);
+        Assert.Null(bytes);       // rejected — the infinite stream exceeds the (small) cap
+        Assert.NotNull(reason);   // ...never read unbounded
+    }
+
+    [Fact]
+    public void ReadRegularFileWithinCap_returns_exact_bytes_for_a_regular_file()
+    {
+        string p = Path.Combine(Path.GetTempPath(), "mae-" + Guid.NewGuid().ToString("N"));
+        byte[] payload = Encoding.UTF8.GetBytes("hello determinism");
+        File.WriteAllBytes(p, payload);
+        try
+        {
+            byte[]? bytes = CosignRunner.ReadRegularFileWithinCap(p, out string? reason, inputCap: 4096);
+            Assert.Null(reason);
+            Assert.NotNull(bytes);
+            Assert.Equal(payload, bytes);
+        }
+        finally { File.Delete(p); }
+    }
+
+    // MA-E [integration]: a character-device RECEIPT (/dev/zero) reports st_size=0, so the stat-size
+    // cap alone ACCEPTS it and File.ReadAllBytes would then read it forever (OOM). The bounded read
+    // rejects it as malformed BEFORE the unbounded read, and before cosign is ever launched.
+    [Fact]
+    public void Verify_rejects_special_file_receipt_before_unbounded_read()
+    {
+        if (!File.Exists("/dev/zero")) { return; } // Linux special file whose stat size (0) is a lie
+        FixtureCopy fx = FixtureCopy.Of("pos");
+        try
+        {
+            var req = new DeterminismVerifyRequest
+            {
+                CosignBinPath = MakeExitZeroFakeCosign(fx.Dir),
+                BundlePath = fx.BundlePath,
+                ReceiptPath = "/dev/zero",
+                TrustRootPath = WriteMinimalRoot(fx.Dir),
+                WorkingDirectory = fx.Dir,
+                ExpectedRid = "linux-x64",
+                Identity = DeterminismVerifyIdentity.Fixture,
+                CertWorkflowSha = FixtureAttestedCommit,
+                ManifestStale = false,
+                AttestedCommitAncestry = AncestryStatus.Ancestor,
+                Timeout = TimeSpan.FromSeconds(30),
+            };
+
+            DeterminismVerifyResult r = DeterminismVerifier.Verify(req);
+
+            Assert.Equal(DeterminismVerifyOutcome.Rejected, r.Outcome);
+            Assert.Equal(DeterminismVerifyReason.MalformedReceipt, r.Reason);
+        }
+        finally { fx.Dispose(); }
+    }
+
     // ================= section F — audit-finding-3 transient faults through the REAL path =========
 
     // Tests INV-012 [integration] (EA-009 transient fault — chmod-000 UNREADABLE trust root →
@@ -556,7 +776,9 @@ public class Inv010Inv011Layer2RealCosignTests
 
         internal DeterminismVerifyRequest FixtureRequest(
             FixtureCopy fx, DeterminismVerifyIdentity identity, string certWorkflowSha,
-            string? trustRootOverride = null) => new()
+            string? trustRootOverride = null,
+            bool manifestStale = false,
+            AncestryStatus attestedCommitAncestry = AncestryStatus.Ancestor) => new()
             {
                 // If cosign is unresolved, point at an absolute-but-missing path so the REAL Verify
                 // path fails closed with verifier-unavailable (never a skip) — the honest fallback.
@@ -568,6 +790,10 @@ public class Inv010Inv011Layer2RealCosignTests
                 ExpectedRid = "linux-x64",
                 Identity = identity,
                 CertWorkflowSha = certWorkflowSha,
+                // QA-001: the fixture positive proves accept via EXPLICIT accept-valued safety inputs,
+                // never the request record's (now fail-closed) defaults.
+                ManifestStale = manifestStale,
+                AttestedCommitAncestry = attestedCommitAncestry,
                 Timeout = TimeSpan.FromSeconds(60),
             };
 

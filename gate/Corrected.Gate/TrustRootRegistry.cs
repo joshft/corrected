@@ -52,22 +52,22 @@ public sealed record VersionArgvEntry(string Version, IReadOnlyList<string> Argv
 /// committed bundles stay verifiable along the tool axis. Fail-closed lookup: an unmapped
 /// version resolves to <c>null</c>, never a floating/latest argv.
 ///
-/// RED-phase structural stub — the deny-by-default bodies below carry <c>STUB:TDD</c> and
-/// return safe-wrong values so the POSITIVE resolve/append-retention cells fail as
-/// ASSERTIONS (not build errors) while the fail-closed unmapped-version cell passes.
+/// GREEN: the bodies below implement the real append-retentive version-to-argv lookup — a
+/// positive resolve returns the frozen argv for a mapped version, append-retention keeps every
+/// prior version's argv, and an unmapped version resolves to <c>null</c> (fail-closed).
 /// </summary>
 public sealed class VersionArgvMap
 {
     private readonly IReadOnlyList<VersionArgvEntry> _entries;
 
     /// <summary>
-    /// Structural constructor: retain the supplied rows verbatim. The append-only
-    /// invariant enforcement (rejecting a bump that mutates or drops a prior version's
-    /// argv) is GREEN's job, not this stub's.
+    /// Structural constructor: retain the supplied rows verbatim. The append-only invariant
+    /// enforcement (rejecting a bump that mutates or drops a prior version's argv) lives in the
+    /// append/validation methods, not the constructor.
     /// </summary>
     public VersionArgvMap(IReadOnlyList<VersionArgvEntry> entries)
     {
-        // STUB:TDD structural plumbing only — no invariant logic.
+        // Structural plumbing only — the append-only invariant logic lives in the validation methods.
         _entries = entries ?? Array.Empty<VersionArgvEntry>();
     }
 
@@ -163,10 +163,10 @@ public sealed class VersionArgvMap
 /// one is never mutated) and AP-017 (coupled artifacts validated as a fail-closed pair —
 /// here the receipt binds BOTH id AND digest, and a disagreement or absence rejects).
 ///
-/// RED-phase structural stub — every method body below carries <c>STUB:TDD</c> and returns
-/// a deny-by-default / safe-wrong value so the POSITIVE cells (append-only Valid, correct
-/// v1 selection, accepted binding) fail as ASSERTIONS while the fail-closed NEGATIVE cells
-/// (mutation/removal reject, absent-id null, tamper reject) pass on the deny stub.
+/// GREEN: every method body below implements the real fail-closed logic — append-only
+/// validation (a mutation/removal rejects, an append is Valid), exact v1 root selection (an
+/// absent id resolves to null), and the coupled id+digest receipt binding (a tamper or absence
+/// rejects).
 /// </summary>
 public static class TrustRootRegistry
 {

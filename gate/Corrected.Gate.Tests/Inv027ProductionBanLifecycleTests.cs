@@ -61,9 +61,10 @@ public class Inv027ProductionBanLifecycleTests
             banActive = true; // plain BLOCKED / READY+BLOCKED / at-activation-not-verified.
         }
 
-        // Ban-scan component: only meaningful while the ban is active. Any content (Fail) OR
-        // an uncomputable closure (fail-closed) while banned is a violation → hard-red.
-        bool banViolated = banActive && (scan == ScanOutcome.Fail || scan == ScanOutcome.ClosureUncomputable);
+        // Ban-scan component: only meaningful while the ban is active. Enumerate the SAFE outcomes
+        // (fail-closed on accept, QA-010/PMB-003): VacuousPass (empty) and Pass (declaration-only)
+        // satisfy the ban; every other outcome (Fail, ClosureUncomputable, or a future member) trips it.
+        bool banViolated = banActive && !(scan == ScanOutcome.VacuousPass || scan == ScanOutcome.Pass);
 
         // entry_integrity / activation verdict component (tables (A)/(B)).
         LifecycleVerdict integrityVerdict = ctx switch
@@ -113,7 +114,7 @@ public class Inv027ProductionBanLifecycleTests
         {
             foreach (EntryIntegrity integ in Enum.GetValues<EntryIntegrity>())
             {
-                foreach (ScanOutcome scan in new[] { ScanOutcome.VacuousPass, ScanOutcome.Fail })
+                foreach (ScanOutcome scan in Enum.GetValues<ScanOutcome>())
                 {
                     yield return new object[] { eff, ctx, integ, scan };
                 }
@@ -189,13 +190,30 @@ public class Inv027ProductionBanLifecycleTests
     // Tests INV-027 [unit]: the coherent cross-product ENUMERATES the full committed state
     // space — a count DERIVED from the enums, with a literal PIN that breaks if a member is
     // added to any axis (PMB-003 — a row-count proxy cannot detect an ABSENT cell). 3 coherent
-    // states × |EntryIntegrity|=4 × {VacuousPass, Fail}=2 = 24.
+    // states × |EntryIntegrity|=4 × |ScanOutcome|=4 = 48. QA-010: the scan axis now enumerates the
+    // FULL committed ScanOutcome (incl. Pass + ClosureUncomputable), not a {VacuousPass, Fail} subset.
     [Fact]
     public void Coherent_cross_product_enumerates_the_full_state_space()
     {
-        int derived = CoherentStates.Length * Enum.GetValues<EntryIntegrity>().Length * 2;
-        Assert.Equal(24, derived);
+        int derived = CoherentStates.Length
+            * Enum.GetValues<EntryIntegrity>().Length
+            * Enum.GetValues<ScanOutcome>().Length;
+        Assert.Equal(48, derived);
         Assert.Equal(derived, CoherentCells().Count());
+    }
+
+    // Tests INV-027 [unit] (QA-011): an unknown / cast / future TransitionContext can NEVER yield the
+    // accepting Success verdict — the integrity switch fail-closes to hard-red on its default arm. With
+    // a non-tripping scan (VacuousPass) the OLD `_ => Success` default failed OPEN; the fixed default
+    // hard-fails, so a new context member added without an explicit arm cannot silently accept.
+    [Fact]
+    public void Unknown_transition_context_fails_closed_never_success()
+    {
+        var cast = (TransitionContext)0x7FFF;
+        Assert.DoesNotContain(cast, Enum.GetValues<TransitionContext>()); // genuinely out-of-range
+        LifecycleGateResult r = Eval(LifecycleState.Blocked, EntryIntegrity.Verified, cast, ScanOutcome.VacuousPass);
+        Assert.NotEqual(LifecycleVerdict.Success, r.Verdict);
+        Assert.Equal(LifecycleVerdict.HardRedFailure, r.Verdict);
     }
 
     // ===================================================================================

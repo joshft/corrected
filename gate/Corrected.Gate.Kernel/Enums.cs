@@ -67,6 +67,16 @@ public enum LifecycleState
 /// </summary>
 public enum EntryIntegrity
 {
+    /// <summary>
+    /// No committed entry receipt where the declaration requires one. Deliberately ORDINAL 0, so
+    /// <c>default(EntryIntegrity)</c> is this FAIL-CLOSED value — never the accepting
+    /// <see cref="Verified"/> (MA-C / MA-H). Unlike the P3 verify carriers, <c>EntryIntegrity</c> is
+    /// a RAW enum argument (not wrapped in a required-field DTO whose default is a null reference),
+    /// so the zero-value itself must be a reject: Absent keeps the <c>src/</c> ban active (INV-027)
+    /// and blocks activation.
+    /// </summary>
+    Absent,
+
     /// <summary>The committed entry receipt verified (signature + schema + ancestry, or a full at-activation re-derivation).</summary>
     Verified,
 
@@ -75,9 +85,6 @@ public enum EntryIntegrity
 
     /// <summary>The P3 verifier/root is transiently unreadable — NEVER represented as ok; a first activation must not merge on a fault.</summary>
     Unavailable,
-
-    /// <summary>No committed entry receipt where the declaration requires one.</summary>
-    Absent,
 }
 
 /// <summary>

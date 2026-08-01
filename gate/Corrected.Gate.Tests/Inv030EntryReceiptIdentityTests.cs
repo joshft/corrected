@@ -724,6 +724,65 @@ public class Inv030EntryReceiptIdentityTests
         Assert.False(EntryAttestation.ValidateEntrySchema(WithPredicate(stmt, emptyManifest)).Valid);
     }
 
+    // Tests INV-030 [integration] (QA-012): a manifest entry with a BAD SHAPE is rejected —
+    // precondition-manifest-entry-shape. The manifest stays a >=2-entry full closure (so it passes the
+    // not-full-closure gate) but one entry carries a non-hex sha256 or an empty path. Guards the
+    // per-entry shape check that had no negative before.
+    [Fact]
+    public void Schema_rejects_malformed_manifest_entry_shape()
+    {
+        InTotoStatement stmt = WellFormedEntryStatement();
+        var predicate = (EntryPredicate)stmt.Predicate!;
+
+        // (a) a non-lowercase-hex sha256 on one entry.
+        var badSha = new EntryPredicate
+        {
+            CommitX = predicate.CommitX,
+            Preconditions = predicate.Preconditions
+                .Select(p => p.Precondition == "P1"
+                    ? new PreconditionClosure
+                    {
+                        Precondition = "P1",
+                        Manifest = new[]
+                        {
+                            new ClosureDigest { Path = "a.txt", Sha256 = new string('a', 64) },
+                            new ClosureDigest { Path = "b.txt", Sha256 = "NOT-HEX" },
+                        },
+                    }
+                    : p)
+                .ToArray(),
+        };
+        // Assert the SPECIFIC shape reason, not merely !Valid: the per-entry shape check (272-278) runs
+        // BEFORE the subject<->manifest binding check (291-294). Without the reason assertion this test
+        // would pass even with the shape check removed, because replacing P1's manifest also breaks the
+        // binding (its root no longer equals subjects[1].Digest) -> the binding check would reject anyway.
+        EntrySchemaResult rBadSha = EntryAttestation.ValidateEntrySchema(WithPredicate(stmt, badSha));
+        Assert.False(rBadSha.Valid);
+        Assert.Equal("precondition-manifest-entry-shape", rBadSha.Reason);
+
+        // (b) an EMPTY path on one entry.
+        var emptyPath = new EntryPredicate
+        {
+            CommitX = predicate.CommitX,
+            Preconditions = predicate.Preconditions
+                .Select(p => p.Precondition == "P1"
+                    ? new PreconditionClosure
+                    {
+                        Precondition = "P1",
+                        Manifest = new[]
+                        {
+                            new ClosureDigest { Path = "", Sha256 = new string('a', 64) },
+                            new ClosureDigest { Path = "b.txt", Sha256 = new string('b', 64) },
+                        },
+                    }
+                    : p)
+                .ToArray(),
+        };
+        EntrySchemaResult rEmptyPath = EntryAttestation.ValidateEntrySchema(WithPredicate(stmt, emptyPath));
+        Assert.False(rEmptyPath.Valid);
+        Assert.Equal("precondition-manifest-entry-shape", rEmptyPath.Reason);
+    }
+
     // =====================================================================
     // (4) Bidirectional predicate CROSS-REJECTION (RS-024), synthetic at the
     //     predicate-type layer (real cosign/cert identity verify defers to T3).

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using Corrected.Gate;
@@ -105,6 +106,45 @@ public class Inv012TypedResultTotalityTests
         };
 
         Assert.Equal(expected, mappedUnavailable);
+    }
+
+    // Tests INV-012 [integration] (QA-002): DeterminismVerifier.Verify DERIVES its non-verified
+    // Outcome (Rejected vs Unavailable) from the committed severity map — the map is the single
+    // production source of truth, not parallel dead code. An induced Rejected-severity reason (an
+    // absent bundle -> EvidenceAbsent) yields Outcome.Rejected, matching Classify. A future edit that
+    // bypassed the map (hand-deciding the outcome at the call site) would break this binding.
+    [Fact]
+    public void Verify_outcome_severity_is_derived_from_the_committed_map()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "qa002-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var req = new DeterminismVerifyRequest
+            {
+                CosignBinPath = "/nonexistent/pinned/cosign",
+                BundlePath = Path.Combine(dir, "absent-bundle.json"),   // absent -> EvidenceAbsent (Rejected)
+                ReceiptPath = Path.Combine(dir, "absent-receipt.json"),
+                TrustRootPath = Path.Combine(dir, "absent-root.json"),
+                WorkingDirectory = dir,
+                ExpectedRid = "linux-x64",
+                Identity = DeterminismVerifyIdentity.Fixture,
+                Timeout = TimeSpan.FromSeconds(5),
+            };
+
+            DeterminismVerifyResult r = DeterminismVerifier.Verify(req);
+
+            Assert.NotNull(r.Reason);
+            VerifySeverity mapped = DeterminismVerifyReasonMap.Classify(r.Reason!.Value);
+            DeterminismVerifyOutcome expected = mapped == VerifySeverity.Unavailable
+                ? DeterminismVerifyOutcome.Unavailable
+                : DeterminismVerifyOutcome.Rejected;
+            Assert.Equal(expected, r.Outcome);
+            // The induced reason is EvidenceAbsent (Rejected-severity) -> Outcome.Rejected.
+            Assert.Equal(DeterminismVerifyReason.EvidenceAbsent, r.Reason);
+            Assert.Equal(DeterminismVerifyOutcome.Rejected, r.Outcome);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
     }
 
     // Tests INV-012 [unit] (fail-closed DEFAULT): an out-of-range enum value (a future reason with

@@ -73,6 +73,30 @@ public class Inv011ProductionSurfaceTests
         Assert.NotEmpty(kinds);
         Assert.DoesNotContain("BlockSyntax", kinds);
         Assert.DoesNotContain("GlobalStatementSyntax", kinds);
+        // The enforcement MUST actually consult this set (MA-D): member-synthesizing kinds
+        // that carry no body — and so slip past the body/initializer deny-list — are NOT in
+        // the allowlist, so a closed-allowlist predicate rejects them. These kinds exist today.
+        Assert.DoesNotContain("ConstructorDeclaration", kinds);
+        Assert.DoesNotContain("OperatorDeclaration", kinds);
+        Assert.DoesNotContain("ConversionOperatorDeclaration", kinds);
+        Assert.DoesNotContain("DestructorDeclaration", kinds);
+    }
+
+    // Tests INV-011 [integration] (MA-D forward-compat / AP-022): a member-declaration kind
+    // that is NOT in the closed allowlist AND carries no body/initializer (so the body/
+    // initializer deny-list never sees it) MUST fail closed. Constructors and operators are
+    // member-synthesizing kinds absent from AllowedKinds; a BODYLESS declaration of one (a
+    // constructor with no body, or a `static abstract` interface operator) carries no Block
+    // for the deny-list to catch — exactly the "newly-added synthesizing C# form" the
+    // enumerated-allowlist meta-test promises fails closed. A denylist-only predicate accepts
+    // it (the false-assurance defect); a real closed allowlist over member declarations
+    // rejects it. Only the member-allowlist gate (not the body deny-list) can reject these.
+    [Theory]
+    [InlineData("namespace N { public class C { public C(); } }")]                                   // bodyless constructor declaration
+    [InlineData("namespace N { public interface I { static abstract I operator +(I a, I b); } }")]   // static abstract operator (C#11), bodyless
+    public void Bodyless_member_kind_outside_allowlist_fails_closed(string source)
+    {
+        Assert.False(SyntaxAllowlist.ContainsOnlyDeclarations(source, NoDefines));
     }
 
     // ----- Scanner: outcome discriminators -----

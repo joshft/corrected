@@ -115,6 +115,19 @@ public class Inv028PointerSchemaTests
             Enum.GetValues<PointerFamily>().ToHashSet());
     }
 
+    // Tests INV-028 [unit] (QA-012): an unknown / cast / future PointerFamily fails CLOSED — FixedRootOf
+    // returns null for it, so ValidatePointer cannot establish the fixed root and rejects. Guards the
+    // deny-by-default direction for a family member added without a fixed-root mapping.
+    [Fact]
+    public void Cast_out_of_range_pointer_family_fails_closed()
+    {
+        var castFamily = (PointerFamily)0x7FFF;
+        Assert.DoesNotContain(castFamily, Enum.GetValues<PointerFamily>()); // genuinely out-of-range
+        Fixture fx = Valid(PointerFamily.P3ActiveBaseline);
+        PointerDescriptor d = fx.D with { Family = castFamily };
+        AssertReject(d, fx.CommittedSet, "unknown/cast PointerFamily (FixedRootOf -> null)");
+    }
+
     // =====================================================================================
     // (B) POSITIVE — a well-formed pointer is Valid (one per family). RED against the stub.
     // =====================================================================================

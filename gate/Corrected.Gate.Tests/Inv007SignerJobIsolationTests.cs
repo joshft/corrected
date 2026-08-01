@@ -213,6 +213,22 @@ public class Inv007SignerJobIsolationTests
         Assert.DoesNotContain("actions:", producer);
     }
 
+    // Tests INV-007 [integration] (QA-009): the producer's OWN permissions block is EXACTLY
+    // { contents: read } — least privilege as an EXACT set, not merely "no id-token/actions". A
+    // producer that added `contents: write` / `packages: write` would pass the deny-only cell above
+    // while being non-minimal; this closes that gap (mirrors the signer's exact-permission-set check).
+    [Fact]
+    public void Producer_job_block_permissions_are_exactly_contents_read()
+    {
+        string producer = JobSection(ReadWorkflow(), "producer");
+        Assert.NotEqual(string.Empty, producer);
+        HashSet<string> perms = PermissionEntries(producer);
+        Assert.True(
+            perms.SetEquals(new[] { "contents: read" }),
+            "INV-007: the producer permissions block must be EXACTLY { contents: read }; got { " +
+            string.Join(", ", perms) + " }");
+    }
+
     // Tests INV-007 [integration] (INV-007 CORE: "the determinism producer holds no OIDC
     // privilege"): the ONLY place an `id-token` grant may appear in the whole workflow is INSIDE
     // the signer job section. This closes the workflow-level `permissions:` INHERITANCE hole —
