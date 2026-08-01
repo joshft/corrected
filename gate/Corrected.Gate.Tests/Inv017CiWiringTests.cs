@@ -13,6 +13,7 @@ namespace Corrected.Gate.Tests;
 /// grep, not deferred); the recursion sentinel has a defined set/check owner; no
 /// in-suite xUnit test executes &lt;GATE-SCRIPT&gt;. [integration].
 /// </summary>
+[Collection("Subprocess")]
 public class Inv017CiWiringTests
 {
     // Tests INV-017 [integration]: the recursion sentinel OWNERSHIP — the OUTER script

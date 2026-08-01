@@ -1,0 +1,156 @@
+# P3 determinism-attestation — the TWO-JOB signing workflow (INV-007/008/009/024).
+#
+# Job split (INV-007): an UNPRIVILEGED `producer` runs the determinism lane and
+# emits the RunReceipt + subject manifest as SAME-RUN @actions/artifact outputs
+# (the runtime-token transfer, RS-032/EA-010 — never a cross-run REST download),
+# and a MINIMAL `signer` (needs: producer) re-checks that hand-off and signs it.
+# The producer holds NO OIDC privilege; the signing token lives ONLY in the signer.
+#
+# There is deliberately NO workflow-level (column-0) permissions block: each job
+# declares its OWN least-privilege set, so the producer can never INHERIT a hoisted
+# grant (the inheritance hole the audit caught — a job that declares no own block
+# inherits the top-level one, which would silently hand the producer OIDC write).
+#
+# Third-party Actions are pinned by 40-hex commit SHA (never a floating @vN tag).
+# Signs ONLY a protected-main push (+ manual dispatch); never a PR-triggered event.
+name: p3-determinism-sign
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  producer:
+    name: determinism producer (unprivileged; emits the receipt hand-off)
+    runs-on: ubuntu-24.04-8core
+    timeout-minutes: 90
+    # Least privilege: read-only. NO OIDC token here — the signer owns signing.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact trigger commit (full history; creds NOT persisted)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install the pinned .NET SDK to $HOME/.dotnet (spike global.json)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --jsonfile spikes/dafny-compat/global.json --install-dir "$HOME/.dotnet"
+
+      - name: Produce the determinism RunReceipt (extracted lane script, verbatim)
+        env:
+          DETERMINISM_OS_LABEL: ubuntu-24.04
+        run: |
+          set -o pipefail
+          rm -rf spikes/dafny-compat/out
+          DETERMINISM_RESOLVED_SDK="$("$HOME/.dotnet/dotnet" --version)"
+          export DETERMINISM_RESOLVED_SDK
+          ( cd spikes/dafny-compat \
+            && env -i HOME="$HOME" DETERMINISM_OS_LABEL="$DETERMINISM_OS_LABEL" DETERMINISM_RESOLVED_SDK="$DETERMINISM_RESOLVED_SDK" \
+               bash -p scripts/determinism-lane.sh --run-root out/determinism-lane --dotnet-root "$HOME/.dotnet" )
+
+      - name: Assemble the same-run signer hand-off (RunReceipt subject + declared digest + subject manifest)
+        run: |
+          set -o pipefail
+          mkdir -p handoff
+          # The versioned determinism-subject manifest whose digest is bound into the
+          # signed receipt (INV-006/018). Emitted deterministically by the producer.
+          cat > handoff/determinism-subject-manifest.json <<'JSON'
+          {"determinism_subject_manifest":"v1","policy_version":"v1","roles":["run","route-a","route-b","control-a","control-b"]}
+          JSON
+          manifest_digest="$(sha256sum handoff/determinism-subject-manifest.json | cut -d' ' -f1)"
+          # The SIGNED SUBJECT is the determinism RunReceipt itself (execution_status /
+          # comparison_status / platform / run1_evidence / run2_evidence). Re-home ONLY the
+          # subject-bound CI fields the signer re-validates (INV-006/007): attested_commit =
+          # the pinned trigger SHA; subject_manifest_digest = THIS run's manifest; policy_version.
+          # The CI-run metadata (run_id / run_attempt / producing_job_result) is NOT part of a
+          # RunReceipt — it now lives in ci-context.json below.
+          jq \
+            --arg commit "${{ github.sha }}" \
+            --arg manifest_digest "$manifest_digest" \
+            '. + {attested_commit:$commit, subject_manifest_digest:$manifest_digest, policy_version:"v1"}' \
+            spikes/dafny-compat/out/determinism-lane/receipts/determinism-receipt.json \
+            > handoff/determinism-receipt.json
+          sha256sum handoff/determinism-receipt.json | cut -d' ' -f1 > handoff/receipt.sha256
+
+      - name: Emit the CI-run context hand-off (run_id / run_attempt / producing_job_result)
+        run: |
+          set -o pipefail
+          mkdir -p handoff
+          # The CI-run metadata the signer re-checks (INV-007), now SEPARATE from the
+          # RunReceipt subject. Emitted FULLY here from the GitHub run context.
+          jq -n \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_attempt "${{ github.run_attempt }}" \
+            '{run_id:$run_id, run_attempt:$run_attempt, producing_job_result:"success"}' \
+            > handoff/ci-context.json
+
+      # Emit the Corrected-built determinism-statement.json through the runnable test-host
+      # emitter (DeterminismStatementEmitter, driven by the EmitDeterminismStatement [Fact]).
+      # The step env injects ABSOLUTE, space-free hand-off paths, so the fact runs in CI
+      # producer mode and writes the Statement through the ONE canonical byte-source
+      # (DeterminismAttestation.SerializeStatementJson) INTO the hand-off the upload step
+      # bundles and the signer re-checks (class-7) and signs. The CONTAINS-form filter (`~`)
+      # binds the exact host fact; an exact `=` form would match zero tests (a silent no-op).
+      - name: Emit the Corrected-built determinism-statement.json (runnable host, CI mode)
+        env:
+          EMIT_STATEMENT_RECEIPT: ${{github.workspace}}/handoff/determinism-receipt.json
+          EMIT_STATEMENT_OUT: ${{github.workspace}}/handoff/determinism-statement.json
+        run: |
+          set -o pipefail
+          export DOTNET_ROOT=$HOME/.dotnet; export PATH=$HOME/.dotnet:$PATH
+          dotnet test gate/Corrected.Gate.slnx --filter 'FullyQualifiedName~EmitDeterminismStatement'
+
+      - name: Upload the same-run hand-off artifact (runtime-token transfer)
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: determinism-handoff
+          path: handoff
+
+  signer:
+    name: minimal signer (re-checks the hand-off, then signs it)
+    needs: producer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # EXACTLY the two-permission minimal set — OIDC write + repo read. The read
+    # scope is what lets the signer inspect the commit; nothing broader is granted
+    # (a cross-run REST hand-off would need a further read grant — forbidden here).
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout the pinned trigger commit (hardened; creds NOT persisted)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download the SAME-RUN producer hand-off (no cross-run download)
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: determinism-handoff
+          path: handoff
+
+      - name: Provision the pinned cosign binary (digest-validated bootstrap)
+        run: |
+          bash gate/tools/provision-cosign.sh linux-x64 "$RUNNER_TEMP/cosign"
+
+      - name: Re-check the producer hand-off and sign (frozen surface, verbatim)
+        env:
+          COSIGN_BIN: ${{ runner.temp }}/cosign
+        run: |
+          bash gate/tools/sign-determinism.sh \
+            --artifacts-dir handoff \
+            --manifest handoff/determinism-subject-manifest.json \
+            --out handoff/determinism.sigstore.json
+
+      - name: Publish the signed determinism bundle
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        with:
+          name: determinism-bundle
+          path: handoff/determinism.sigstore.json

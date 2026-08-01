@@ -371,18 +371,19 @@ manifest **plus** `attested_commit` ancestor-of-HEAD — never a stored field in
   bundle format, and **frozen signing argv** are established by a **real `attest-blob` → network-disabled
   `verify-blob-attestation` transcript spike** (a PR2 *specification* deliverable — not a GREEN-time question),
   and the bundle carries a Rekor **tlog inclusion proof + signed timestamp** (verify-later sound after the
-  ~10-min Fulcio cert expires). **Two crypto facts this invariant ASSERTS are unproven until the transcript spike
-  and are therefore HARD PR2 LANDING GATES (RS-007/RS-008) — if the spike disproves either, PR2 cannot freeze and
-  this invariant is amended, not waived:** (a) **the keyless GitHub-OIDC bundle actually carries an RFC3161 signed
-  timestamp** so `verify-blob-attestation --use-signed-timestamps` is sound **offline after the Fulcio cert
-  expires** — EA-001 already grants TSA network at signing time and cosign v3 + the public-good instance require
-  signed timestamps, but the transcript spike must **demonstrate a committed fixture bundle offline-verifying
-  *after* cert expiry** (add `--timestamp-server-url`/a TSA to the signer if the demonstration shows one is not
-  attached by default); and (b) **offline verification of the pinned bundle FORMAT works** — the research brief's
-  own Open Question #1 flags that offline verify of the *new protobuf* bundle format "was not fully landed" and is
-  UNCONFIRMED at v3.1.x; the spike must resolve this and, if new-format offline is unconfirmed at the pin, **sign
-  with `--new-bundle-format=false`** (old format embeds the Rekor SET for offline verify) — this contingency is a
-  **pinned decision carried in DD-002**, not left only in OQ-001.
+  ~10-min Fulcio cert expires). **Two crypto facts this invariant ASSERTS were HARD PR2 LANDING GATES
+  (RS-007/RS-008); both were POSITIVELY DEMONSTRATED by the transcript spike (2026-07-30, GH Actions run
+  `30511722581`, local egress-blocked verify past cert expiry) and are now CONFIRMED:** (a) **the keyless
+  GitHub-OIDC bundle carries an RFC3161 signed timestamp** (AND a Rekor v2 tlog inclusion proof — either anchors
+  signing-time) so `verify-blob-attestation --use-signed-timestamps` is sound **offline after the Fulcio cert
+  expires** — demonstrated by a committed fixture bundle offline-verifying (egress-blocked) *after* the ~10-min
+  cert expiry; a signed timestamp is **attached by default at v3.1.2** (no `--timestamp-server-url` needed); and
+  (b) **offline verification of the pinned NEW protobuf bundle FORMAT (`v0.3+json`) works** with a pinned
+  `--trusted-root` — so the `--new-bundle-format=false` contingency is **NOT taken** (DD-002; the flag is
+  additionally deprecated at v3.1.2). **Frozen (see INV-015 / DD-002):** cosign **v3.1.2**, `linux-x64` sha256
+  `f7622ed3…e7cf`; sign `attest-blob --statement … --new-bundle-format=true`; verify `verify-blob-attestation
+  --check-claims=true --type <predicateType> --certificate-identity … --certificate-oidc-issuer …
+  --certificate-github-workflow-sha … --use-signed-timestamps --trusted-root <root>`.
 - **Violated when**: cosign is unpinned/ranged; the bundle lacks a tlog proof or signed timestamp; the argv is not
   the transcript-frozen one; **the committed fixture's only time anchor requires a network Rekor lookup** (rather
   than an embedded signed timestamp) so from-clean offline verify after cert expiry is impossible (RS-007); or the
@@ -390,8 +391,9 @@ manifest **plus** `attested_commit` ancestor-of-HEAD — never a stored field in
   contingency being taken (RS-008).
 - **Enforcement**: CI config assertion (pinned version+digest+frozen argv) + a bundle-content assertion + **a
   from-clean meta-test that FAILS if the committed fixture bundle's only time anchor requires network Rekor** (it
-  must offline-verify after cert expiry) + a transcript-spike landing check that records which bundle-format
-  contingency (new-format-offline vs `--new-bundle-format=false`) was taken.
+  must offline-verify after cert expiry) + a transcript-spike landing check recording the resolved bundle-format
+  decision (**new-format-offline, RS-008 resolved 2026-07-30** — the `--new-bundle-format=false` contingency was
+  not taken).
 - **Guards against**: AP-015, AP-014
 - **Test approach**: integration
 
@@ -470,11 +472,16 @@ manifest **plus** `attested_commit` ancestor-of-HEAD — never a stored field in
     positively identified as one of the two transient faults above**: `{evidence-absent, p3-not-yet-activated`
     (RS-035 — the expected pre-PR3 zero-state; rendered distinctly by INV-021 but classified fail-closed)`,
     malformed-receipt, malformed-bundle, signature-invalid, identity-mismatch, predicate-type-mismatch,
-    subject-digest-mismatch, projection-policy-mismatch` (RS-005)`, stale-subject-manifest,
-    attested-commit-not-ancestor, ancestry-uncomputable` (RS-013 — a shallow-clone/absent-`X` ancestry that cannot
-    be computed is `rejected`, **never** `unavailable`)`, rid-platform-mismatch, non-pass-outcome,
-    trust-root-or-pin-mismatch` (a root/binary **digest MISMATCH** — distinct from the *unreadable* fault above)`,
-    unclassified-verifier-fault}`. **`unclassified-verifier-fault` is the pinned DEFAULT branch**: any cosign
+    subject-digest-mismatch, statement-reconstruction-mismatch` (RS-006 / INV-010 — the decoded SIGNED Statement
+    does not byte-equal the Statement Corrected reconstructs from the committed receipt EVEN WHEN `sha256(receipt)`
+    matches; cosign `--check-claims` never verifies predicate CONTENT, so this is DISTINCT from
+    `subject-digest-mismatch`)`, projection-policy-mismatch` (RS-005)`, stale-subject-manifest,
+    attested-commit-not-ancestor, cert-workflow-sha-mismatch` (RS-006 / INV-011 — the certificate's workflow-SHA
+    does not equal the receipt's `attested_commit`; the Corrected-side binding check reached only AFTER cosign
+    accepts the identity, so this is DISTINCT from `identity-mismatch`)`, ancestry-uncomputable` (RS-013 — a
+    shallow-clone/absent-`X` ancestry that cannot be computed is `rejected`, **never** `unavailable`)`,
+    rid-platform-mismatch, non-pass-outcome, trust-root-or-pin-mismatch` (a root/binary **digest MISMATCH** —
+    distinct from the *unreadable* fault above)`, unclassified-verifier-fault}`. **`unclassified-verifier-fault` is the pinned DEFAULT branch**: any cosign
     crash / SIGSEGV / unknown non-zero exit / timeout / output the INV-014 exit-code taxonomy does not positively
     match → **`rejected`** (fail-closed). Treating an unclassified cosign fault as `unavailable` (the earlier broad
     "verifier/tool faults → unavailable") is the fail-open seam that **armed the RS-001 forged-ENTERED bypass** (a
@@ -564,7 +571,9 @@ manifest **plus** `attested_commit` ancestor-of-HEAD — never a stored field in
 - **Boundary**: TB-004
 - **Statement**: the `cosign` binary is pinned to **exactly one version and one per-RID digest** (not a range),
   chosen at/after the advisory floors — **GHSA-w6c6-c85g-mmv6 / CVE-2026-39395** (fixed **v3.0.6**) and the
-  **distinct** **GHSA-whqx-f9j3-ch6m** (fixed **v3.0.4**) — recommend the current stable line. Bootstrap is a
+  **distinct** **GHSA-whqx-f9j3-ch6m** (fixed **v3.0.4**). **Frozen pin (OQ-001 spike, 2026-07-30): `v3.1.2`,
+  `cosign-linux-amd64` sha256 `f7622ed3cf22e55e1ae6377c080979ff77a22da9981c11df222a2e444991e7cf`** (CI-recorded ==
+  locally re-provisioned; per-RID `linux-x64`, EA-003). Bootstrap is a
   **reviewed hard-coded SHA-256 of the exact release asset per RID** + an authenticated source URL — **never
   cosign-verifying-cosign**. Never "latest".
 - **Violated when**: a range/"latest"/floating digest resolves; the bootstrap self-verifies; or a version below
@@ -1454,7 +1463,7 @@ The safety-direction invariant, cross-product-tested (INV-026 enforcement): **no
 
 ## Design Decisions (resolved)
 - **DD-001 (verify path)**: digest-pinned cosign CLI (not `Sigstore.Net`). (User 2026-07-27.)
-- **DD-002 (cosign object model)**: `attest-blob --statement` (Corrected owns Statement semantics); verify with `verify-blob-attestation --check-claims=true` + exact identity/issuer/workflow-SHA + `--use-signed-timestamps` + pinned `--trusted-root`; the **semantic** check decodes the signed DSSE Statement and byte-compares it to the reconstructed one. Exact version + argv + bundle format frozen by the PR2 transcript spike. **Bundle-format contingency (RS-008):** if the transcript spike shows the pinned version's **new protobuf bundle format cannot be offline-verified** (the research brief's Open Question #1, UNCONFIRMED at v3.1.x), the signer uses **`--new-bundle-format=false`** (old format embeds the Rekor SET for offline verify) — a pinned decision recorded here, not deferred to OQ-001. **Pointer shape (RS-025):** the DD-002 `P3AttestationPath` constant `test/attestations/inv010-determinism.json` is **retained as the active-baseline POINTER**; versioned receipts live under `test/attestations/inv010/<commit>/` (append-only). This resolves the earlier internal contradiction (the value is preserved *as a pointer*, not dropped) and names `Inv009And010ProbesTests.cs` + the `Probes.cs` const as migration sites.
+- **DD-002 (cosign object model)**: `attest-blob --statement` (Corrected owns Statement semantics); verify with `verify-blob-attestation --check-claims=true` + **`--type <predicateType>`** (REQUIRED — a custom predicate type must be named or cosign defaults to `custom` and rejects; this is the CVE-2026-39395 predicate-type binding) + exact identity/issuer/workflow-SHA + `--use-signed-timestamps` + pinned `--trusted-root` (the airgap path — the old `--offline` flag is deprecated at v3.1.2); the **semantic** check decodes the signed DSSE Statement and byte-compares it to the reconstructed one. **Bundle format (RS-008 RESOLVED 2026-07-30, spike run `30511722581`):** the transcript spike CONFIRMED the pinned version's **new protobuf bundle format (`application/vnd.dev.sigstore.bundle.v0.3+json`) IS offline-verifiable** with a pinned `--trusted-root` (it embeds an RFC3161 signed timestamp AND a Rekor v2 inclusion proof) — so the signer freezes the **new format** and the `--new-bundle-format=false` contingency is **NOT taken** (the flag is additionally deprecated at v3.1.2: the new format is becoming the only supported format). **Frozen sign argv:** `cosign attest-blob --statement <stmt> --bundle <out.sigstore.json> --new-bundle-format=true --yes <blob>`. **Pointer shape (RS-025):** the DD-002 `P3AttestationPath` constant `test/attestations/inv010-determinism.json` is **retained as the active-baseline POINTER**; versioned receipts live under `test/attestations/inv010/<commit>/` (append-only). This resolves the earlier internal contradiction (the value is preserved *as a pointer*, not dropped) and names `Inv009And010ProbesTests.cs` + the `Probes.cs` const as migration sites.
 - **DD-003 (landing)**: **three** PRs — counted runner + campaign / **frozen** provenance mechanism / evidence-only activation. Resolves carrier **OQ-A#3**. (User 2026-07-27.)
 - **DD-004 (P3 semantics)**: a **committed capability baseline** bound to a versioned determinism-subject manifest (digest bound into the signed receipt) + a **live** determinism job on every relevant change + a **bounded parent INV-005 amendment mapping every orthogonal outcome**. (User 2026-07-27.)
 - **DD-005 (provenance home)**: `gate/Corrected.Provenance` as a **5th, non-shipped gate project + shared CONTRACT** for INV-031/032/033, with the full exact-four→five migration; never referenced by a shipped `src/` binary (PRH-010). (User 2026-07-27.)
@@ -1485,7 +1494,7 @@ The safety-direction invariant, cross-product-tested (INV-026 enforcement): **no
   compose with the "kernel never mints/persists" rule (INV-026) rather than reinventing it. Not a code change here.
 
 ## Open Questions
-- **OQ-001 [scheduled, HARD PR2 landing gate — RS-007/RS-008]**: the exact cosign version, bundle format, and frozen sign→offline-verify argv — a **PR2 transcript-spike deliverable** (real GitHub-OIDC sign → fresh-machine network-disabled verify), capturing exact argv, bundle media type, output shape. The spike **must positively demonstrate**: (a) a committed fixture bundle **offline-verifying AFTER the ~10-min Fulcio cert expires** (signed-timestamp attached — add a TSA if not attached by default, RS-007); and (b) whether the pinned version's **new bundle format is offline-verifiable**, else take the `--new-bundle-format=false` contingency (RS-008, pinned in DD-002). If either is disproven, INV-009 is **amended, not waived**, and PR2 cannot freeze until resolved. Blocks the PR2 freeze.
+- **OQ-001 [RESOLVED 2026-07-30 by the PR2 transcript spike — RS-007/RS-008 both discharged]**: the exact cosign version, bundle format, and frozen sign→offline-verify argv were settled by a real GitHub-OIDC sign → network-disabled `verify-blob-attestation` transcript spike (GH Actions run `30511722581`; local egress-blocked verify on the downloaded bundle, past cert expiry). **Both landing-gate facts POSITIVELY DEMONSTRATED:** (a) a committed fixture bundle **offline-verified AFTER the ~10-min Fulcio cert expired** — the bundle carries BOTH an RFC3161 signed timestamp AND a Rekor v2 inclusion proof, either of which anchors signing-time (a signed timestamp is attached by default at v3.1.2; none needed to be added); and (b) the **new protobuf bundle format (`application/vnd.dev.sigstore.bundle.v0.3+json`) IS offline-verifiable** with a pinned `--trusted-root`, so the `--new-bundle-format=false` contingency (RS-008) is **NOT taken** (the flag is additionally now deprecated — the new format is becoming the only supported format). Frozen values recorded in INV-009 / INV-015 / DD-002. **PR2 freeze unblocked.**
 - **OQ-002 [scheduled]**: the measured stable core floor — a **PR1 measurement-campaign deliverable** (a plan committed before N retained attempt-1 runs, the **eligible run sequence predefined + verified set-equal to an authoritative listing**, RS-016). The campaign also settles the RS-009 runner-class commitment (which pinned runner reaches `completed` on the standing lane).
 - **OQ-003 [cross-ref]**: parent **OQ-006** (keyless vs key-backed for the release-provenance path) — informed by this feature's keyless determinism lane; the release path stays a parent decision.
 - **OQ-005 [scheduled, LOW — RS-037]**: the retention / GC policy for the append-only evidence surface (`test/attestations/inv010/<commit>/**` + the append-only trust roots) and whether a P3 **de-activation / rollback** affordance is ever needed — which historical `<commit>/` attestations + roots are safe to prune (each old bundle stays verifiable only against the exact root current at its signing, INV-016) vs a documented "keep all" with rationale. Advisory; does not block PR1/PR2/PR3.

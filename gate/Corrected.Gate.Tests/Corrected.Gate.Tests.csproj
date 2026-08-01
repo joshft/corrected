@@ -20,6 +20,8 @@
     <ProjectReference Include="../Corrected.Gate/Corrected.Gate.csproj" />
     <ProjectReference Include="../Corrected.Gate.Kernel/Corrected.Gate.Kernel.csproj" />
     <ProjectReference Include="../Corrected.Gate.Lint/Corrected.Gate.Lint.csproj" />
+    <!-- INV-006 / INV-022: the P3 provenance substrate (5th gate project). -->
+    <ProjectReference Include="../Corrected.Provenance/Corrected.Provenance.csproj" />
   </ItemGroup>
 
   <!-- Fixtures + manifests are data, not test-assembly source. Exclude any .cs

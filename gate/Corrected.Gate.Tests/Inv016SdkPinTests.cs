@@ -11,6 +11,7 @@ namespace Corrected.Gate.Tests;
 /// latestPatch band predicate; CPM opt-out + regression; the .gitattributes LF pin.
 /// [integration].
 /// </summary>
+[Collection("Subprocess")]
 public class Inv016SdkPinTests
 {
     // The precise band predicate (EXT5-04/EXT6-03): major 10, minor 0, feature-band

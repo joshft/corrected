@@ -130,7 +130,8 @@ readiness/ADR/evidence intake boundary; TB-005 is reserved by the parent for `.d
 **In scope.** A non-shipped .NET 10 project set under `gate/` (`gate/Corrected.Gate/` +
 the isolated I/O-free `gate/Corrected.Gate.Kernel/` (pure kernel + DTOs, INV-004/EXT6-05) +
 `gate/Corrected.Gate.Tests/` + the extracted Dafny-free linter lib `gate/Corrected.Gate.Lint/` +
-`gate/Corrected.Gate.slnx` aggregating **exactly** those four projects), with its own `<clear/>`
+the non-shipped shared-provenance substrate `gate/Corrected.Provenance/` (INV-022) +
+`gate/Corrected.Gate.slnx` aggregating **exactly** those five projects), with its own `<clear/>`
 `NuGet.Config`, CPM opt-out, committed
 `packages.lock.json`, and a **repo-root** `global.json`; readiness-block extraction + AST-hardened
 strict parse (INV-001/002/003); the fail-closed pure kernel + verdict table + real probe orchestration
@@ -879,8 +880,9 @@ it a deferred extension, EXT2-12). Any `src/Corrected.*` production code; the `c
   `xunit.runner.visualstudio`, matching the spike; RS-A-06). All under `RestorePackagesWithLockFile` /
   `RestoreLockedMode` with a committed `packages.lock.json` (the gate's AND every shipped-closure fixture
   project's own lock; R3-I2); CI asserts the restored versions. **The `<AGGREGATOR>` restore/lock set is
-  EXACTLY the four gate projects — `Corrected.Gate`, `Corrected.Gate.Kernel`, `Corrected.Gate.Tests`,
-  `Corrected.Gate.Lint` (EXT7-05)**: a meta-test asserts solution membership equals that four-element set
+  EXACTLY the five gate projects — `Corrected.Gate`, `Corrected.Gate.Kernel`, `Corrected.Gate.Tests`,
+  `Corrected.Gate.Lint`, `Corrected.Provenance` (EXT7-05; INV-022 exact-four→five)**: a meta-test asserts
+  solution membership equals that five-element set
   (so the isolated Kernel project is not accidentally omitted and depended on only transitively), and each
   has a committed lock restored in locked mode. A documented **bump affordance**: any
   YamlDotNet/Roslyn/SDK/test-host bump re-runs the AST-hardening + INV-011 + INV-014 fixtures under the
@@ -1212,8 +1214,9 @@ Input from `docs/adr/ADR-0001-*.md` (+ the compiled-`const` ADR registry), the p
 ## Packages Affected (monorepo)
 - **Test/build-gate carrier** (NEW, NOT shipped): `gate/Corrected.Gate/` + `gate/Corrected.Gate.Kernel/`
   (isolated pure kernel + DTOs, INV-004/EXT6-05) + `gate/Corrected.Gate.Tests/`
-  + `gate/Corrected.Gate.Lint/` (extracted Dafny-free linter, INV-018) + `gate/Corrected.Gate.slnx`
-  (aggregating **exactly** those four projects)
+  + `gate/Corrected.Gate.Lint/` (extracted Dafny-free linter, INV-018)
+  + `gate/Corrected.Provenance/` (non-shipped shared-provenance substrate, INV-022) + `gate/Corrected.Gate.slnx`
+  (aggregating **exactly** those five projects)
   + `gate/NuGet.Config` + CPM opt-out + a per-project `packages.lock.json` (one per gate project, INV-015) + `gate/Corrected.Gate/lint-source-registry.json`
   (INV-008c). Exempt surface (`gate/**`). INV-044's history registry is homed here but built later (DD-005).
 - **Repo root**: new `global.json` (INV-016) + `.gitattributes` (INV-001) + a `.gitignore` rule for

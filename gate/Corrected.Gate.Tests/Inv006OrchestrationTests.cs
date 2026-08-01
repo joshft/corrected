@@ -54,14 +54,15 @@ public class Inv006OrchestrationTests
     }
 
     // Tests INV-006 [integration]: no probe throws/skips — each returns a typed
-    // {satisfied:false, reason}. P2/P3 fail-closed with validator-deferred.
+    // {satisfied:false, reason}. P2 fail-closed with validator-deferred; P3 (the real
+    // verifier, RS-025) fail-closed with p3-not-yet-activated while the pointer is absent.
     [Fact]
     public void Probes_never_throw_and_carry_typed_reasons()
     {
         var ctx = GateContext.ForRepoRoot(TestPaths.RepoRoot());
         var results = ProbeOrchestrator.RunAll(ctx);
         Assert.Equal(ProbeReasons.ValidatorDeferred, results[PreconditionId.P2].Reason);
-        Assert.Equal(ProbeReasons.ValidatorDeferred, results[PreconditionId.P3].Reason);
+        Assert.Equal(ProbeReasons.P3NotYetActivated, results[PreconditionId.P3].Reason);
     }
 
     // Tests INV-006 [integration]: the orchestrator resolves structured evidence via

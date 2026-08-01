@@ -1,0 +1,21 @@
+{
+  "_comment": "MA-C (INV-030) synthetic entry-receipt spec — the suite-mode self-test input for EntryStatementEmitter, and the base the fixture MINT (part c) copies with the real fixture-signing commit SHA. commit_x + three per-precondition evidence closures (path + inline UTF-8 content); matches the Inv030 synthetic closures so the emitted statement round-trips through EntryVerifier.",
+  "commit_x": "0123456789abcdef0123456789abcdef01234567",
+  "preconditions": {
+    "P1": [
+      { "path": "test/attestations/entry/p1/inv008-p1-probe.json", "content": "p1-probe-body-alpha" },
+      { "path": "test/attestations/entry/p1/inv008-tree-migrated.json", "content": "p1-tree-migrated-beta" },
+      { "path": "test/attestations/entry/p1/inv008-closure.json", "content": "p1-closure-gamma" }
+    ],
+    "P2": [
+      { "path": "test/attestations/entry/p2/inv010-receipt.json", "content": "p2-receipt-delta" },
+      { "path": "test/attestations/entry/p2/inv010-bundle.sigstore.json", "content": "p2-bundle-epsilon" }
+    ],
+    "P3": [
+      { "path": "test/attestations/entry/p3/inv010-receipt.json", "content": "p3-receipt-zeta" },
+      { "path": "test/attestations/entry/p3/inv010-bundle.sigstore.json", "content": "p3-bundle-eta" },
+      { "path": "test/attestations/entry/p3/active-baseline-pointer.json", "content": "p3-pointer-theta" },
+      { "path": "test/attestations/entry/p3/trusted-root.json", "content": "p3-root-iota" }
+    ]
+  }
+}

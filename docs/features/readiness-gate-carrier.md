@@ -21,7 +21,7 @@ and the **production-surface ban** that keeps `src/` empty while readiness is
 
 It lives in an **exempt, non-shipped carrier** (`gate/`), *outside* the shipped
 compilation closure, so the gate can enforce its own production-code ban without
-tripping it (INV-036 self-enforcement; PAT-005). The solution is four projects
+tripping it (INV-036 self-enforcement; PAT-005). The solution is five projects
 aggregated by `gate/Corrected.Gate.slnx`:
 
 | Project | Role |
@@ -30,6 +30,7 @@ aggregated by `gate/Corrected.Gate.slnx`:
 | `Corrected.Gate` | The impure edge: AST-hardened YAML/ADR parsers, the P1/P2/P3 evidence probes, the DD-003 migration-consistency gate, the INV-011 shipped-closure scanner, the INV-012 status renderer. |
 | `Corrected.Gate.Tests` | xUnit suite — one `Inv0NN*Tests.cs` per invariant + `ProhibitionsTests.cs`; the SUPPLIED-fixture corpus that drives the pure kernel. |
 | `Corrected.Gate.Lint` | Dafny-free ADR linter extracted so the gate build never pulls Dafny assemblies (INV-018 build insulation). |
+| `Corrected.Provenance` | Non-shipped shared-provenance substrate (INV-022): the generic in-toto Statement / subject / DSSE-envelope / signer-identity verify contracts (reused by the future INV-031/032/033 release provenance by **reimplementation**, not linking — PRH-010) plus the P3-specific determinism RunReceipt + predicate schemas. BCL-only, no `PackageReference`. |
 
 ### Flow
 

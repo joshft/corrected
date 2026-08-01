@@ -1,5 +1,9 @@
 Read AGENTS.md before doing anything in this repo.
 
+## Output Language
+
+Write all assistant output in this project in ASD-STE100 Simplified Technical English (STE). Obey the STE writing rules: use approved words only, keep sentences short (procedures 20 words or fewer, descriptions 25 words or fewer), write in the active voice, give one instruction per sentence, and use simple tenses. Do not use unapproved or ambiguous words. This rule applies to all prose output, but not to code, file paths, identifiers, commit messages, or quoted spec text.
+
 ## Correctless Learnings
 <!-- Auto-updated by Correctless workflow. Do not edit above this line. -->
 

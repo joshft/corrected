@@ -81,7 +81,7 @@ dafny_family_absent:
 - name: "readiness-build-gate"
   type: cli
   handler: "gate/Corrected.Gate.Kernel/ReadinessGate.cs:EvaluateReadiness (pure kernel + DTOs in the isolated I/O-free Corrected.Gate.Kernel project, EXT6-05: (ReadinessBlock, probeResults) -> {Pass|Fail, offending}) + a separate probe orchestrator (IEvidenceProbe/ProbeResult) and a shipped-closure ProductionSurfaceScanner in gate/Corrected.Gate/"
-  test_via: "from a CLEAN checkout (git clone + `rm -rf spikes/dafny-compat/out/` — the correct path; there is no top-level out/, and that tree is gitignored) run the DOCUMENTED command — the committed runnable gate script `gate/run-readiness-gate.sh` (<GATE-SCRIPT>, EXT6-01/EXT7-01; NOT bare `dotnet test`, which swallows the banner and runs no executed-count guard), which internally runs `dotnet test <AGGREGATOR> --logger \"trx;LogFileName=gate.trx\"`, then validates the TRX, renders the INV-012 status to stdout, and returns the final gate exit code — where <AGGREGATOR> is the single pinned constant `gate/Corrected.Gate.slnx` iff an INV-014 pre-flight proves `.slnx` on SDK 10.0.302, else the classic `.sln` fallback (a `.slnx`/`.sln` aggregator over gate/Corrected.Gate + gate/Corrected.Gate.Kernel + gate/Corrected.Gate.Tests + gate/Corrected.Gate.Lint). Parse the TRX so zero-discovery / a below-floor executed count FAILS — the executed-count guard lives OUTSIDE the discovered suite, in an EXTRACTED RUNNABLE SCRIPT executed verbatim from clean (never a YAML/README grep — the PMB-001 trap). It drives the pure kernel over the committed SUPPLIED-(block, probeResults) fixture table (BLOCKED-all-false -> Pass; READY+satisfied:false/evidence:null/refuted-probe/unresolvable-reference -> Fail; indeterminate -> Fail) AND the real probe orchestrator (Stage A pre-migration: P1 evidence-schema-incomplete false; Stage B post-migration: P1 true; P2/P3 false-on-absent -> BLOCKED either way). It also homes the INV-036 production-surface SHIPPED-CLOSURE scan (out-of-process pinned-SDK build, not a path scan). NOTE: the INV-044 history-registry meta-test is a DEFERRED extension of this entrypoint (lands with Phase-0.1 certification runtime, readiness-gate-carrier DD-005) — NOT part of this carrier's required suite"
+  test_via: "from a CLEAN checkout (git clone + `rm -rf spikes/dafny-compat/out/` — the correct path; there is no top-level out/, and that tree is gitignored) run the DOCUMENTED command — the committed runnable gate script `gate/run-readiness-gate.sh` (<GATE-SCRIPT>, EXT6-01/EXT7-01; NOT bare `dotnet test`, which swallows the banner and runs no executed-count guard), which internally runs `dotnet test <AGGREGATOR> --logger \"trx;LogFileName=gate.trx\"`, then validates the TRX, renders the INV-012 status to stdout, and returns the final gate exit code — where <AGGREGATOR> is the single pinned constant `gate/Corrected.Gate.slnx` iff an INV-014 pre-flight proves `.slnx` on SDK 10.0.302, else the classic `.sln` fallback (a `.slnx`/`.sln` aggregator over gate/Corrected.Gate + gate/Corrected.Gate.Kernel + gate/Corrected.Gate.Tests + gate/Corrected.Gate.Lint + gate/Corrected.Provenance). Parse the TRX so zero-discovery / a below-floor executed count FAILS — the executed-count guard lives OUTSIDE the discovered suite, in an EXTRACTED RUNNABLE SCRIPT executed verbatim from clean (never a YAML/README grep — the PMB-001 trap). It drives the pure kernel over the committed SUPPLIED-(block, probeResults) fixture table (BLOCKED-all-false -> Pass; READY+satisfied:false/evidence:null/refuted-probe/unresolvable-reference -> Fail; indeterminate -> Fail) AND the real probe orchestrator (Stage A pre-migration: P1 evidence-schema-incomplete false; Stage B post-migration: P1 true; P2/P3 false-on-absent -> BLOCKED either way). It also homes the INV-036 production-surface SHIPPED-CLOSURE scan (out-of-process pinned-SDK build, not a path scan). NOTE: the INV-044 history-registry meta-test is a DEFERRED extension of this entrypoint (lands with Phase-0.1 certification runtime, readiness-gate-carrier DD-005) — NOT part of this carrier's required suite"
   scope:
     - "gate/**"
     - "test/**"
@@ -91,7 +91,7 @@ dafny_family_absent:
 - name: "reference-ci-provenance"
   type: cli
   handler: ".github/workflows/phase-0-1-reference-ci.yml:verify-before-run"
-  test_via: "run the reference-CI lane (or its extracted script) with the PINNED external SLSA/signature verifier + pinned Cosign identity against a tampered-artifact fixture (INV-031/032/033), plus the determinism lane (PR1-built: .github/workflows/p3-determinism-lane.yml -> scripts/determinism-lane.sh) that drives two nested runs and emits a RunReceipt binding the observed platform identity (ProcessorCount / RID / arch / pinned OS label / kernel / SDK) to a derived closed-table (execution × comparison) status pair — comparison_status=equal iff every per-role deterministic projection agrees across the two runs, exit non-zero on different (INV-001/002/003/005 / P3). The PR2 reference-CI-provenance refresh (INV-022/023) reconciles this entry's handler + scope + invariant-group map and registers TB-007"
+  test_via: "run the reference-CI lane (or its extracted script) with the PINNED external SLSA/signature verifier + pinned Cosign identity against a tampered-artifact fixture (INV-031/032/033), plus the determinism lane (PR1-built: .github/workflows/p3-determinism-lane.yml -> scripts/determinism-lane.sh) that drives two nested runs and emits a RunReceipt binding the observed platform identity (ProcessorCount / RID / arch / pinned OS label / kernel / SDK) to a derived closed-table (execution × comparison) status pair — comparison_status=equal iff every per-role deterministic projection agrees across the two runs, exit non-zero on different (INV-001/002/003/005 / P3). This entry was reconciled under INV-023 — the P3/determinism ownership re-homed to readiness-build-gate/TB-007 (TB-007 registered in the Trust Boundaries section below); gate/Corrected.Provenance/** stays in scope but is reused only by reimplementation of the generic in-toto/DSSE contracts (PRH-010), not as a shipped dependency"
   scope:
     - ".github/workflows/**"
     - "gate/Corrected.Provenance/**"
@@ -103,14 +103,14 @@ dafny_family_absent:
 - **corrected-cli** — the operator surface and the AP-020 verbatim-invocation home; `corrected explain` renders receipts / INV-038 failure artifacts to human-actionable text (INV-040).
 - **corrected-core** — the in-process certification pipeline; Entry/Through/Exit for the bulk of the `[integration]` invariants: intake/lock/identity (INV-007..013), ownership/protected-surface (INV-014..018), fragment gate + verification + resource plan + watchdog (INV-019..023), honesty/vacuity (INV-024..026), success-predicate/receipt/schemas (INV-027..030, INV-041/042/047), and INV-037/038/039/045/046/048. INV-044's **runtime** supported-version dispatch table ships here.
 - **dafny-adapter** — the single Dafny boundary (PAT-001 / PROHIBIT-002); INV-006/034/035.
-- **readiness-build-gate** — the test/build-gate carrier; INV-001/002/003/004/036/043. INV-044's append-only **history** registry + meta-test is *homed* here but is a **deferred extension** built with Phase-0.1 certification runtime (readiness-gate-carrier DD-005), NOT part of the carrier's initial required suite. The readiness gate lives here so it can enforce itself without tripping its own production-code ban.
-- **reference-ci-provenance** — the release-provenance / determinism lane (TB-003); INV-005/031/032/033.
+- **readiness-build-gate** — the test/build-gate carrier; INV-001/002/003/004/036/043. INV-044's append-only **history** registry + meta-test is *homed* here but is a **deferred extension** built with Phase-0.1 certification runtime (readiness-gate-carrier DD-005), NOT part of the carrier's initial required suite. The readiness gate lives here so it can enforce itself without tripping its own production-code ban. The P3/**determinism** attestation claim (INV-005) re-homes here under INV-022/023 and is homed at the TB-007 trusted-CI evidence signing/verification boundary.
+- **reference-ci-provenance** — the release-provenance lane (TB-003); INV-031/032/033. The P3/determinism claim re-homes to readiness-build-gate/TB-007 (INV-022/023); gate/Corrected.Provenance/** stays in this lane's scope but is reused only by reimplementation of the generic in-toto/DSSE contracts (PRH-010).
 
 ### Production-surface partition (INV-036, deny-by-default)
 
-INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can fail a PR that lands production code while `implementation_readiness.status = BLOCKED`:
+INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can fail a PR that lands production code while `effective_lifecycle != ENTERED`:
 
-- **Production surface** (deny-by-default — non-trivial content here while BLOCKED trips PRH-008): `src/Corrected.Core/**`, `src/Corrected.DafnyAdapter/**`, `src/Corrected.Cli/**`. Any NEW top-level `src/` package is production until explicitly listed as carrier.
+- **Production surface** (deny-by-default — non-trivial content here while `effective_lifecycle != ENTERED` trips PRH-008): `src/Corrected.Core/**`, `src/Corrected.DafnyAdapter/**`, `src/Corrected.Cli/**`. Any NEW top-level `src/` package is production until explicitly listed as carrier.
 - **Exempt carrier / test / CI surface** (may carry content while BLOCKED): `gate/**`, `test/**`, `.github/workflows/**`, and `**/*.Tests/**` — but the **shipped compilation closure overrides path exemption** (spec-review EXT-04/RS-RT-04): `**/*.Tests/**` is exempt ONLY for an *independent top-level test project* neither referenced nor linked by any shipped `src/Corrected.*` project. A `*.Tests` directory, a linked `<Compile Include>`, a generated/analyzer-emitted source, or a first-party binary `<PackageReference>`/`<Reference>` that lands *inside* a shipped project's built closure is **production**, not exempt — INV-011 enforces over the real MSBuild/Roslyn closure (Compile items + project/assembly references + generated sources), not a path/content scan. Note the split from INV-044: its runtime dispatch table is production (`src/Corrected.Core/**`); only its append-only history registry + meta-test are exempt (`gate/**`).
 
 ### Design decisions (this `/carchitect` session, 2026-07-24)
@@ -318,6 +318,30 @@ INV-036 / PRH-008 need a deterministic partition so a path-scoped CI check can f
   + `gate/Corrected.Gate.Lint/**` and its `*.Tests` fixture corpus.
 - Test: `.correctless/specs/readiness-gate-carrier.md` INV-001/002/003/005/008 +
   BND-001/BND-003 + the STRIDE-for-TB-006 section. Registered by that feature.
+
+### TB-007: trusted-CI evidence signing/verification
+- The determinism-attestation lane's durable claim crosses a trust boundary
+  distinct from TB-003's *outbound* release provenance: a trusted-CI run executes
+  the two nested determinism runs, then signs the emitted RunReceipt so a later
+  consumer can verify the recorded claim was produced by the trusted-CI lane and
+  not altered after the fact. Crosses: trusted-CI execution → a durable,
+  provenance-bound determinism claim, established by signing/verification of the
+  receipt. This boundary reuses TB-004 (inbound cosign intake) and TB-006
+  (committed evidence / tamper) as-defined — it adds only the trusted-CI →
+  provenance-bound-determinism crossing and does not redefine them.
+- Invariant: a determinism claim is acceptance evidence only when it is signed in
+  the trusted-CI lane, its signer identity verifies against the pinned Cosign
+  identity (TB-004, as-defined), and the signed receipt is bound to committed
+  evidence (TB-006, as-defined). An unsigned, unverifiable, or non-committed
+  determinism receipt is not evidence; intake failure is fail-closed.
+- Violated when: a determinism claim is trusted without a trusted-CI signature;
+  the signing/verification step is skipped or self-verified by the produced
+  binary; or this boundary is silently folded into / relabeled as TB-003 (release
+  provenance) instead of registered as its own boundary.
+- Homed by the `readiness-build-gate` entrypoint — the P3/determinism ownership
+  (INV-005) re-homed here under INV-022/023. Registered by the
+  p3-determinism-attestation feature
+  (`.correctless/specs/p3-determinism-attestation.md`, INV-022/INV-023).
 
 ## Conventions
 

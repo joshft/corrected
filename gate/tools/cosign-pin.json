@@ -1,0 +1,16 @@
+{
+  "_note": "cosign binary pin (P3 determinism-attestation INV-015 / OQ-001). Exactly one frozen version and exactly one per-RID digest. Bootstrap integrity is the reviewed hard-coded sha256 only, plus an authenticated release URL; the signing tool is never used to check its own binary. Advisory floors: GHSA-w6c6-c85g-mmv6 / CVE-2026-39395 (fixed v3.0.6) and the distinct GHSA-whqx-f9j3-ch6m (fixed v3.0.4).",
+  "version": "v3.1.2",
+  "advisoryFloors": {
+    "GHSA-w6c6-c85g-mmv6": "v3.0.6",
+    "GHSA-whqx-f9j3-ch6m": "v3.0.4"
+  },
+  "rids": [
+    {
+      "rid": "linux-x64",
+      "assetName": "cosign-linux-amd64",
+      "sha256": "f7622ed3cf22e55e1ae6377c080979ff77a22da9981c11df222a2e444991e7cf",
+      "url": "https://github.com/sigstore/cosign/releases/download/v3.1.2/cosign-linux-amd64"
+    }
+  ]
+}

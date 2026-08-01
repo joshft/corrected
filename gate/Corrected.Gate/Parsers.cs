@@ -250,6 +250,8 @@ public static class ReadinessBlockParser
         }
 
         ReadinessDto? dto;
+        bool lifecycleKeyPresent;
+        bool pointerKeyPresent;
         try
         {
             var deserializer = new DeserializerBuilder()
@@ -260,6 +262,18 @@ public static class ReadinessBlockParser
             // DTO fields, so deserialize the wrapper and take the single inner value.
             var wrapper = deserializer.Deserialize<ReadinessDocDto>(new StringReader(yaml));
             dto = wrapper?.ImplementationReadiness;
+
+            // Presence-bit detection (INV-026 / RS-021). The typed ReadinessDto CANNOT
+            // distinguish an ABSENT key from an explicit null, so re-read the SAME block as
+            // a raw map and probe the inner `implementation_readiness` mapping for the v2
+            // wire keys — mirroring the AdrLintBlockParser dictionary/ContainsKey presence
+            // pattern (RS-206: same machinery, distinct probe). A raw parse failure here is
+            // caught below and fails closed (Indeterminate), the safe direction.
+            var rawDeserializer = new DeserializerBuilder()
+                .WithDuplicateKeyChecking()
+                .Build();
+            var raw = rawDeserializer.Deserialize<Dictionary<string, object?>>(new StringReader(yaml));
+            (lifecycleKeyPresent, pointerKeyPresent) = ProbeV2KeyPresence(raw);
         }
         catch (YamlException)
         {
@@ -275,7 +289,8 @@ public static class ReadinessBlockParser
             return ReadinessBlock.Indeterminate();
         }
 
-        if (dto.SchemaVersion != ReadinessBlock.RecognizedSchemaVersion)
+        // RS-021: recognize the SET {1,2}, not just v1. A version outside the set fails closed.
+        if (!ReadinessBlock.RecognizedSchemaVersions.Contains(dto.SchemaVersion))
         {
             return ReadinessBlock.Indeterminate();
         }
@@ -305,8 +320,72 @@ public static class ReadinessBlockParser
 
         // dto.ReadyPredicate equals expectedPredicate here (checked above) — pass the
         // validated non-null value.
-        var block = ReadinessBlock.TryCreate(dto.SchemaVersion, status, expectedPredicate, preconditions);
-        return block ?? ReadinessBlock.Indeterminate();
+        if (dto.SchemaVersion == 1)
+        {
+            // v1 PROHIBITS both v2 wire keys. Presence of EITHER key (regardless of value —
+            // even an unrecognized lifecycle value the typed DTO would drop to null) is a
+            // fail-closed. Detect via the raw key-presence bits, never the typed DTO. The 4-arg
+            // TryCreate below carries no lifecycle/pointer, so on the parser path the raw
+            // key-presence probe is the SOLE prohibition mechanism (QA-015 — pinned by the v1/v2
+            // key-prohibition parser tests). TryCreate's own v1 key-rejection only backstops
+            // DIRECT callers of the lifecycle/pointer overload, not this path.
+            if (lifecycleKeyPresent || pointerKeyPresent)
+            {
+                return ReadinessBlock.Indeterminate();
+            }
+
+            var v1 = ReadinessBlock.TryCreate(dto.SchemaVersion, status, expectedPredicate, preconditions);
+            return v1 ?? ReadinessBlock.Indeterminate();
+        }
+
+        // v2 path (dto.SchemaVersion == 2). lifecycle is REQUIRED: an absent, explicit-null,
+        // or unrecognized value all map to a null LifecycleState, which TryCreate rejects.
+        // entry_evidence_pointer is required-iff-ENTERED / prohibited-iff-BLOCKED: pass its
+        // value ONLY when the key is present so the presence bit is honored even for an
+        // explicit-null value (present-null ⇒ non-null empty sentinel ⇒ TryCreate's
+        // pointer-prohibited/required rule fires), and absent ⇒ null.
+        LifecycleState? lifecycle = TryParseLifecycle(dto.Lifecycle);
+        string? pointer = pointerKeyPresent ? (dto.EntryEvidencePointer ?? string.Empty) : null;
+        var v2 = ReadinessBlock.TryCreate(
+            dto.SchemaVersion, status, expectedPredicate, preconditions, lifecycle, pointer);
+        return v2 ?? ReadinessBlock.Indeterminate();
+    }
+
+    /// <summary>
+    /// Probes the raw-map form of a readiness block for the PRESENCE of the v2 wire keys
+    /// (`lifecycle`, `entry_evidence_pointer`) inside the inner `implementation_readiness`
+    /// mapping. Presence is a KEY-existence check (ContainsKey), independent of the value —
+    /// mirroring <see cref="AdrLintBlockParser"/>'s dictionary/ContainsKey pattern. Returns
+    /// (false, false) when the expected shape is absent; the caller's version gate has
+    /// already established the block shape, so a mismatch here degrades to "no v2 keys".
+    /// </summary>
+    private static (bool lifecycle, bool pointer) ProbeV2KeyPresence(Dictionary<string, object?>? raw)
+    {
+        if (raw is not null
+            && raw.TryGetValue(Key, out var inner)
+            && inner is IDictionary<object, object?> innerMap)
+        {
+            return (innerMap.ContainsKey("lifecycle"), innerMap.ContainsKey("entry_evidence_pointer"));
+        }
+
+        return (false, false);
+    }
+
+    /// <summary>
+    /// Maps a serialized lifecycle string to the typed <see cref="LifecycleState"/>; null for
+    /// an absent/unrecognized value. COMPLETE is not a legal v2 value (reserved).
+    /// </summary>
+    private static LifecycleState? TryParseLifecycle(string? raw)
+    {
+        switch (raw)
+        {
+            case "BLOCKED":
+                return LifecycleState.Blocked;
+            case "ENTERED":
+                return LifecycleState.Entered;
+            default:
+                return null;
+        }
     }
 
     private static bool TryParseStatus(string? raw, out ReadinessStatus status)
@@ -336,6 +415,12 @@ public static class ReadinessBlockParser
         public int SchemaVersion { get; set; }
         public string? Status { get; set; }
         public string? ReadyPredicate { get; set; }
+        // v2 wire fields (RS-021). Mapped by UnderscoredNamingConvention from `lifecycle` /
+        // `entry_evidence_pointer`. Presence-bit detection (absent-because-v1 vs
+        // required-in-v2-and-missing) is GREEN's job — the typed DTO alone cannot distinguish
+        // an absent key from an explicit null, so GREEN adds presence-aware parsing.
+        public string? Lifecycle { get; set; }
+        public string? EntryEvidencePointer { get; set; }
         public List<PreconditionDto>? Preconditions { get; set; }
     }
 

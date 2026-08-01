@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Corrected.Gate.Kernel;
+using Corrected.Provenance.Determinism;
 
 namespace Corrected.Gate;
 
@@ -22,6 +23,12 @@ public static class ProbeReasons
     public const string ValidatorDeferred = "validator-deferred";
     public const string EvidenceSchemaMismatch = "evidence-schema-mismatch";
     public const string EvidenceSchemaNewerThanPinned = "evidence-schema-newer-than-pinned; bump the gate pin";
+
+    /// <summary>
+    /// P3 zero-state (INV-010/012 RS-035): the committed determinism-attestation pointer does not
+    /// exist yet (pre-PR3). Rendered distinctly but classified fail-closed — P3 stays false.
+    /// </summary>
+    public const string P3NotYetActivated = "p3-not-yet-activated";
 }
 
 /// <summary>
@@ -32,10 +39,16 @@ public static class ProbeReasons
 /// </summary>
 public sealed class GateContext
 {
-    private GateContext(string repoRoot, IReadOnlyList<string>? adrRegistryOverride)
+    private GateContext(
+        string repoRoot,
+        IReadOnlyList<string>? adrRegistryOverride,
+        string? cosignBinPath,
+        string? trustRootPath)
     {
         RepoRoot = repoRoot;
         AdrRegistryOverride = adrRegistryOverride;
+        CosignBinPath = cosignBinPath;
+        TrustRootPath = trustRootPath;
     }
 
     public string RepoRoot { get; }
@@ -46,15 +59,36 @@ public sealed class GateContext
     /// </summary>
     public IReadOnlyList<string>? AdrRegistryOverride { get; }
 
+    /// <summary>
+    /// Injected cosign binary path (the COSIGN_BIN seam) for the P3 present-valid verify path
+    /// (INV-010/MA-B wiring). Null on the production factory — <see cref="P3Probe"/> then falls back
+    /// to the <c>COSIGN_BIN</c> environment variable the gate exports.
+    /// </summary>
+    public string? CosignBinPath { get; }
+
+    /// <summary>
+    /// Injected trust-root path for the P3 present-valid verify path. Null on the production factory
+    /// — <see cref="P3Probe"/> then falls back to the <c>TRUSTED_ROOT</c> environment variable.
+    /// </summary>
+    public string? TrustRootPath { get; }
+
     /// <summary>Test-only injectable-repo-root factory (structurally test-only, RS-271/AP-003).</summary>
-    public static GateContext ForRepoRoot(string repoRoot) => new(repoRoot, null);
+    public static GateContext ForRepoRoot(string repoRoot) => new(repoRoot, null, null, null);
 
     /// <summary>
     /// Test-only injectable-repo-root + synthesized-ADR-registry factory for the
     /// INV-008(a‴) supersession-graph fixtures (EXT4-02/EXT4-07).
     /// </summary>
     public static GateContext ForRepoRootWithAdrRegistry(
-        string repoRoot, IReadOnlyList<string> adrRegistry) => new(repoRoot, adrRegistry);
+        string repoRoot, IReadOnlyList<string> adrRegistry) => new(repoRoot, adrRegistry, null, null);
+
+    /// <summary>
+    /// Test/CI factory that also injects the cosign + trust-root seam for the P3 present-valid
+    /// verify path (INV-010/MA-B). Production uses <see cref="ForRepoRoot"/> and the env fallback.
+    /// </summary>
+    public static GateContext ForRepoRootWithVerify(
+        string repoRoot, string cosignBinPath, string trustRootPath)
+        => new(repoRoot, null, cosignBinPath, trustRootPath);
 }
 
 /// <summary>
@@ -517,13 +551,165 @@ public sealed class P2Probe : IEvidenceProbe
         => ProbeResult.TryCreate(false, ProbeReasons.ValidatorDeferred, ReferenceResolution.Resolved)!;
 }
 
-/// <summary>P3 probe — fail-closed validator-deferred unconditionally (INV-010).</summary>
+/// <summary>
+/// P3 probe — the REAL fail-closed determinism-attestation verifier (INV-010/012/018/019, RS-025).
+/// It resolves the pinned durable pointer <see cref="ProbeOrchestrator.P3AttestationPath"/> under
+/// <c>context.RepoRoot</c>: an ABSENT pointer is the expected pre-PR3 zero-state
+/// (<c>p3-not-yet-activated</c>, satisfied:false); a PRESENT pointer is parsed into the closed
+/// pointer schema, resolved to the committed {receipt, bundle}, and handed to
+/// <see cref="DeterminismVerifier.Verify"/> with the REAL gate-side inputs — subject-manifest
+/// staleness (INV-019, <see cref="SubjectManifestProducer"/> over
+/// <see cref="SubjectClassificationPolicy.Pinned"/>) and attested-commit ancestry
+/// (<see cref="GitAncestry"/>). A malformed/dangling pointer fails closed with a typed carrier
+/// reason. The production pointer is ABSENT in the repo, so the real gate never reaches the verify
+/// path — P3 stays false / readiness BLOCKED (MA-B: the present-valid branch is wired, not a stub).
+/// </summary>
 public sealed class P3Probe : IEvidenceProbe
 {
+    /// <summary>The pinned production platform RID (EA-003) the receipt's rid must equal.</summary>
+    private const string ExpectedRid = "linux-x64";
+
     public PreconditionId Id => PreconditionId.P3;
 
     public ProbeResult Evaluate(GateContext context)
-        => ProbeResult.TryCreate(false, ProbeReasons.ValidatorDeferred, ReferenceResolution.Resolved)!;
+    {
+        // Resolve the pinned pointer under the injected repo root (never the dotnet test cwd).
+        string pointer = Path.Combine(
+            context.RepoRoot, Path.Combine(ProbeOrchestrator.P3AttestationPath.Split('/')));
+
+        // ABSENT pointer = the expected pre-PR3 zero-state. Fail closed (satisfied:false) with the
+        // distinct p3-not-yet-activated reason — NOT the old validator-deferred stub.
+        if (!File.Exists(pointer))
+        {
+            return ProbeResult.TryCreate(
+                false, ProbeReasons.P3NotYetActivated, ReferenceResolution.Resolved)!;
+        }
+
+        // PRESENT pointer -> the real verify path. A probe never throws (IEvidenceProbe contract):
+        // any internal fault fails closed with a typed carrier reason.
+        try
+        {
+            return EvaluatePresentPointer(context, pointer);
+        }
+        catch (Exception)
+        {
+            return Reject(DeterminismVerifyReason.UnclassifiedVerifierFault);
+        }
+    }
+
+    private static ProbeResult EvaluatePresentPointer(GateContext context, string pointerPath)
+    {
+        string repoRoot = context.RepoRoot;
+
+        // 1) Parse the minimal pointer JSON. A malformed pointer fails closed (malformed-bundle).
+        (PointerSchema.PointerDocument? doc, _) =
+            PointerSchema.ParsePointerJson(File.ReadAllBytes(pointerPath));
+        if (doc is null)
+        {
+            return Reject(DeterminismVerifyReason.MalformedBundle);
+        }
+
+        PointerFamily? family = PointerSchema.FamilyFromWire(doc.Family);
+        if (family is null)
+        {
+            return Reject(DeterminismVerifyReason.MalformedBundle);
+        }
+
+        // 2) Build the closed-schema descriptor + validate against the committed-path set.
+        string root = PointerSchema.FixedRoot(family.Value)!;
+        string onDiskSegment = FirstSegmentUnderRoot(doc.Receipt, root);
+        string receiptAbs = Path.Combine(repoRoot, Path.Combine(doc.Receipt.Split('/')));
+        string bundleAbs = Path.Combine(repoRoot, Path.Combine(doc.Bundle.Split('/')));
+        bool symlinked = IsSymlink(receiptAbs) || IsSymlink(bundleAbs);
+
+        var descriptor = new PointerDescriptor(
+            family.Value, new[] { doc.Receipt }, new[] { doc.Bundle },
+            doc.AttestedCommit, onDiskSegment, symlinked);
+
+        var committed = new HashSet<string>(
+            SubjectManifestProducer.EnumerateRepoFiles(repoRoot), StringComparer.Ordinal);
+        PointerValidation validation = PointerSchema.ValidatePointer(descriptor, committed);
+        if (!validation.Valid)
+        {
+            // A dangling pointer (named target not committed) is evidence-absent; every other
+            // closed-schema violation (bad path / symlink / cardinality / commit-dir) is malformed.
+            return validation.Reason.StartsWith("dangling", StringComparison.Ordinal)
+                ? Reject(DeterminismVerifyReason.EvidenceAbsent)
+                : Reject(DeterminismVerifyReason.MalformedBundle);
+        }
+
+        // 3) Resolve the cosign + trust-root seam (injected, else the gate-exported env). A missing
+        // seam is a fail-closed verifier-unavailable (retryable), never a silent accept.
+        string? cosignBin = context.CosignBinPath ?? Environment.GetEnvironmentVariable("COSIGN_BIN");
+        string? trustRoot = context.TrustRootPath ?? Environment.GetEnvironmentVariable("TRUSTED_ROOT");
+        if (string.IsNullOrEmpty(cosignBin) || string.IsNullOrEmpty(trustRoot))
+        {
+            return DeterminismVerifier.ToProbeResult(new DeterminismVerifyResult(
+                DeterminismVerifyOutcome.Unavailable, DeterminismVerifyReason.VerifierUnavailable));
+        }
+
+        // 4) Read the receipt for the gate-side inputs (staleness + ancestry). A malformed receipt
+        // fails closed.
+        RunReceipt receipt;
+        try
+        {
+            receipt = RunReceipt.FromJson(File.ReadAllBytes(receiptAbs));
+        }
+        catch (Exception)
+        {
+            return Reject(DeterminismVerifyReason.MalformedReceipt);
+        }
+
+        bool manifestStale = SubjectManifestProducer.IsStale(
+            receipt.SubjectManifestDigest, SubjectClassificationPolicy.Pinned, repoRoot);
+        AncestryStatus ancestry = GitAncestry.Classify(repoRoot, receipt.AttestedCommit);
+
+        // 5) Run the real verifier with the resolved inputs; bridge to a typed carrier ProbeResult.
+        var request = new DeterminismVerifyRequest
+        {
+            CosignBinPath = cosignBin,
+            BundlePath = bundleAbs,
+            ReceiptPath = receiptAbs,
+            TrustRootPath = trustRoot,
+            WorkingDirectory = repoRoot,
+            ExpectedRid = ExpectedRid,
+            Identity = DeterminismVerifyIdentity.Production,
+            CertWorkflowSha = null,
+            AttestedCommitAncestry = ancestry,
+            ManifestStale = manifestStale,
+        };
+
+        return DeterminismVerifier.ToProbeResult(DeterminismVerifier.Verify(request));
+    }
+
+    private static ProbeResult Reject(DeterminismVerifyReason reason)
+        => DeterminismVerifier.ToProbeResult(new DeterminismVerifyResult(
+            DeterminismVerifyOutcome.Rejected, reason));
+
+    /// <summary>The first path segment after <paramref name="root"/> (the &lt;commit&gt; dir), or "" if not under the root.</summary>
+    private static string FirstSegmentUnderRoot(string repoRelativePath, string root)
+    {
+        if (!repoRelativePath.StartsWith(root, StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+        string rest = repoRelativePath.Substring(root.Length);
+        int slash = rest.IndexOf('/');
+        return slash < 0 ? rest : rest.Substring(0, slash);
+    }
+
+    private static bool IsSymlink(string absPath)
+    {
+        try
+        {
+            var info = new FileInfo(absPath);
+            return info.Exists && info.LinkTarget is not null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
 
 /// <summary>
@@ -552,4 +738,12 @@ public static class ProbeOrchestrator
 
     /// <summary>The pinned P3 determinism-attestation path (DD-002).</summary>
     public const string P3AttestationPath = "test/attestations/inv010-determinism.json";
+
+    /// <summary>
+    /// The pinned durable ENTRY-ACTIVATION pointer path (INV-030 / Group G, MA-C part e). ABSENT in
+    /// PR2 (Group G dormant, the committed readiness block is v1) so <see cref="EntryIntegrityProbe"/>
+    /// resolves the pre-entry zero-state <see cref="EntryIntegrity.Absent"/> — the src/ ban stays
+    /// active and readiness stays BLOCKED. A P2 activation would emit this pointer at the entry commit.
+    /// </summary>
+    public const string EntryActivationPointerPath = "test/attestations/entry-activation.json";
 }

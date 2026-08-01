@@ -1,0 +1,42 @@
+# CODEOWNERS — INV-025 / EA-006 (RS-012) assumption-completeness.
+#
+# RS-039 — ASSUMPTION-COMPLETENESS ONLY, NOT structural enforcement: this file
+# records that the security-load-bearing surfaces of the narrowed threat model
+# (INV-025) are review-gated. It is NOT a cryptographic or structural guarantee.
+# Required-review and branch protection on `main` are OUT-OF-BAND GitHub settings
+# (EA-006) that no in-repo file can prove — a CODEOWNERS entry still routes review
+# even if branch protection is disabled. The guarantee is "tampering or fabrication
+# of evidence under an UNCHANGED, reviewed verifier, workflow, tool pin, and trust
+# policy" — cryptography does not defend a principal who can also replace these.
+#
+# Every rule below MUST name an owner; an un-owned pattern is a silent no-op.
+
+# The build/verification gate (readiness kernel, probes, classifier, runner) ...
+gate/**                                    @joshft
+# ... and its non-shipped provenance substrate (in-toto/DSSE/identity contracts).
+gate/Corrected.Provenance/**               @joshft
+# The cosign version+digest pin — named explicitly so a broad gate/** rule cannot
+# silently drop it in a future reorganization.
+gate/tools/cosign-pin.json                 @joshft
+
+# The determinism / signing CI lane (the trusted-CI execution surface, TB-007).
+.github/workflows/**                       @joshft
+
+# The Sigstore trust root (committed, versioned; pattern covers a not-yet-committed
+# root file — CODEOWNERS patterns need not resolve to an existing path).
+**/trusted_root*.json                      @joshft
+
+# The readiness lifecycle spec: the `lifecycle` / `preconditions` / `satisfied`
+# spans. The `lifecycle` field lifts the src/ ban under INV-027 — MORE load-bearing
+# than the cosign pin (RS-012 corrected the earlier inverted risk-weighting).
+.correctless/specs/phase-0-1-worker.md     @joshft
+
+# Committed determinism receipts/bundles AND every pointer file (the active-baseline
+# pointer + entry_evidence_pointer select which bundle each verifier consumes).
+test/attestations/**                       @joshft
+
+# The spike determinism producer + projection surface (the code whose recorded
+# projection facts verification trusts, RS-005) and the resource-floor constant /
+# runner-escalation policy (INV-004 — an unreviewed floor raise silently suppresses
+# the determinism observation, RS-040).
+spikes/dafny-compat/**                     @joshft

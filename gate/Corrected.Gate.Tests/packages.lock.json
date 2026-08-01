@@ -125,6 +125,7 @@
         "dependencies": {
           "Corrected.Gate.Kernel": "[1.0.0, )",
           "Corrected.Gate.Lint": "[1.0.0, )",
+          "Corrected.Provenance": "[1.0.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[4.14.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
@@ -133,6 +134,9 @@
         "type": "Project"
       },
       "corrected.gate.lint": {
+        "type": "Project"
+      },
+      "corrected.provenance": {
         "type": "Project"
       }
     }

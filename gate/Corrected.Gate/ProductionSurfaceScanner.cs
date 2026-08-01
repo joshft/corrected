@@ -422,9 +422,21 @@ public static class ProductionSurfaceScanner
 
 /// <summary>
 /// The CLOSED-ALLOWLIST Roslyn predicate (INV-011 / EXT4-01, default-deny by
-/// construction). The ONLY permitted syntax nodes are namespace/type/member
-/// DECLARATIONS carrying no body, no initializer, and synthesizing no members;
-/// ANY other node fails closed.
+/// construction). The ONLY permitted member declarations are the namespace/type/member
+/// kinds in <see cref="AllowedKinds"/> carrying no body, no initializer, and synthesizing
+/// no members; ANY member-declaration kind OUTSIDE the allowlist fails closed, and the
+/// executable/synthesizing FORMS inside an allowed member (bodies, initializers, top-level
+/// statements, primary-ctor/positional-record parameter lists, extern/[DllImport]) fail
+/// closed too.
+///
+/// Enforcement is TWO coupled gates (MA-D): (1) a closed allowlist over every
+/// <see cref="MemberDeclarationSyntax"/> node — a member kind not in <see cref="AllowedKinds"/>
+/// (e.g. a constructor/operator/conversion/destructor, incl. their net10 BODYLESS `partial`
+/// forms that carry no <c>Block</c> for the deny-list to see) fails closed, so a NEWLY-ADDED
+/// synthesizing C# member form fails closed by default; and (2) a deny-list of executable
+/// content that can appear WITHIN an allowed member. Non-member structural nodes (type
+/// references, parameter lists of allowed methods, accessor lists, identifiers) are neutral.
+/// <see cref="AllowedKinds"/> is thus LOAD-BEARING, not decorative.
 /// </summary>
 public static class SyntaxAllowlist
 {
@@ -438,6 +450,8 @@ public static class SyntaxAllowlist
         "IndexerDeclaration", "EventFieldDeclaration", "MethodDeclaration",
         "AccessorDeclaration", "AttributeList",
     };
+
+    private static readonly HashSet<string> AllowedKindSet = new(AllowedKinds, StringComparer.Ordinal);
 
     /// <summary>The enumerated allowed declaration-kind set (meta-test subject, INV-011).</summary>
     public static IReadOnlyList<string> AllowedDeclarationKinds => AllowedKinds;
@@ -462,6 +476,15 @@ public static class SyntaxAllowlist
                 case EqualsValueClauseSyntax:              // field/property initializers
                 case GlobalStatementSyntax:                // top-level statements
                     return false;
+            }
+
+            // Closed allowlist over MEMBER declarations (MA-D): a member-declaration kind not
+            // in AllowedKinds fails closed — this is what catches a member-synthesizing form
+            // (constructor / operator / conversion / destructor, incl. their net10 bodyless
+            // `partial` variants) that carries no Block for the deny-list above to see.
+            if (node is MemberDeclarationSyntax && !AllowedKindSet.Contains(node.Kind().ToString()))
+            {
+                return false;
             }
 
             // Primary constructor / positional record parameter list.
