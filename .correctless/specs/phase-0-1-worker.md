@@ -147,8 +147,8 @@ implementation_readiness:
       discharges: [DF-003]     # plus the P0-* Phase-0.1-entry capability gates (DESIGN §13 v1.14)
     - id: P3
       name: inv010-ci-determinism-exercised-not-silently-skipped
-      satisfied: false
-      evidence: null          # CI lane / reworked test proving the cross-run determinism check actually runs on the CI path
+      satisfied: true
+      evidence: test/attestations/inv010-determinism.json          # active-baseline pointer to the committed production determinism receipt + bundle, verified offline by the P3 probe (PR3 evidence activation)
       discharges: []
 ```
 

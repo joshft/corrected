@@ -1,0 +1,6 @@
+{
+  "family": "p3-active-baseline",
+  "receipt": "test/attestations/inv010/20b577d82b2119b7e20251404fe8e4f1d3eb945c/determinism-receipt.json",
+  "bundle": "test/attestations/inv010/20b577d82b2119b7e20251404fe8e4f1d3eb945c/determinism.sigstore.json",
+  "attested_commit": "20b577d82b2119b7e20251404fe8e4f1d3eb945c"
+}

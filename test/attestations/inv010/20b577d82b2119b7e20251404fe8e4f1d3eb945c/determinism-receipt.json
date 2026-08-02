@@ -1,0 +1,150 @@
+{
+  "execution_status": "completed",
+  "comparison_status": "equal",
+  "attested_commit": "20b577d82b2119b7e20251404fe8e4f1d3eb945c",
+  "subject_manifest_digest": "96302a3ae295bbef8bfc6e9074333df23b8437b1a824be8e7f17343fd82a4fdd",
+  "policy_version": "v1",
+  "platform": {
+    "processor_count": 8,
+    "rid": "linux-x64",
+    "os_label": "ubuntu-24.04",
+    "runner_image": "local-dev-nonci-runner",
+    "kernel": "Ubuntu 24.04.4 LTS",
+    "architecture": "x64",
+    "resolved_sdk": "10.0.302"
+  },
+  "run1_evidence": [
+    {
+      "role": "run",
+      "kind": "run-report",
+      "repo_relative_name": "reports/run-report.json",
+      "raw_sha256": "6b00e1f71f8a96a1a4fbd0a778534a54e6e2c79747f6925998abb55892b5589c",
+      "projection_sha256": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    },
+    {
+      "role": "route-a",
+      "kind": "route-report",
+      "repo_relative_name": "reports/route-a.json",
+      "raw_sha256": "df6c0229774792b389bc776ee462fb75958c87f24893a7bb4bb66e4cccc29c02",
+      "projection_sha256": "0cbcf3bfb383d0263f7327c9158679eade64586e06a9d244a1779e25d03dbc15",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    },
+    {
+      "role": "route-b",
+      "kind": "route-report",
+      "repo_relative_name": "reports/route-b.json",
+      "raw_sha256": "3fb9516af073666618d53f833f9940334844d6af026201119a61966122176b8e",
+      "projection_sha256": "d34bb0bacfadee85fbea49e6b46f27b714f241c0dd778c9c301b55239cd5671f",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    },
+    {
+      "role": "control-a",
+      "kind": "control-report",
+      "repo_relative_name": "reports/control-a.json",
+      "raw_sha256": "5d848ae1b029228954a95bd7da4b88d5b2497256a2e1f8f2e2760df76be25b30",
+      "projection_sha256": "0fbba0905ceb137c7dd3f9eea23f99ba3633fde2a03459b2189fb3fdae43498d",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    },
+    {
+      "role": "control-b",
+      "kind": "control-report",
+      "repo_relative_name": "reports/control-b.json",
+      "raw_sha256": "40adcf1558e58f09753496a6dda21d4e693b3c0762ee5f8d5585af1e393f09f7",
+      "projection_sha256": "0fbba0905ceb137c7dd3f9eea23f99ba3633fde2a03459b2189fb3fdae43498d",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    }
+  ],
+  "run2_evidence": [
+    {
+      "role": "run",
+      "kind": "run-report",
+      "repo_relative_name": "reports/run-report.json",
+      "raw_sha256": "ff1942e7514ca5ad71a72ad02da5b12cd8443739721e0bb42014709f3f83acd3",
+      "projection_sha256": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    },
+    {
+      "role": "route-a",
+      "kind": "route-report",
+      "repo_relative_name": "reports/route-a.json",
+      "raw_sha256": "8a81c06fcd131802665f21338420e5929f934be57eebcc39168963a36b656c73",
+      "projection_sha256": "0cbcf3bfb383d0263f7327c9158679eade64586e06a9d244a1779e25d03dbc15",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    },
+    {
+      "role": "route-b",
+      "kind": "route-report",
+      "repo_relative_name": "reports/route-b.json",
+      "raw_sha256": "add89f1897b4046e0407ead66adc4ca8d2aedf76d983755ef02fe345c2487e7f",
+      "projection_sha256": "d34bb0bacfadee85fbea49e6b46f27b714f241c0dd778c9c301b55239cd5671f",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    },
+    {
+      "role": "control-a",
+      "kind": "control-report",
+      "repo_relative_name": "reports/control-a.json",
+      "raw_sha256": "696c439426cfc412536003e2bf5c4b477b7263a8ae8793d358e8d4906876bed5",
+      "projection_sha256": "0fbba0905ceb137c7dd3f9eea23f99ba3633fde2a03459b2189fb3fdae43498d",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    },
+    {
+      "role": "control-b",
+      "kind": "control-report",
+      "repo_relative_name": "reports/control-b.json",
+      "raw_sha256": "9f8334448ff9cdabac8495c934a8edfec0b4260d003d9d893000eb68c30a6bc5",
+      "projection_sha256": "0fbba0905ceb137c7dd3f9eea23f99ba3633fde2a03459b2189fb3fdae43498d",
+      "projection_schema_id": "corrected.determinism.projection",
+      "projection_schema_version": 2,
+      "projection_schema_digest": "c872c710dd390ff8d8050c059077d0eb7d6ef4f2352fc7bf375403014ac18509",
+      "canonicalization_version": "1",
+      "per_role_verdict": "equal",
+      "projection_impl_digest": "9838713255bf681ed6e579089c0573e730f5f00fb0ca7c253b47c306676d8c73"
+    }
+  ]
+}
