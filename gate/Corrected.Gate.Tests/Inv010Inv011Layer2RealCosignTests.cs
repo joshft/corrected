@@ -590,31 +590,50 @@ public class Inv010Inv011Layer2RealCosignTests
 
     // ================= INV-013 meta-assert — no committed fixture carries the production identity ====
 
-    // Tests INV-013 [integration] (meta-assertion): scan test/attestations/** — EVERY committed
-    // bundle's leaf certificate SAN is the FIXTURE identity, NEVER the production identity
-    // (…/p3-determinism-sign.yml@refs/heads/main). The production-identity ACCEPT branch is a recorded
-    // PR3 residual — never a committed fixture and never asserted (RS-006/RS-011). Hermetic: decode
-    // the cert bytes from each bundle's verificationMaterial and search for the SAN token. Genuine
-    // guard (holds now; would fail if a production-identity bundle were ever committed before PR3).
+    private const string ProductionSanToken = "p3-determinism-sign.yml";
+    private const string FixtureSanToken = "p3-fixture-sign.yml";
+
+    // Tests INV-013 [integration] (meta-assertion): scan test/attestations/FIXTURES/** — EVERY
+    // committed FIXTURE bundle's leaf certificate SAN is the FIXTURE identity, NEVER the production
+    // identity (…/p3-determinism-sign.yml@refs/heads/main). Since PR3 the tree ALSO holds the real
+    // production baseline under test/attestations/inv010/** (asserted positively by
+    // Committed_production_baseline_carries_the_production_identity below) — so this fixture guard is
+    // scoped to fixtures/ and must NOT sweep the production dir. Hermetic: decode the cert bytes from
+    // each bundle's verificationMaterial and search for the SAN token.
     [Fact]
     public void No_committed_fixture_carries_the_production_identity()
     {
-        string root = TestPaths.RepoFile("test", "attestations");
-        // Scope to the DETERMINISM bundles by name: since MA-C the tree also holds entry.sigstore.json
-        // bundles (a DISTINCT fixture identity, p3-entry-fixture-sign.yml) which this determinism-
-        // identity assertion does not govern — their own guard is Inv030EntryLayer2RealCosignTests.
-        var bundles = Directory.EnumerateFiles(root, "determinism.sigstore.json", SearchOption.AllDirectories).ToList();
+        string fixturesRoot = TestPaths.RepoFile("test", "attestations", "fixtures");
+        // Scope to the DETERMINISM bundles by name: the tree also holds entry.sigstore.json bundles
+        // (a DISTINCT fixture identity, p3-entry-fixture-sign.yml) which this determinism-identity
+        // assertion does not govern — their own guard is Inv030EntryLayer2RealCosignTests.
+        var bundles = Directory.EnumerateFiles(fixturesRoot, "determinism.sigstore.json", SearchOption.AllDirectories).ToList();
         Assert.NotEmpty(bundles); // AP-010: the scan is not vacuously over an empty set.
-
-        const string productionSanToken = "p3-determinism-sign.yml";
-        const string fixtureSanToken = "p3-fixture-sign.yml";
 
         foreach (string bundlePath in bundles)
         {
-            byte[] certBytes = LeafCertBytes(bundlePath);
-            string certAscii = Encoding.Latin1.GetString(certBytes);
-            Assert.DoesNotContain(productionSanToken, certAscii, StringComparison.Ordinal);
-            Assert.Contains(fixtureSanToken, certAscii, StringComparison.Ordinal);
+            string certAscii = Encoding.Latin1.GetString(LeafCertBytes(bundlePath));
+            Assert.DoesNotContain(ProductionSanToken, certAscii, StringComparison.Ordinal);
+            Assert.Contains(FixtureSanToken, certAscii, StringComparison.Ordinal);
+        }
+    }
+
+    // Tests INV-013/INV-020 [integration] (PR3 evidence-activation positive): the committed
+    // production determinism baseline under test/attestations/inv010/<commit>/** carries the
+    // PRODUCTION identity SAN and NOT the fixture identity — the counterpart of the fixture guard
+    // above. This is the committed evidence the P3 probe verifies offline under the production argv.
+    [Fact]
+    public void Committed_production_baseline_carries_the_production_identity()
+    {
+        string prodRoot = TestPaths.RepoFile("test", "attestations", "inv010");
+        var bundles = Directory.EnumerateFiles(prodRoot, "determinism.sigstore.json", SearchOption.AllDirectories).ToList();
+        Assert.NotEmpty(bundles); // the PR3 baseline must exist (AP-010: not vacuous).
+
+        foreach (string bundlePath in bundles)
+        {
+            string certAscii = Encoding.Latin1.GetString(LeafCertBytes(bundlePath));
+            Assert.Contains(ProductionSanToken, certAscii, StringComparison.Ordinal);
+            Assert.DoesNotContain(FixtureSanToken, certAscii, StringComparison.Ordinal);
         }
     }
 

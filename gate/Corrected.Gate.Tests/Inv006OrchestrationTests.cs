@@ -37,10 +37,14 @@ public class Inv006OrchestrationTests
         Assert.Equal("resolved-compatible", results[PreconditionId.P1].Reason);
     }
 
-    // Tests INV-006 [integration]: Stage-B committed block -> Pass, status BLOCKED
-    // (through the REAL kernel + REAL orchestrator). Post-flip the P1 cell is consistent
-    // because declared P1.satisfied:true + non-null evidence matches the real probe's
-    // satisfied:true/Resolved; P2/P3 stay (null,false,false) consistent -> overall BLOCKED.
+    // Tests INV-006 [integration]: post-PR3 committed block -> Pass, status BLOCKED
+    // (through the REAL kernel + REAL orchestrator). P1 is consistent (declared true + non-null
+    // evidence matches the real probe). PR3 activated P3 (declared satisfied:true + evidence
+    // pointer), so the P3 cell is consistent ONLY when the committed bundle actually verifies —
+    // which needs cosign provisioned. Provisioning-aware: the gate wrapper provisions COSIGN_BIN +
+    // TRUSTED_ROOT and drives Pass/BLOCKED; a bare `dotnet test` cannot verify the bundle, so the
+    // P3 cell is honestly unresolved and the gate does NOT pass (the canonical green is
+    // `bash gate/run-readiness-gate.sh`). P2 stays false -> overall BLOCKED, never READY.
     [Fact]
     public void StageB_committed_block_is_Pass_BLOCKED()
     {
@@ -50,20 +54,39 @@ public class Inv006OrchestrationTests
             File.ReadAllText(TestPaths.RepoFile(".correctless", "specs", "phase-0-1-worker.md")));
         Assert.Equal(ReadinessStatus.BLOCKED, block.Status);
         var v = ReadinessGate.EvaluateReadiness(block, results);
-        Assert.Equal(VerdictKind.Pass, v.Kind);
+        if (CosignProvisioned())
+        {
+            Assert.Equal(VerdictKind.Pass, v.Kind);
+        }
+        else
+        {
+            // Honest fail-closed: unverifiable P3 evidence without the verifier is not a green gate.
+            Assert.NotEqual(VerdictKind.Pass, v.Kind);
+        }
     }
 
-    // Tests INV-006 [integration]: no probe throws/skips — each returns a typed
-    // {satisfied:false, reason}. P2 fail-closed with validator-deferred; P3 (the real
-    // verifier, RS-025) fail-closed with p3-not-yet-activated while the pointer is absent.
+    // Tests INV-006 [integration]: no probe throws/skips — each returns a typed reason.
+    // P2 fail-closed with validator-deferred. P3 is now ACTIVATED (PR3): provisioning-aware —
+    // with cosign provisioned the committed production bundle verifies (ran-passed); a bare
+    // `dotnet test` leaves the seam unset, so the probe takes the honest verifier-unavailable
+    // fallback (never a silent skip, never the pre-PR3 p3-not-yet-activated zero-state).
     [Fact]
     public void Probes_never_throw_and_carry_typed_reasons()
     {
         var ctx = GateContext.ForRepoRoot(TestPaths.RepoRoot());
         var results = ProbeOrchestrator.RunAll(ctx);
         Assert.Equal(ProbeReasons.ValidatorDeferred, results[PreconditionId.P2].Reason);
-        Assert.Equal(ProbeReasons.P3NotYetActivated, results[PreconditionId.P3].Reason);
+        Assert.Equal(
+            CosignProvisioned() ? "ran-passed" : "verifier-unavailable",
+            results[PreconditionId.P3].Reason);
     }
+
+    // The gate wrapper (commands.test) provisions cosign + trusted root before the offline P3
+    // verify (RS-014); a bare `dotnet test` leaves both unset. This mirrors the RealCosign seam
+    // in Inv010Inv011Layer2RealCosignTests so P3-verifying tests are honest in both modes.
+    private static bool CosignProvisioned()
+        => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COSIGN_BIN"))
+        && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TRUSTED_ROOT"));
 
     // Tests INV-006 [integration]: the orchestrator resolves structured evidence via
     // the exact real-producer JSON paths NESTED under `deterministic.` (not
