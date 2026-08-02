@@ -53,15 +53,26 @@ jobs:
             && env -i HOME="$HOME" DETERMINISM_OS_LABEL="$DETERMINISM_OS_LABEL" DETERMINISM_RESOLVED_SDK="$DETERMINISM_RESOLVED_SDK" \
                bash -p scripts/determinism-lane.sh --run-root out/determinism-lane --dotnet-root "$HOME/.dotnet" )
 
+      - name: Emit the canonical subject-manifest (gate ComputeDigest — single source of truth)
+        env:
+          EMIT_MANIFEST_OUT: ${{github.workspace}}/handoff/determinism-subject-manifest.json
+          EMIT_MANIFEST_REPO_ROOT: ${{github.workspace}}
+        run: |
+          set -o pipefail
+          mkdir -p handoff
+          export DOTNET_ROOT=$HOME/.dotnet; export PATH=$HOME/.dotnet:$PATH
+          # Emit the EXACT bytes SubjectManifest.ComputeDigest hashes (the pinned subject set at the
+          # trigger commit) through the gate's OWN code, so `sha256sum` of this file equals the gate
+          # verifier's ComputeHeadManifestDigest and the receipt's subject_manifest_digest reads
+          # NON-STALE (the p3-producer-manifest-digest fix; a hardcoded roles-JSON manifest read stale).
+          dotnet test gate/Corrected.Gate.slnx --filter 'FullyQualifiedName~EmitSubjectManifestDigest'
+
       - name: Assemble the same-run signer hand-off (RunReceipt subject + declared digest + subject manifest)
         run: |
           set -o pipefail
           mkdir -p handoff
-          # The versioned determinism-subject manifest whose digest is bound into the
-          # signed receipt (INV-006/018). Emitted deterministically by the producer.
-          cat > handoff/determinism-subject-manifest.json <<'JSON'
-          {"determinism_subject_manifest":"v1","policy_version":"v1","roles":["run","route-a","route-b","control-a","control-b"]}
-          JSON
+          # The subject-manifest digest = SHA-256 of the canonical preimage emitted above (INV-006/018),
+          # so it equals the gate verifier's ComputeHeadManifestDigest and the receipt reads non-stale.
           manifest_digest="$(sha256sum handoff/determinism-subject-manifest.json | cut -d' ' -f1)"
           # The SIGNED SUBJECT is the determinism RunReceipt itself (execution_status /
           # comparison_status / platform / run1_evidence / run2_evidence). Re-home ONLY the

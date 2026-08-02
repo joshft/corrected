@@ -250,7 +250,17 @@ public sealed record SubjectManifest(IReadOnlyList<SubjectManifestEntry> Entries
     /// <summary>The canonical field/row delimiters — forbidden inside a Path or Sha256 so the serialization stays injective.</summary>
     private static readonly char[] DelimiterChars = { '\n', '\0' };
 
-    public string ComputeDigest()
+    /// <summary>
+    /// The canonical digest PREIMAGE (INV-018/019): the EXACT byte-string <see cref="ComputeDigest"/>
+    /// hashes — rows sorted by <see cref="SubjectManifestEntry.Path"/> Ordinal, each serialized as
+    /// <c>{Path}\n{Sha256}\n</c>, concatenated. This is the SINGLE source the CI producer emits to
+    /// the hand-off manifest file, so <c>sha256(emitted-preimage) == ComputeDigest ==</c> the
+    /// receipt's signed <c>subject_manifest_digest</c> — keeping the producer and the gate verifier
+    /// byte-identical (the p3-producer-manifest-digest fix). Fail-closed (AP-001/MA-B-AUDIT-02): a
+    /// duplicate path, or a newline/NUL inside a path or sha (a non-injective manifest that could let
+    /// a stale baseline read fresh), THROWS rather than hashing an ambiguous manifest.
+    /// </summary>
+    public string CanonicalPreimage()
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (SubjectManifestEntry entry in Entries)
@@ -278,7 +288,14 @@ public sealed record SubjectManifest(IReadOnlyList<SubjectManifestEntry> Entries
             canonical.Append(entry.Path).Append('\n').Append(entry.Sha256).Append('\n');
         }
 
-        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()));
+        return canonical.ToString();
+    }
+
+    public string ComputeDigest()
+    {
+        // Single source of truth: the digest is SHA-256 of the canonical preimage bytes. The CI
+        // producer emits that same preimage and takes sha256sum of it, so producer and verifier agree.
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalPreimage()));
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
