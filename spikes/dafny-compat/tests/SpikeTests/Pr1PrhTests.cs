@@ -4,16 +4,22 @@
 //   hostname/username/home/temp/absolute-local path (a field scan restricted to
 //   Corrected fields; the Sigstore bundle's PUBLIC identities are exempt — but
 //   PR1 has no bundle).
-// PRH-004: PR1 does NOT flip P3 — P3.satisfied stays false; no readiness-block
-//   edit in PR1 (a from-clean read of the committed block).
+// PRH-004: the committed readiness block is always WELL-FORMED — P3.satisfied and
+//   P3.evidence move IN LOCKSTEP (satisfied:true IFF a real evidence pointer is
+//   present). A from-clean read asserts the coupling ONLY, not the polarity, so it
+//   holds in BOTH states: pre-activation (satisfied:false ⟺ evidence:null) and
+//   post-activation (satisfied:true ⟺ the pinned pointer). This is the anti-forgery
+//   direction PRH-004 protects — P3 flips only through the deliberate evidence path,
+//   never a forged satisfied:true with evidence:null.
 // PRH-005: a `different` result is not signed (PR1 signs nothing); no
 //   retry/continue-on-error construct in the lane.
 //
 // RED: ReceiptPrivacyScan.LocalIdentityLeaks and DeterminismDisposition.Dispose
 // throw NotImplementedException (STUB:TDD); the determinism-lane workflow does
-// not exist yet (missing file). PRH-004 is a from-clean REGRESSION GUARD (P3 is
-// false today and PR1 must keep it that way) — green now, it fails if PR1 ever
-// flips P3.
+// not exist yet (missing file). The PRH-004 guard is activation-INVARIANT on
+// purpose: this spike file is itself a pinned determinism SUBJECT, so a post-flip
+// edit would stale the receipt — asserting only the lockstep lets the one guard
+// survive the P3 activation with no edit.
 using Corrected.Spike.Contracts;
 using Xunit;
 
@@ -105,12 +111,17 @@ public class Pr1PrhTests
         }
     }
 
-    // Tests PRH-004 [integration] (from-clean REGRESSION GUARD): PR1 does not flip
-    // P3 — the committed implementation_readiness block declares P3.satisfied:false
-    // with evidence:null. Fails if any PR1 edit flips P3 to satisfied/true or
-    // attaches evidence. (No readiness-block edit is part of the PR1 diff.)
+    // Tests PRH-004 [integration] (from-clean ACTIVATION-INVARIANT guard): the committed
+    // readiness block is well-formed — P3.satisfied and P3.evidence move IN LOCKSTEP.
+    // Reads the block from clean and asserts the COUPLING only: satisfied:true IFF a
+    // real (non-null, non-empty) evidence pointer is present. It holds in BOTH states —
+    // pre-activation (satisfied:false ⟺ evidence:null) and post-activation
+    // (satisfied:true ⟺ the pinned pointer) — so the one guard survives the P3 flip with
+    // NO edit (this spike file is a pinned determinism subject; a post-flip edit would
+    // stale the receipt). Fails closed on the forged shape (satisfied:true with
+    // evidence:null) and on a stray satisfied:false left with a dangling evidence pointer.
     [Fact]
-    public void Pr1_DoesNotFlipP3_ReadinessBlockStaysFalse()
+    public void P3_ReadinessBlock_IsWellFormed_SatisfiedCoupledToEvidence()
     {
         var specPath = SpikePaths.Repo(".correctless", "specs", "phase-0-1-worker.md");
         var lines = File.ReadAllLines(specPath);
@@ -135,8 +146,22 @@ public class Pr1PrhTests
                 evidence = t.Substring("evidence:".Length).Split('#')[0].Trim();
             }
         }
-        Assert.Equal("false", satisfied);
-        Assert.Equal("null", evidence);
+
+        // Both fields must be present, and satisfied must be a real boolean literal — a
+        // typo (satisfied: yes) must not be silently read as "not true" and pass vacuously.
+        Assert.NotNull(satisfied);
+        Assert.NotNull(evidence);
+        Assert.Contains(satisfied, new[] { "true", "false" });
+
+        // The readiness schema uses the literal "null" for an absent evidence pointer.
+        bool isSatisfied = satisfied == "true";
+        bool hasEvidence = !string.IsNullOrWhiteSpace(evidence)
+            && !string.Equals(evidence, "null", StringComparison.Ordinal);
+
+        // LOCKSTEP coupling (activation-invariant): satisfied:true IFF a real evidence
+        // pointer is present. Holds pre-flip (false ⟺ no evidence) and post-flip
+        // (true ⟺ pinned pointer); rejects the forged satisfied:true+evidence:null.
+        Assert.Equal(isSatisfied, hasEvidence);
     }
 
     // Tests PRH-005 [unit]: a `different` result is NOT signed and mints nothing;
